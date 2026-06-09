@@ -1,0 +1,2 @@
+/usr/bin/ar qc libvhsm_keystore.a CMakeFiles/vhsm_keystore.dir/__/__/cmake/empty.cpp.o
+/usr/bin/ranlib libvhsm_keystore.a

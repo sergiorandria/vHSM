@@ -1,0 +1,2 @@
+/usr/bin/ar qc libvhsm_signature_store.a CMakeFiles/vhsm_signature_store.dir/__/__/cmake/empty.cpp.o
+/usr/bin/ranlib libvhsm_signature_store.a

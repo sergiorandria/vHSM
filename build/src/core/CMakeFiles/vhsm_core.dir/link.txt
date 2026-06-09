@@ -1,0 +1,2 @@
+/usr/bin/ar qc libvhsm_core.a CMakeFiles/vhsm_core.dir/__/__/cmake/empty.cpp.o
+/usr/bin/ranlib libvhsm_core.a

@@ -1,0 +1,2 @@
+/usr/bin/ar qc libvhsm_session.a CMakeFiles/vhsm_session.dir/__/__/cmake/empty.cpp.o
+/usr/bin/ranlib libvhsm_session.a

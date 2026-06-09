@@ -1,0 +1,2 @@
+/usr/bin/ar qc libvhsm_crypto.a CMakeFiles/vhsm_crypto.dir/__/__/cmake/empty.cpp.o
+/usr/bin/ranlib libvhsm_crypto.a

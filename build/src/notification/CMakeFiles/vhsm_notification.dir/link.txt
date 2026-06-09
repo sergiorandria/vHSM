@@ -1,0 +1,2 @@
+/usr/bin/ar qc libvhsm_notification.a CMakeFiles/vhsm_notification.dir/__/__/cmake/empty.cpp.o
+/usr/bin/ranlib libvhsm_notification.a
