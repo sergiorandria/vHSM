@@ -1,5 +1,10 @@
 # Core Unit Tests
-add_library(vhsm_core_test secure_buffer_test.cpp)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build)
+
+add_executable(vhsm_core_test
+    secure_buffer_test.cpp
+    clock_test.cpp
+)
 
 target_include_directories(vhsm_core_test
     PRIVATE
@@ -10,8 +15,12 @@ target_include_directories(vhsm_core_test
 target_link_libraries(vhsm_core_test
     PRIVATE
         vhsm_core
+        gtest
         gtest_main
 )
+
+# Disable warnings that are triggered by the tests but are not issues in the test context
+target_compile_options(vhsm_core_test PRIVATE -Wno-self-move -Wno-format-truncation)
 
 # Add test to enable testing
 include(GoogleTest)

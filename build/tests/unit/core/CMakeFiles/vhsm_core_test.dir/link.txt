@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -pie -Wl,-z,relro,-z,now -Wl,--dependency-file=CMakeFiles/vhsm_core_test.dir/link.d CMakeFiles/vhsm_core_test.dir/secure_buffer_test.cpp.o CMakeFiles/vhsm_core_test.dir/clock_test.cpp.o -o /home/sergio/project/vHSM/tests/unit/core/build/vhsm_core_test  ../../../src/core/libvhsm_core.a -lgtest -lgtest_main

@@ -137,7 +137,7 @@ SecureBuffer::SecureBuffer(std::size_t size) {
     }
 #endif
  
-    // ── Lock the data pages into RAM ─────────────────────────────────────────
+    // Lock the data pages into RAM
     data_ = base + ps;
     size_ = size;
  
@@ -160,26 +160,12 @@ SecureBuffer::SecureBuffer(std::size_t size) {
         alloc_size_ = 0;
         throw;
     }
- 
+
     // mmap already zero-fills MAP_ANONYMOUS; explicit zero for Windows.
 #ifdef _WIN32
     ::memset(data_, 0, data_pages);
 #endif
 }
- 
-
-// SecureBuffer::~SecureBuffer() {
-//     if (data_) {
-//         // Zeroize memory before unlocking and freeing, 
-//         // but an open question arise, will be this destructor 
-//         // called everytime a SecureBuffer is destroyed ?
-//         // This destructor should be called manually to wipe 
-//         // this->data_; 
-//         std::memset(data_, 0, size_ * sizeof(u8));
-//         munlock(data_, size_ * sizeof(u8));
-//         std::free(data_);
-//     }
-// }
 
 SecureBuffer::~SecureBuffer() noexcept {
     release();

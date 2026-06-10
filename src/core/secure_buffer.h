@@ -21,10 +21,6 @@ namespace vhsm {
 // naming and project philosophy.
 //template <typename BufferElementType>
 class SecureBuffer {
-// Maybe in future update, it will be analyzed 
-// carefully if the use of metaprogramming is necessary, or not.
-//    using T = BufferElementType;
-
 public:
     explicit SecureBuffer(std::size_t element_count = 1);
 

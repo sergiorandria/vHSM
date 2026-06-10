@@ -1,0 +1,5 @@
+if(EXISTS "/home/sergio/project/vHSM/tests/unit/core/build/vhsm_core_test[1]_tests.cmake")
+  include("/home/sergio/project/vHSM/tests/unit/core/build/vhsm_core_test[1]_tests.cmake")
+else()
+  add_test(vhsm_core_test_NOT_BUILT vhsm_core_test_NOT_BUILT)
+endif()
