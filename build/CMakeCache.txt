@@ -282,7 +282,7 @@ SQLite3_INCLUDE_DIR:PATH=/usr/include
 SQLite3_LIBRARY:FILEPATH=/usr/lib/libsqlite3.so
 
 //Build gRPC admin server
-VHSM_ADMIN_GRPC:BOOL=ON
+VHSM_ADMIN_GRPC:BOOL=OFF
 
 //Use async write queue for DB
 VHSM_ASYNC_DB:BOOL=OFF
@@ -323,12 +323,6 @@ ZLIB_LIBRARY_RELEASE:FILEPATH=/usr/lib/libz.so
 //The directory containing a CMake configuration file for absl.
 absl_DIR:PATH=/usr/lib/cmake/absl
 
-//The directory containing a CMake configuration file for c-ares.
-c-ares_DIR:PATH=/usr/lib/cmake/c-ares
-
-//The directory containing a CMake configuration file for gRPC.
-gRPC_DIR:PATH=/usr/lib/cmake/grpc
-
 //The directory containing a CMake configuration file for nlohmann_json.
 nlohmann_json_DIR:PATH=/usr/share/cmake/nlohmann_json
 
@@ -349,9 +343,6 @@ protobuf_MODULE_COMPATIBLE:BOOL=OFF
 
 //Enable for verbose output
 protobuf_VERBOSE:BOOL=OFF
-
-//The directory containing a CMake configuration file for re2.
-re2_DIR:PATH=/usr/lib/cmake/re2
 
 //The directory containing a CMake configuration file for utf8_range.
 utf8_range_DIR:PATH=/usr/lib/cmake/utf8_range
@@ -467,7 +458,7 @@ CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_NM
 CMAKE_NM-ADVANCED:INTERNAL=1
 //number of local generators
-CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=10
+CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=18
 //ADVANCED property for variable: CMAKE_OBJCOPY
 CMAKE_OBJCOPY-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_OBJDUMP
@@ -526,8 +517,6 @@ FIND_PACKAGE_MESSAGE_DETAILS_OpenSSL:INTERNAL=[/usr/lib/libcrypto.so][/usr/inclu
 FIND_PACKAGE_MESSAGE_DETAILS_Threads:INTERNAL=[TRUE][v()]
 //Details about finding ZLIB
 FIND_PACKAGE_MESSAGE_DETAILS_ZLIB:INTERNAL=[/usr/lib/libz.so][/usr/include][ ][v1.3.2()]
-//Details about finding c-ares
-FIND_PACKAGE_MESSAGE_DETAILS_c-ares:INTERNAL=[/usr/lib/cmake/c-ares/c-ares-config.cmake][v1.34.6()]
 //ADVANCED property for variable: OPENSSL_CRYPTO_LIBRARY
 OPENSSL_CRYPTO_LIBRARY-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: OPENSSL_INCLUDE_DIR

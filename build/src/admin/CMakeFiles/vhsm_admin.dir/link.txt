@@ -1,2 +1,0 @@
-/usr/bin/ar qc libvhsm_admin.a CMakeFiles/vhsm_admin.dir/__/__/cmake/empty.cpp.o
-/usr/bin/ranlib libvhsm_admin.a
