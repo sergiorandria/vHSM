@@ -7,6 +7,8 @@
 #include <optional>
 #include <thread>
 
+#include "RecordCreator.h"
+
 using namespace vhsm;
 using namespace std::chrono_literals;
 
@@ -157,24 +159,9 @@ TEST(ClockUtils, FromIso8601RejectsMalformed) {
     EXPECT_FALSE(ClockUtils::from_iso8601("2025-13-01T00:00:00Z").has_value());
 }
 
-// ---------------------------------------------------------------------------
-// Injection pattern — the reason for the pure-virtual interface
-// ---------------------------------------------------------------------------
-
-// Simulates a component that takes IHsmClock by const-ref.
-struct RecordCreator {
-    const IHsmClock& clock;
-
-    struct Record { int64_t created_at_ms; };
-
-    Record create() const {
-        return { ClockUtils::to_epoch_ms(clock.now()) };
-    }
-};
-
 TEST(ClockInjection, ComponentUsesInjectedClock) {
     FrozenHsmClock fake(ClockUtils::from_epoch_ms(5'000LL));
-    RecordCreator  creator{fake};
+    vhsm::test::RecordCreator  creator{fake};
 
     auto r1 = creator.create();
     EXPECT_EQ(r1.created_at_ms, 5'000LL);
