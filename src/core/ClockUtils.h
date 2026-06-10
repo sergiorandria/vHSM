@@ -1,6 +1,7 @@
 #ifndef VHSM_CORE_CLOCK_UTILS 
 #define VHSM_CORE_CLOCK_UTILS
 #include <optional>
+#include <stdexcept>
 
 #include "hsm_clock.h"
 
@@ -15,8 +16,9 @@ struct ClockUtils {
     // Valid for dates between roughly year 292 million BCE and 292 million CE.
     [[nodiscard]]
     static int64_t to_epoch_ms(HsmTimePoint tp) noexcept {
-        return tp.time_since_epoch().count();
-        // HsmTimePoint's period IS milliseconds, so .count() is already ms.
+        return std::chrono::duration_cast<std::chrono::milliseconds>(tp.time_since_epoch()).count();
+        // HsmTimePoint's period IS milliseconds, so .count() is already ms, 
+        // but it is safer to cast to milliseconds.
     }
 
     /// Reconstruct a HsmTimePoint from a stored epoch-millisecond value.
@@ -49,7 +51,9 @@ struct ClockUtils {
 #ifdef _WIN32
         gmtime_s(&utc_tm, &t);
 #else
-        ::gmtime_r(&t, &utc_tm);
+        if (::gmtime_r(&t, &utc_tm) == nullptr) {
+            throw std::invalid_argument("gmtime_r got an invalid argument");
+        }
 #endif
 
         char buf[32];
@@ -58,8 +62,8 @@ struct ClockUtils {
 
         // Append ".mmmZ"
         char result[32];
-        std::snprintf(result, sizeof(result), "%s.%03lldZ",
-                      buf, static_cast<long long>(ms_norm));
+        std::snprintf(result, sizeof(result), "%s.%03dZ",
+            buf, static_cast<int>(ms_norm));
         return result;
     }
 
@@ -92,6 +96,13 @@ struct ClockUtils {
         utc_tm.tm_year -= 1900;
         utc_tm.tm_mon  -= 1;
         utc_tm.tm_isdst = 0;
+
+        if (utc_tm.tm_mon  < 0 || utc_tm.tm_mon  > 11) return std::nullopt;
+        if (utc_tm.tm_mday < 1 || utc_tm.tm_mday > 31) return std::nullopt;
+        if (utc_tm.tm_hour > 23) return std::nullopt;
+        if (utc_tm.tm_min  > 59) return std::nullopt;
+        if (utc_tm.tm_sec  > 60) return std::nullopt; // 60 = leap second
+        if (ms < 0  || ms > 999) return std::nullopt;
 
 #ifdef _WIN32
         const std::time_t t = _mkgmtime(&utc_tm);
