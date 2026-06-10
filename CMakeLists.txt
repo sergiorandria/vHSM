@@ -163,6 +163,9 @@ add_compile_definitions(
 # ---------------------------------------------------------------------------
 # Subdirectories
 # ---------------------------------------------------------------------------
+
+enable_testing()  # Enable CTest for the tests/ subdirectory
+
 add_subdirectory(src)
 add_subdirectory(tests)
 # add_subdirectory(tools)
