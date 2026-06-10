@@ -9,6 +9,8 @@
 #include <cstring>
 #include <new>
 
+#include "types.h"
+
 namespace vhsm {
 
 // Allocates memory using std::malloc and locks it with mlock().
@@ -23,13 +25,10 @@ class SecureBuffer {
 // carefully if the use of metaprogramming is necessary, or not.
 //    using T = BufferElementType;
 
-// This should be inside core/types.h, 
-// std::uint8_t is not thread safe.
-    using u8 = std::uint8_t;
 public:
     explicit SecureBuffer(std::size_t element_count = 1);
 
-    ~SecureBuffer();
+    ~SecureBuffer() noexcept;
 
     // Non-copyable
     SecureBuffer(const SecureBuffer&) = delete;
@@ -40,21 +39,58 @@ public:
     SecureBuffer& operator=(SecureBuffer&& other) noexcept;
 
     // Pointer to the locked memory
+    [[nodiscard]]
     u8* data() noexcept;
 
     // Const pointer to the locked memory
+    [[nodiscard]]
     const u8* data() const noexcept;
 
     // Size of the buffer in elements
+    [[nodiscard]]
     std::size_t size() const noexcept;
 
     // Size of the buffer in bytes
+    [[nodiscard]]
     std::size_t byte_size() const noexcept;
+
+    // Write `len` bytes from `src` into the buffer at `offset`.
+    // Throws std::out_of_range if offset+len > size().
+    void write(std::size_t offset, const u8* src, std::size_t len);
+    
+    // Read `len` bytes starting at `offset` into `dst`.
+    // Throws std::out_of_range if offset+len > size().
+    void read(std::size_t offset, u8* dst, std::size_t len) const;
+
+    [[nodiscard]] 
+    bool equals(const SecureBuffer& other) const noexcept;
+
+    bool operator==(const SecureBuffer& other) const noexcept; 
+    bool operator!=(const SecureBuffer& other) const noexcept;
 
     // Zeroize the buffer contents
     void wipe() noexcept;
     
 private:
+    // Round `n` up to the next multiple of the system page size.
+    static std::size_t round_up_to_page(std::size_t n) noexcept;
+ 
+    // Returns the system page size (cached after first call).
+    static std::size_t page_size() noexcept;
+ 
+    // Platform-specific: lock `addr`/`len` into RAM.
+    static void lock_pages(void* addr, std::size_t len);
+ 
+    // Platform-specific: unlock pages (best-effort; called in destructor).
+    static void unlock_pages(void* addr, std::size_t len) noexcept;
+ 
+    // Platform-specific: zero memory without compiler elision.
+    static void secure_zero(void* addr, std::size_t len) noexcept;
+ 
+    // Free the full mmap/VirtualAlloc region and reset all members to null.
+    void release() noexcept;
+
+
     u8* data_;                  // Pointer to the usable memory region
     std::size_t size_;          // Usable bytes requested by caller 
     void* alloc_base_;          // Address base of the full mmap allocation
