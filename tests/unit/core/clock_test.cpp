@@ -54,7 +54,7 @@ TEST(FrozenHsmClock, ReturnsSameValueRepeatedly) {
 }
 
 TEST(FrozenHsmClock, AdvanceMovesTimeForward) {
-    const auto start = ClockUtils::from_epoch_ms(1'000'000'000'000LL);
+    const auto start = ClockUtils::from_epoch_ms(1'000'000'000LL);
     FrozenHsmClock clock(start);
 
     clock.advance(1000ms);
