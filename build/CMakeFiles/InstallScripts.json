@@ -1,6 +1,7 @@
 {
 	"InstallScripts" : 
 	[
+<<<<<<< HEAD
 		"/home/sergio/project/vHSM/build/cmake_install.cmake",
 		"/home/sergio/project/vHSM/build/src/cmake_install.cmake",
 		"/home/sergio/project/vHSM/build/src/core/cmake_install.cmake",
@@ -13,6 +14,19 @@
 		"/home/sergio/project/vHSM/build/tests/unit/notification/cmake_install.cmake",
 		"/home/sergio/project/vHSM/build/tests/unit/session/cmake_install.cmake",
 		"/home/sergio/project/vHSM/build/tests/unit/signature_store/cmake_install.cmake"
+=======
+		"/home/rastan/Documents/L3/dev/projet/vHSM/build/cmake_install.cmake",
+		"/home/rastan/Documents/L3/dev/projet/vHSM/build/src/cmake_install.cmake",
+		"/home/rastan/Documents/L3/dev/projet/vHSM/build/src/core/cmake_install.cmake",
+		"/home/rastan/Documents/L3/dev/projet/vHSM/build/tests/cmake_install.cmake",
+		"/home/rastan/Documents/L3/dev/projet/vHSM/build/tests/unit/cmake_install.cmake",
+		"/home/rastan/Documents/L3/dev/projet/vHSM/build/tests/unit/core/cmake_install.cmake",
+		"/home/rastan/Documents/L3/dev/projet/vHSM/build/tests/unit/crypto/cmake_install.cmake",
+		"/home/rastan/Documents/L3/dev/projet/vHSM/build/tests/unit/keystore/cmake_install.cmake",
+		"/home/rastan/Documents/L3/dev/projet/vHSM/build/tests/unit/notification/cmake_install.cmake",
+		"/home/rastan/Documents/L3/dev/projet/vHSM/build/tests/unit/session/cmake_install.cmake",
+		"/home/rastan/Documents/L3/dev/projet/vHSM/build/tests/unit/signature_store/cmake_install.cmake"
+>>>>>>> ebd65df (feat(crypto/rng): Random Number Generator using CTR_DRBG algorithm with '48-byte (384-bit) high-entropy bitstring' as seed)
 	],
 	"Parallel" : false
 }
