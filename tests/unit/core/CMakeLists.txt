@@ -20,7 +20,7 @@ target_link_libraries(vhsm_core_test
 )
 
 # Disable warnings that are triggered by the tests but are not issues in the test context
-target_compile_options(vhsm_core_test PRIVATE -Wno-self-move -Wno-format-truncation)
+target_compile_options(vhsm_core_test PRIVATE -O1 -g -Wno-self-move -Wno-format-truncation)
 
 # Add test to enable testing
 include(GoogleTest)

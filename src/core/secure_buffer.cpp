@@ -300,6 +300,14 @@ std::size_t SecureBuffer::size() const noexcept { return size_; }
 // Size of the buffer in bytes
 std::size_t SecureBuffer::byte_size() const noexcept { return size_ * sizeof(u8); }
 
+bool SecureBuffer::operator==(const SecureBuffer& other) const noexcept {
+    return this->equals(other);
+} 
+    
+bool SecureBuffer::operator!=(const SecureBuffer& other) const noexcept {
+    return !this->equals(other);
+}
+
 // Zeroize the buffer contents
 void SecureBuffer::wipe() noexcept {
     if (data_ != nullptr)
