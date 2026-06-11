@@ -739,15 +739,11 @@ option(VHSM_NOTIFY_BUS_SIZE "Notification ring buffer capacity"         1024)
 *Can run in parallel with Phase 1 after `core/types.h` is agreed.*
 
 - [x] Define `HsmObject` hierarchy (Needs verification)
-- [ ] Implement `key_fingerprint.cpp` (SHA-256 of SPKI DER) (Gilbert)
+- [x] Implement `key_fingerprint.cpp` (SHA-256 of SPKI DER) (Gilbert)
 - [x] Implement `ObjectStore` with handle allocation (Sergio)
 - [x] Implement `AttributeStore` with `CKA_SENSITIVE` / `CKA_EXTRACTABLE` enforcement
-<<<<<<< Updated upstream
 - [x] Implement `key_wrap.cpp` (RFC 3394) (Tanjona) 
-=======
-- [ ] Implement `key_wrap.cpp` (RFC 3394) (Tanjona)
->>>>>>> Stashed changes
-- [ ] Unit tests for attribute enforcement and fingerprint computation
+- [x] Unit tests for attribute enforcement and fingerprint computation
 
 ### Phase 3 — Session & Slot Management (Week 4)
 - [ ] Implement `Slot`, `Token`, `Session` with `app_context_json` in `SignContext`
