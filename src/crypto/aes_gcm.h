@@ -30,16 +30,7 @@ struct AESGCMResult
 class AESGCM 
 {
     public:
-        static AESGCMResult encrypt
-        (
-            const std::vector<u8>& key,
-            const std::vector<u8>& plaintext
-        );
-
-        static std::vector<u8> decrypt
-        (
-            const std::vector<u8>& key,
-            const AESGCMResult& data
-        );
+        static AESGCMResult encrypt( const std::vector<u8>& key, const std::vector<u8>& plaintext);
+        static std::vector<u8> decrypt (const std::vector<u8>& key, const AESGCMResult& data);
 };
 }

@@ -19,12 +19,12 @@ class CTR_DRBG_AES256 {
 public:
     explicit CTR_DRBG_AES256(const std::vector<u8>& entropy_input);
     ~CTR_DRBG_AES256();
-
+    
     void reseed(const std::vector<u8>& entropy_input);
     std::vector<u8> generate(size_t requested_bytes);
 
 private:
-    std::vector<u8> key, V;   
+    std::vector<u8> key, V;
     uint64_t reseed_counter;
     const uint64_t RESEED_INTERVAL = 100000; 
 

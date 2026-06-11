@@ -126,5 +126,4 @@ void HsmObject::wipe() noexcept {
     sensitive_   = false;
     extractable_ = false;
 }
-
 } // namespace vhsm::keystore
