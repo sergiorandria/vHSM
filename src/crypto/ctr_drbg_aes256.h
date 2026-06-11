@@ -19,7 +19,7 @@ class CTR_DRBG_AES256 {
 public:
     explicit CTR_DRBG_AES256(const std::vector<u8>& entropy_input);
     ~CTR_DRBG_AES256();
-    
+
     void reseed(const std::vector<u8>& entropy_input);
     std::vector<u8> generate(size_t requested_bytes);
 
