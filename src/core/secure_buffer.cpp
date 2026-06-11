@@ -248,7 +248,7 @@ void SecureBuffer::read(std::size_t offset,
 
     ::memcpy(dst, data_ + offset, len);
 }
- 
+
 void SecureBuffer::write(std::size_t    offset,
                         const u8* src,
                         std::size_t    len)
