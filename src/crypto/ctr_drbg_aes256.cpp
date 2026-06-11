@@ -16,7 +16,7 @@ namespace vhsm::crypto {
 
     void CTR_DRBG_AES256::aes256_encrypt_block(const std::vector<u8>& input, std::vector<u8>& output) {
         int len;
-        
+
         EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
         VHSM_CHECK_PTR_MSG(ctx != nullptr, "RNG Internal Error: Context creation failed");
 
@@ -49,7 +49,7 @@ namespace vhsm::crypto {
     }
 
     CTR_DRBG_AES256::CTR_DRBG_AES256(const std::vector<u8>& entropy_input) {
-        if (entropy_input.size() != 48) { 
+        if (entropy_input.size() != 48) {
             throw std::invalid_argument("Seed must be 48 bytes");
         }
 

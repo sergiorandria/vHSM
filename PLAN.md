@@ -742,7 +742,7 @@ option(VHSM_NOTIFY_BUS_SIZE "Notification ring buffer capacity"         1024)
 - [ ] Implement `key_fingerprint.cpp` (SHA-256 of SPKI DER) (Gilbert)
 - [ ] Implement `ObjectStore` with handle allocation (Sergio)
 - [ ] Implement `AttributeStore` with `CKA_SENSITIVE` / `CKA_EXTRACTABLE` enforcement
-- [ ] Implement `key_wrap.cpp` (RFC 3394) (Tanjona)
+- [ ] Implement `key_wrap.cpp` (RFC 3394) (Tanjona) 
 - [ ] Unit tests for attribute enforcement and fingerprint computation
 
 ### Phase 3 — Session & Slot Management (Week 4)
