@@ -15,8 +15,8 @@ target_include_directories(vhsm_core_test
 target_link_libraries(vhsm_core_test
     PRIVATE
         vhsm_core
-        gtest
-        gtest_main
+        GTest::gtest
+        GTest::gtest_main
 )
 
 # Disable warnings that are triggered by the tests but are not issues in the test context
