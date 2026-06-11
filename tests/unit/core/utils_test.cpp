@@ -1,10 +1,6 @@
-// ---------------------------------------------------------------------------
-// tests/unit/utils/utils_test.cpp
-// ---------------------------------------------------------------------------
 #include "../../../src/core/utils.h"
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <cstring>
 #include <regex>
 #include <set>
@@ -21,10 +17,6 @@ static std::span<const std::byte> as_bytes(std::string_view s) {
 static std::string to_str(const std::vector<std::byte>& v) {
     return { reinterpret_cast<const char*>(v.data()), v.size() };
 }
-
-// ===========================================================================
-// UUID v4
-// ===========================================================================
 
 TEST(UuidV4, CorrectLength) {
     EXPECT_EQ(uuid_v4().size(), 36u);
@@ -116,7 +108,7 @@ TEST(Base64Encode, AllByteValues) {
     // Every character must be a valid base64 character or '='
     for (char c : enc)
         EXPECT_NE(std::string("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=").find(c),
-                  std::string::npos) << "unexpected char: " << c;
+                std::string::npos) << "unexpected char: " << c;
 }
 
 // ===========================================================================

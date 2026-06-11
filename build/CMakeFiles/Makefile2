@@ -87,18 +87,22 @@ clean: tests/clean
 
 # Recursive "all" directory target.
 src/all: src/core/all
+src/all: src/crypto/all
 .PHONY : src/all
 
 # Recursive "codegen" directory target.
 src/codegen: src/core/codegen
+src/codegen: src/crypto/codegen
 .PHONY : src/codegen
 
 # Recursive "preinstall" directory target.
 src/preinstall: src/core/preinstall
+src/preinstall: src/crypto/preinstall
 .PHONY : src/preinstall
 
 # Recursive "clean" directory target.
 src/clean: src/core/clean
+src/clean: src/crypto/clean
 .PHONY : src/clean
 
 #=============================================================================
@@ -119,6 +123,25 @@ src/core/preinstall:
 # Recursive "clean" directory target.
 src/core/clean: src/core/CMakeFiles/vhsm_core.dir/clean
 .PHONY : src/core/clean
+
+#=============================================================================
+# Directory level rules for directory src/crypto
+
+# Recursive "all" directory target.
+src/crypto/all: src/crypto/CMakeFiles/vhsm_crypto.dir/all
+.PHONY : src/crypto/all
+
+# Recursive "codegen" directory target.
+src/crypto/codegen: src/crypto/CMakeFiles/vhsm_crypto.dir/codegen
+.PHONY : src/crypto/codegen
+
+# Recursive "preinstall" directory target.
+src/crypto/preinstall:
+.PHONY : src/crypto/preinstall
+
+# Recursive "clean" directory target.
+src/crypto/clean: src/crypto/CMakeFiles/vhsm_crypto.dir/clean
+.PHONY : src/crypto/clean
 
 #=============================================================================
 # Directory level rules for directory tests
@@ -201,11 +224,11 @@ tests/unit/core/clean: tests/unit/core/CMakeFiles/vhsm_core_test.dir/clean
 # Directory level rules for directory tests/unit/crypto
 
 # Recursive "all" directory target.
-tests/unit/crypto/all:
+tests/unit/crypto/all: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/all
 .PHONY : tests/unit/crypto/all
 
 # Recursive "codegen" directory target.
-tests/unit/crypto/codegen:
+tests/unit/crypto/codegen: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/codegen
 .PHONY : tests/unit/crypto/codegen
 
 # Recursive "preinstall" directory target.
@@ -213,7 +236,7 @@ tests/unit/crypto/preinstall:
 .PHONY : tests/unit/crypto/preinstall
 
 # Recursive "clean" directory target.
-tests/unit/crypto/clean:
+tests/unit/crypto/clean: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/clean
 .PHONY : tests/unit/crypto/clean
 
 #=============================================================================
@@ -325,6 +348,38 @@ src/core/CMakeFiles/vhsm_core.dir/clean:
 .PHONY : src/core/CMakeFiles/vhsm_core.dir/clean
 
 #=============================================================================
+# Target rules for target src/crypto/CMakeFiles/vhsm_crypto.dir
+
+# All Build rule for target.
+src/crypto/CMakeFiles/vhsm_crypto.dir/all:
+	$(MAKE) $(MAKESILENT) -f src/crypto/CMakeFiles/vhsm_crypto.dir/build.make src/crypto/CMakeFiles/vhsm_crypto.dir/depend
+	$(MAKE) $(MAKESILENT) -f src/crypto/CMakeFiles/vhsm_crypto.dir/build.make src/crypto/CMakeFiles/vhsm_crypto.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=9,10,11,12 "Built target vhsm_crypto"
+.PHONY : src/crypto/CMakeFiles/vhsm_crypto.dir/all
+
+# Build rule for subdir invocation for target.
+src/crypto/CMakeFiles/vhsm_crypto.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/sergio/project/vHSM/build/CMakeFiles 4
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 src/crypto/CMakeFiles/vhsm_crypto.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/sergio/project/vHSM/build/CMakeFiles 0
+.PHONY : src/crypto/CMakeFiles/vhsm_crypto.dir/rule
+
+# Convenience name for target.
+vhsm_crypto: src/crypto/CMakeFiles/vhsm_crypto.dir/rule
+.PHONY : vhsm_crypto
+
+# codegen rule for target.
+src/crypto/CMakeFiles/vhsm_crypto.dir/codegen:
+	$(MAKE) $(MAKESILENT) -f src/crypto/CMakeFiles/vhsm_crypto.dir/build.make src/crypto/CMakeFiles/vhsm_crypto.dir/codegen
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=9,10,11,12 "Finished codegen for target vhsm_crypto"
+.PHONY : src/crypto/CMakeFiles/vhsm_crypto.dir/codegen
+
+# clean rule for target.
+src/crypto/CMakeFiles/vhsm_crypto.dir/clean:
+	$(MAKE) $(MAKESILENT) -f src/crypto/CMakeFiles/vhsm_crypto.dir/build.make src/crypto/CMakeFiles/vhsm_crypto.dir/clean
+.PHONY : src/crypto/CMakeFiles/vhsm_crypto.dir/clean
+
+#=============================================================================
 # Target rules for target tests/unit/core/CMakeFiles/vhsm_core_test.dir
 
 # All Build rule for target.
@@ -355,6 +410,38 @@ tests/unit/core/CMakeFiles/vhsm_core_test.dir/codegen:
 tests/unit/core/CMakeFiles/vhsm_core_test.dir/clean:
 	$(MAKE) $(MAKESILENT) -f tests/unit/core/CMakeFiles/vhsm_core_test.dir/build.make tests/unit/core/CMakeFiles/vhsm_core_test.dir/clean
 .PHONY : tests/unit/core/CMakeFiles/vhsm_core_test.dir/clean
+
+#=============================================================================
+# Target rules for target tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir
+
+# All Build rule for target.
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/all: src/crypto/CMakeFiles/vhsm_crypto.dir/all
+	$(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/depend
+	$(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=13,14,15,16 "Built target vhsm_crypto_test"
+.PHONY : tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/all
+
+# Build rule for subdir invocation for target.
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/sergio/project/vHSM/build/CMakeFiles 8
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/sergio/project/vHSM/build/CMakeFiles 0
+.PHONY : tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/rule
+
+# Convenience name for target.
+vhsm_crypto_test: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/rule
+.PHONY : vhsm_crypto_test
+
+# codegen rule for target.
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/codegen:
+	$(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/codegen
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=13,14,15,16 "Finished codegen for target vhsm_crypto_test"
+.PHONY : tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/codegen
+
+# clean rule for target.
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/clean:
+	$(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/clean
+.PHONY : tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/clean
 
 #=============================================================================
 # Special targets to cleanup operation of make.
