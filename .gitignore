@@ -12,6 +12,7 @@
 
 .claude/
 .clangd
+build/
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs

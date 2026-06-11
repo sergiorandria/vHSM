@@ -2,7 +2,9 @@ add_library(vhsm_keystore)
 
 target_sources(vhsm_keystore
     PRIVATE
-    hsm_object.cpp 
+    hsm_object.cpp
+    attribute_store.cpp
+    object_store.cpp
 )
 
 target_include_directories(vhsm_keystore
