@@ -10,6 +10,8 @@ set(CMAKE_DEPENDS_LANGUAGES
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/sergio/project/vHSM/src/keystore/attribute_store.cpp" "src/keystore/CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o" "gcc" "src/keystore/CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o.d"
   "/home/sergio/project/vHSM/src/keystore/hsm_object.cpp" "src/keystore/CMakeFiles/vhsm_keystore.dir/hsm_object.cpp.o" "gcc" "src/keystore/CMakeFiles/vhsm_keystore.dir/hsm_object.cpp.o.d"
+  "/home/sergio/project/vHSM/src/keystore/key_fingerprint.cpp" "src/keystore/CMakeFiles/vhsm_keystore.dir/key_fingerprint.cpp.o" "gcc" "src/keystore/CMakeFiles/vhsm_keystore.dir/key_fingerprint.cpp.o.d"
+  "/home/sergio/project/vHSM/src/keystore/key_wrap.cpp" "src/keystore/CMakeFiles/vhsm_keystore.dir/key_wrap.cpp.o" "gcc" "src/keystore/CMakeFiles/vhsm_keystore.dir/key_wrap.cpp.o.d"
   "/home/sergio/project/vHSM/src/keystore/object_store.cpp" "src/keystore/CMakeFiles/vhsm_keystore.dir/object_store.cpp.o" "gcc" "src/keystore/CMakeFiles/vhsm_keystore.dir/object_store.cpp.o.d"
   )
 
