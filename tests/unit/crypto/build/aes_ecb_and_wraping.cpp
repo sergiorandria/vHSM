@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "key_wrap.h"
-#include "aes_ecb.h"
+#include "../../../../src/crypto/key_wrap.h"
+#include "../../../../src/crypto/aes_ecb.h"
 #include <openssl/crypto.h>
 #include <vector>
 
@@ -36,13 +36,13 @@ TEST_F(KeyWrapLibraryTest, AesEcbBlockInversionNominal) {
     vhsm::crypto::AESECB::encrypt_block(master_kek.data(), plaintext_block, ciphertext_block);
     
     // Ensure the ciphertext is mutated and distinct from plaintext
-    EXPECT_NE(std::memcmp(plaintext_block, ciphertext_block, 16), 0);
+    EXPECT_NE(memcmp(plaintext_block, ciphertext_block, 16), 0);
 
     // Execute low-level raw decryption block hook
     vhsm::crypto::AESECB::decrypt_block(master_kek.data(), ciphertext_block, decrypted_block);
 
     // Verify perfect inversion compliance
-    EXPECT_EQ(std::memcmp(plaintext_block, decrypted_block, 16), 0);
+    EXPECT_EQ(memcmp(plaintext_block, decrypted_block, 16), 0);
 }
 
 // ============================================================================
