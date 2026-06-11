@@ -70,19 +70,19 @@ public:
 private:
     // Round `n` up to the next multiple of the system page size.
     static std::size_t round_up_to_page(std::size_t n) noexcept;
- 
+
     // Returns the system page size (cached after first call).
     static std::size_t page_size() noexcept;
- 
+
     // Platform-specific: lock `addr`/`len` into RAM.
     static void lock_pages(void* addr, std::size_t len);
- 
+
     // Platform-specific: unlock pages (best-effort; called in destructor).
     static void unlock_pages(void* addr, std::size_t len) noexcept;
- 
+
     // Platform-specific: zero memory without compiler elision.
     static void secure_zero(void* addr, std::size_t len) noexcept;
- 
+
     // Free the full mmap/VirtualAlloc region and reset all members to null.
     void release() noexcept;
 

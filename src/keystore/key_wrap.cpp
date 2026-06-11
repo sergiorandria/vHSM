@@ -1,5 +1,7 @@
 #include "key_wrap.h"
 #include "../crypto/aes_ecb.h"
+#include "../core/error.h"
+
 #include <openssl/crypto.h>
 #include <cstring>
 #include <sys/mman.h>
@@ -7,9 +9,7 @@
 namespace vhsm::keystore {
 
     KeyWrap::KeyWrap(const std::vector<u8>& master_kek) {
-        if (master_kek.size() != 32) {
-            throw std::invalid_argument("KeyWrap Initialization Error: KEK must be exactly 32 bytes for AES-256");
-        }
+        VHSM_CHECK_MSG(master_kek.size() == 32, "KeyWrap Initialization Error: KEK must be exactly 32 bytes for AES-256");
         
         internal_kek = master_kek;
         mlock(internal_kek.data(), internal_kek.size());
@@ -23,9 +23,7 @@ namespace vhsm::keystore {
     }
 
     std::vector<u8> KeyWrap::wrap(const std::vector<u8>& plaintext_key) const {
-        if (plaintext_key.size() < 16 || plaintext_key.size() % 8 != 0) {
-            throw std::invalid_argument("Plaintext key size must be a multiple of 8 bytes and >= 16 bytes");
-        }
+        VHSM_CHECK_MSG(plaintext_key.size() >= 16 && plaintext_key.size() % 8 == 0, "Plaintext key size must be a multiple of 8 bytes and >= 16 bytes");
 
         size_t n = plaintext_key.size() / 8; 
         std::vector<u8> result((n + 1) * 8);
@@ -63,9 +61,7 @@ namespace vhsm::keystore {
     }
 
     std::vector<u8> KeyWrap::unwrap(const std::vector<u8>& ciphertext_key) const {
-        if (ciphertext_key.size() < 24 || ciphertext_key.size() % 8 != 0) {
-            throw std::invalid_argument("Ciphertext key size must be a multiple of 8 bytes and >= 24 bytes");
-        }
+        VHSM_CHECK_MSG(ciphertext_key.size() >= 24 && ciphertext_key.size() % 8 == 0, "Ciphertext key size must be a multiple of 8 bytes and >= 24 bytes");
 
         size_t n = (ciphertext_key.size() / 8) - 1;
         std::vector<u8> result(n * 8);
