@@ -52,6 +52,9 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/ecc.cpp.o: \
  /usr/include/c++/16.1.1/bits/ranges_base.h \
  /usr/include/c++/16.1.1/bits/max_size_type.h \
  /usr/include/c++/16.1.1/numbers /usr/include/c++/16.1.1/limits \
+ /usr/include/c++/16.1.1/bits/ranges_algobase.h \
+ /usr/include/c++/16.1.1/bits/invoke.h \
+ /usr/include/c++/16.1.1/bits/ranges_util.h \
  /usr/include/c++/16.1.1/bits/stl_bvector.h \
  /usr/include/c++/16.1.1/bits/functional_hash.h \
  /usr/include/c++/16.1.1/bits/hash_bytes.h \
@@ -63,10 +66,10 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/ecc.cpp.o: \
  /usr/lib/gcc/x86_64-pc-linux-gnu/16.1.1/include/stddef.h \
  /usr/include/c++/16.1.1/bits/uses_allocator.h \
  /usr/include/c++/16.1.1/bits/uses_allocator_args.h \
- /usr/include/c++/16.1.1/tuple /usr/include/c++/16.1.1/bits/invoke.h \
- /usr/include/c++/16.1.1/bits/ranges_util.h /usr/include/openssl/evp.h \
- /usr/include/openssl/macros.h /usr/include/openssl/opensslconf.h \
- /usr/include/openssl/configuration.h /usr/include/openssl/opensslv.h \
+ /usr/include/c++/16.1.1/tuple /usr/include/c++/16.1.1/bits/formatfwd.h \
+ /usr/include/openssl/evp.h /usr/include/openssl/macros.h \
+ /usr/include/openssl/opensslconf.h /usr/include/openssl/configuration.h \
+ /usr/include/openssl/opensslv.h \
  /usr/lib/gcc/x86_64-pc-linux-gnu/16.1.1/include/stdarg.h \
  /usr/include/stdio.h /usr/include/bits/libc-header-start.h \
  /usr/include/bits/types.h /usr/include/bits/typesizes.h \
@@ -137,6 +140,12 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/ecc.cpp.o: \
  /home/sergio/project/vHSM/src/crypto/MdCtxGuard.h \
  /home/sergio/project/vHSM/src/crypto/PkeyCtxGuard.h \
  /home/sergio/project/vHSM/src/crypto/../core/types.h \
+ /usr/include/c++/16.1.1/atomic \
+ /usr/include/c++/16.1.1/bits/atomic_base.h \
+ /usr/include/c++/16.1.1/bits/atomic_lockfree_defines.h \
+ /usr/include/c++/16.1.1/bits/atomic_wait.h \
+ /usr/include/c++/16.1.1/x86_64-pc-linux-gnu/bits/gthr.h \
+ /usr/include/c++/16.1.1/x86_64-pc-linux-gnu/bits/gthr-default.h \
  /usr/include/c++/16.1.1/cstdint /usr/include/c++/16.1.1/string \
  /usr/include/c++/16.1.1/bits/stringfwd.h \
  /usr/include/c++/16.1.1/bits/char_traits.h \

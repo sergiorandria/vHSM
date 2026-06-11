@@ -1,2 +1,2 @@
-/usr/bin/ar qc libvhsm_crypto.a CMakeFiles/vhsm_crypto.dir/rsa.cpp.o CMakeFiles/vhsm_crypto.dir/ecc.cpp.o CMakeFiles/vhsm_crypto.dir/aes_gcm.cpp.o
+/usr/bin/ar qc libvhsm_crypto.a CMakeFiles/vhsm_crypto.dir/rsa.cpp.o CMakeFiles/vhsm_crypto.dir/ecc.cpp.o CMakeFiles/vhsm_crypto.dir/aes_gcm.cpp.o CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.o CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.o
 /usr/bin/ranlib libvhsm_crypto.a

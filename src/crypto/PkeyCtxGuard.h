@@ -3,7 +3,7 @@
 
 #include <openssl/evp.h>
 
-namespace {
+namespace vhsm::crypto {
 struct PkeyCtxGuard {
     EVP_PKEY_CTX* ctx;
     explicit PkeyCtxGuard(EVP_PKEY_CTX* c) noexcept : ctx(c) {}
