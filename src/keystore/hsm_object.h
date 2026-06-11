@@ -56,6 +56,8 @@ protected:
     bool         sensitive_;
     bool         extractable_;
     SecureBuffer id_;
+
+    friend class AttributeStore;
 };
 } // namespace vhsm::keystore
 

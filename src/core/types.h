@@ -28,6 +28,20 @@ typedef CK_ULONG CK_CERTIFICATE_TYPE;
 typedef CK_ULONG CK_KEY_TYPE;
 typedef CK_ULONG CK_MECHANISM_TYPE;
 
+// PKCS#11 attribute types
+typedef CK_ULONG CK_ATTRIBUTE_TYPE;
+typedef void*    CK_VOID_PTR;
+typedef CK_ULONG* CK_ULONG_PTR;
+
+// The CK_ATTRIBUTE structure
+typedef struct CK_ATTRIBUTE {
+    CK_ATTRIBUTE_TYPE type;
+    CK_VOID_PTR       pValue;
+    CK_ULONG          ulValueLen;
+} CK_ATTRIBUTE;
+
+typedef CK_ATTRIBUTE* CK_ATTRIBUTE_PTR;
+
 // Boolean types
 typedef unsigned char CK_BBOOL;
 #define CK_FALSE 0
@@ -42,7 +56,8 @@ typedef CK_ULONG CK_RV;
 #define CKR_GENERAL_ERROR                 ((CK_RV) 0x00000005UL)
 #define CKR_FUNCTION_FAILED               ((CK_RV) 0x00000006UL)
 #define CKR_ARGUMENTS_BAD                 ((CK_RV) 0x00000007UL)
-#define CKR_NO_EVENT                      ((CK_RV) 0x00000008UL)
+#define CKR_BUFFER_TOO_SMALL              ((CK_RV) 0x00000008UL)
+#define CKR_NO_EVENT                      ((CK_RV) 0x00000009UL)
 #define CKR_NEED_TO_CREATE_THREADS        ((CK_RV) 0x00000009UL)
 #define CKR_CANT_LOCK                     ((CK_RV) 0x0000000AUL)
 #define CKR_ATTRIBUTE_READ_ONLY           ((CK_RV) 0x00000010UL)
