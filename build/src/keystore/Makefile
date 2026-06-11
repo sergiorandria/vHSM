@@ -233,6 +233,54 @@ hsm_object.cpp.s:
 	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/hsm_object.cpp.s
 .PHONY : hsm_object.cpp.s
 
+key_fingerprint.o: key_fingerprint.cpp.o
+.PHONY : key_fingerprint.o
+
+# target to build an object file
+key_fingerprint.cpp.o:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/key_fingerprint.cpp.o
+.PHONY : key_fingerprint.cpp.o
+
+key_fingerprint.i: key_fingerprint.cpp.i
+.PHONY : key_fingerprint.i
+
+# target to preprocess a source file
+key_fingerprint.cpp.i:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/key_fingerprint.cpp.i
+.PHONY : key_fingerprint.cpp.i
+
+key_fingerprint.s: key_fingerprint.cpp.s
+.PHONY : key_fingerprint.s
+
+# target to generate assembly for a file
+key_fingerprint.cpp.s:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/key_fingerprint.cpp.s
+.PHONY : key_fingerprint.cpp.s
+
+key_wrap.o: key_wrap.cpp.o
+.PHONY : key_wrap.o
+
+# target to build an object file
+key_wrap.cpp.o:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/key_wrap.cpp.o
+.PHONY : key_wrap.cpp.o
+
+key_wrap.i: key_wrap.cpp.i
+.PHONY : key_wrap.i
+
+# target to preprocess a source file
+key_wrap.cpp.i:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/key_wrap.cpp.i
+.PHONY : key_wrap.cpp.i
+
+key_wrap.s: key_wrap.cpp.s
+.PHONY : key_wrap.s
+
+# target to generate assembly for a file
+key_wrap.cpp.s:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/key_wrap.cpp.s
+.PHONY : key_wrap.cpp.s
+
 object_store.o: object_store.cpp.o
 .PHONY : object_store.o
 
@@ -277,6 +325,12 @@ help:
 	@echo "... hsm_object.o"
 	@echo "... hsm_object.i"
 	@echo "... hsm_object.s"
+	@echo "... key_fingerprint.o"
+	@echo "... key_fingerprint.i"
+	@echo "... key_fingerprint.s"
+	@echo "... key_wrap.o"
+	@echo "... key_wrap.i"
+	@echo "... key_wrap.s"
 	@echo "... object_store.o"
 	@echo "... object_store.i"
 	@echo "... object_store.s"

@@ -1,2 +1,2 @@
-/usr/bin/ar qc libvhsm_keystore.a CMakeFiles/vhsm_keystore.dir/hsm_object.cpp.o CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o CMakeFiles/vhsm_keystore.dir/object_store.cpp.o
+/usr/bin/ar qc libvhsm_keystore.a CMakeFiles/vhsm_keystore.dir/hsm_object.cpp.o CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o CMakeFiles/vhsm_keystore.dir/object_store.cpp.o CMakeFiles/vhsm_keystore.dir/key_wrap.cpp.o CMakeFiles/vhsm_keystore.dir/key_fingerprint.cpp.o
 /usr/bin/ranlib libvhsm_keystore.a
