@@ -5,6 +5,7 @@
 		"/home/sergio/project/vHSM/build/src/cmake_install.cmake",
 		"/home/sergio/project/vHSM/build/src/core/cmake_install.cmake",
 		"/home/sergio/project/vHSM/build/src/crypto/cmake_install.cmake",
+		"/home/sergio/project/vHSM/build/src/keystore/cmake_install.cmake",
 		"/home/sergio/project/vHSM/build/tests/cmake_install.cmake",
 		"/home/sergio/project/vHSM/build/tests/unit/cmake_install.cmake",
 		"/home/sergio/project/vHSM/build/tests/unit/core/cmake_install.cmake",

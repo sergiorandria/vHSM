@@ -37,7 +37,7 @@ void csprng_fill(std::span<std::byte> buf) {
     std::byte* ptr = buf.data();
     std::size_t remaining = buf.size();
     while (remaining > 0) {
-        const ssize_t n = ::getrandom(buf.data(), buf.size(), 0);
+        const ssize_t n = ::getrandom(ptr, buf.size(), 0);
         if (n < 0) {
             if (errno == EINTR) [[likely]] {
                 // On POSIX, ::getrandom() can be interrupted by a signal
