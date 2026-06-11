@@ -1,5 +1,6 @@
 # Keystore Unit Tests
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 find_package(GTest REQUIRED)
 
@@ -21,6 +22,8 @@ target_link_libraries(vhsm_keystore_test
 
 add_test(NAME vhsm_keystore_test COMMAND vhsm_keystore_test)
 =======
+=======
+>>>>>>> 886025d0ccfc8b68813a05f5d5d8926b5c61713b
 # Placeholder - add test files as they are created
 
 find_package(OpenSSL REQUIRED)
@@ -41,5 +44,9 @@ target_link_libraries(vhsm_fingerprint_test
     GTest::gtest_main
 )
 
+<<<<<<< HEAD
 add_test(NAME vhsm_fingerprint_test COMMAND vhsm_fingerprint_test)
 >>>>>>> 886025d (Build Files)
+=======
+add_test(NAME vhsm_fingerprint_test COMMAND vhsm_fingerprint_test)
+>>>>>>> 886025d0ccfc8b68813a05f5d5d8926b5c61713b
