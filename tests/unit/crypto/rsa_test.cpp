@@ -4,6 +4,8 @@
 
 #include <openssl/evp.h>
 
+using namespace vhsm::crypto;
+
 TEST(RSA, GenerateSignVerify)
 {
     // generate key

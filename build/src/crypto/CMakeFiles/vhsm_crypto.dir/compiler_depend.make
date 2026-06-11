@@ -248,6 +248,10 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/aes_gcm.cpp.o: /home/sergio/project/vHSM/s
   /usr/lib/gcc/x86_64-pc-linux-gnu/16.1.1/include/syslimits.h
 
 src/crypto/CMakeFiles/vhsm_crypto.dir/ecc.cpp.o: /home/sergio/project/vHSM/src/crypto/ecc.cpp \
+  /home/sergio/project/vHSM/src/core/error.h \
+  /home/sergio/project/vHSM/src/core/types.h \
+  /home/sergio/project/vHSM/src/crypto/MdCtxGuard.h \
+  /home/sergio/project/vHSM/src/crypto/PkeyCtxGuard.h \
   /home/sergio/project/vHSM/src/crypto/ecc.h \
   /usr/include/alloca.h \
   /usr/include/asm-generic/bitsperlong.h \
@@ -267,7 +271,6 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/ecc.cpp.o: /home/sergio/project/vHSM/src/c
   /usr/include/bits/endian.h \
   /usr/include/bits/endianness.h \
   /usr/include/bits/errno.h \
-  /usr/include/bits/error.h \
   /usr/include/bits/floatn-common.h \
   /usr/include/bits/floatn.h \
   /usr/include/bits/libc-header-start.h \
@@ -403,6 +406,7 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/ecc.cpp.o: /home/sergio/project/vHSM/src/c
   /usr/include/c++/16.1.1/compare \
   /usr/include/c++/16.1.1/concepts \
   /usr/include/c++/16.1.1/cstddef \
+  /usr/include/c++/16.1.1/cstdint \
   /usr/include/c++/16.1.1/cstdio \
   /usr/include/c++/16.1.1/cstdlib \
   /usr/include/c++/16.1.1/cwchar \
@@ -435,7 +439,6 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/ecc.cpp.o: /home/sergio/project/vHSM/src/c
   /usr/include/ctype.h \
   /usr/include/endian.h \
   /usr/include/errno.h \
-  /usr/include/error.h \
   /usr/include/features-time64.h \
   /usr/include/features.h \
   /usr/include/gnu/stubs-64.h \
@@ -497,6 +500,9 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/ecc.cpp.o: /home/sergio/project/vHSM/src/c
   /usr/lib/gcc/x86_64-pc-linux-gnu/16.1.1/include/syslimits.h
 
 src/crypto/CMakeFiles/vhsm_crypto.dir/rsa.cpp.o: /home/sergio/project/vHSM/src/crypto/rsa.cpp \
+  /home/sergio/project/vHSM/src/core/error.h \
+  /home/sergio/project/vHSM/src/crypto/MdCtxGuard.h \
+  /home/sergio/project/vHSM/src/crypto/PkeyCtxGuard.h \
   /home/sergio/project/vHSM/src/crypto/rsa.h \
   /usr/include/alloca.h \
   /usr/include/asm-generic/bitsperlong.h \
@@ -929,6 +935,8 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/rsa.cpp.o: /home/sergio/project/vHSM/src/c
 
 /usr/include/bits/types/__locale_t.h:
 
+/home/sergio/project/vHSM/src/crypto/MdCtxGuard.h:
+
 /usr/include/bits/select2.h:
 
 /usr/include/openssl/symhacks.h:
@@ -968,6 +976,8 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/rsa.cpp.o: /home/sergio/project/vHSM/src/c
 /usr/include/bits/libc-header-start.h:
 
 /usr/include/bits/floatn-common.h:
+
+/home/sergio/project/vHSM/src/crypto/PkeyCtxGuard.h:
 
 /usr/include/bits/typesizes.h:
 
@@ -1151,8 +1161,6 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/rsa.cpp.o: /home/sergio/project/vHSM/src/c
 
 /usr/include/c++/16.1.1/bits/exception_ptr.h:
 
-/usr/include/error.h:
-
 /usr/include/bits/floatn.h:
 
 /usr/include/c++/16.1.1/bits/alloc_traits.h:
@@ -1294,8 +1302,6 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/rsa.cpp.o: /home/sergio/project/vHSM/src/c
 /usr/include/bits/waitstatus.h:
 
 /usr/include/bits/wchar.h:
-
-/usr/include/bits/error.h:
 
 /usr/include/c++/16.1.1/x86_64-pc-linux-gnu/bits/c++locale.h:
 

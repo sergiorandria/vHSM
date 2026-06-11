@@ -133,11 +133,12 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/ecc.cpp.o: \
  /usr/include/openssl/bioerr.h /usr/include/openssl/evperr.h \
  /usr/include/openssl/objects.h /usr/include/openssl/obj_mac.h \
  /usr/include/openssl/asn1.h /usr/include/openssl/asn1err.h \
- /usr/include/openssl/objectserr.h /usr/include/error.h \
- /usr/include/bits/error.h /usr/include/openssl/ec.h \
- /usr/include/string.h /usr/include/strings.h \
- /usr/include/bits/strings_fortified.h \
- /usr/include/bits/string_fortified.h /usr/include/openssl/ecerr.h \
+ /usr/include/openssl/objectserr.h \
+ /home/sergio/project/vHSM/src/crypto/MdCtxGuard.h \
+ /home/sergio/project/vHSM/src/crypto/PkeyCtxGuard.h \
+ /home/sergio/project/vHSM/src/crypto/../core/types.h \
+ /usr/include/c++/16.1.1/cstdint \
+ /home/sergio/project/vHSM/src/crypto/../core/error.h \
  /usr/include/c++/16.1.1/stdexcept /usr/include/c++/16.1.1/exception \
  /usr/include/c++/16.1.1/bits/exception_ptr.h \
  /usr/include/c++/16.1.1/bits/cxxabi_init_exception.h \
@@ -166,4 +167,7 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/ecc.cpp.o: \
  /usr/include/bits/types/error_t.h \
  /usr/include/c++/16.1.1/bits/charconv.h \
  /usr/include/c++/16.1.1/bits/basic_string.tcc \
- /usr/include/c++/16.1.1/bits/stdexcept_except.h
+ /usr/include/c++/16.1.1/bits/stdexcept_except.h \
+ /usr/include/openssl/ec.h /usr/include/string.h /usr/include/strings.h \
+ /usr/include/bits/strings_fortified.h \
+ /usr/include/bits/string_fortified.h /usr/include/openssl/ecerr.h

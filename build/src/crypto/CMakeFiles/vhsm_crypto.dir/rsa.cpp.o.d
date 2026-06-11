@@ -204,5 +204,8 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/rsa.cpp.o: \
  /usr/include/openssl/evperr.h /usr/include/openssl/objects.h \
  /usr/include/openssl/obj_mac.h /usr/include/openssl/asn1.h \
  /usr/include/openssl/asn1err.h /usr/include/openssl/objectserr.h \
+ /home/sergio/project/vHSM/src/crypto/../core/error.h \
+ /home/sergio/project/vHSM/src/crypto/PkeyCtxGuard.h \
+ /home/sergio/project/vHSM/src/crypto/MdCtxGuard.h \
  /usr/include/openssl/rsa.h /usr/include/openssl/rsaerr.h \
  /usr/include/openssl/err.h /usr/include/openssl/lhash.h
