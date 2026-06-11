@@ -22,7 +22,8 @@ namespace vhsm::utils {
 // ===========================================================================
 
 namespace {
-
+// Pseudo Random Number Generator 
+// Simple implementation
 void csprng_fill(std::span<std::byte> buf) {
 #ifdef _WIN32
     const NTSTATUS s = ::BCryptGenRandom(
@@ -65,10 +66,7 @@ std::string uuid_v4() {
     return buf;
 }
 
-// ===========================================================================
 // Base64
-// ===========================================================================
-
 static constexpr std::string_view kB64Chars =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -84,7 +82,7 @@ std::string base64_encode(std::span<const std::byte> data) {
         out += kB64Chars[ b0 >> 2];
         out += kB64Chars[(b0 & 0x03) << 4 | b1 >> 4];
         out += (i + 1 < data.size()) ? kB64Chars[(b1 & 0x0f) << 2 | b2 >> 6] : '=';
-        out += (i + 2 < data.size()) ? kB64Chars[ b2 & 0x3f]                  : '=';
+        out += (i + 2 < data.size()) ? kB64Chars[ b2 & 0x3f] : '=';
     }
     return out;
 }
@@ -93,11 +91,13 @@ std::string base64_encode(std::span<const std::byte> data) {
 static constexpr auto make_b64_decode_table() {
     std::array<uint8_t, 256> t{};
     t.fill(0xFF);
-    for (uint8_t i = 0; i < 64; ++i)
+    for (uint8_t i = 0; i < 64; ++i) {
         t[static_cast<uint8_t>(kB64Chars[i])] = i;
+    }
     t[static_cast<uint8_t>('=')] = 0xFE;
     return t;
 }
+
 static constexpr auto kB64Decode = make_b64_decode_table();
 
 std::optional<std::vector<std::byte>> base64_decode(std::string_view s) {
@@ -129,10 +129,7 @@ std::optional<std::vector<std::byte>> base64_decode(std::string_view s) {
     return out;
 }
 
-// ===========================================================================
 // Hex
-// ===========================================================================
-
 static constexpr std::string_view kHexChars = "0123456789abcdef";
 
 std::string hex_encode(std::span<const std::byte> data) {

@@ -133,9 +133,14 @@ src/core/CMakeFiles/vhsm_core.dir/secure_buffer.cpp.o: \
  /usr/include/strings.h /usr/include/bits/strings_fortified.h \
  /usr/include/bits/string_fortified.h \
  /home/sergio/project/vHSM/src/core/types.h \
- /usr/include/c++/16.1.1/cassert /usr/include/assert.h \
- /usr/include/unistd.h /usr/include/bits/posix_opt.h \
- /usr/include/bits/environments.h /usr/include/bits/confname.h \
- /usr/include/bits/getopt_posix.h /usr/include/bits/getopt_core.h \
- /usr/include/bits/unistd.h /usr/include/bits/unistd-decl.h \
- /usr/include/bits/unistd_ext.h /usr/include/linux/close_range.h
+ /usr/include/c++/16.1.1/vector \
+ /usr/include/c++/16.1.1/bits/stl_uninitialized.h \
+ /usr/include/c++/16.1.1/bits/stl_vector.h \
+ /usr/include/c++/16.1.1/bits/stl_bvector.h \
+ /usr/include/c++/16.1.1/bits/vector.tcc /usr/include/c++/16.1.1/cassert \
+ /usr/include/assert.h /usr/include/unistd.h \
+ /usr/include/bits/posix_opt.h /usr/include/bits/environments.h \
+ /usr/include/bits/confname.h /usr/include/bits/getopt_posix.h \
+ /usr/include/bits/getopt_core.h /usr/include/bits/unistd.h \
+ /usr/include/bits/unistd-decl.h /usr/include/bits/unistd_ext.h \
+ /usr/include/linux/close_range.h
