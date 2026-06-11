@@ -9,42 +9,48 @@ AttributeStore::AttributeStore(HsmObject& object) : object_(object) {}
 CK_RV AttributeStore::getAttribute(CK_ATTRIBUTE_TYPE type, CK_VOID_PTR pValue, CK_ULONG_PTR pulValueLen) {
     // First, determine the size needed for the attribute
     CK_ULONG ulSize = 0;
-    bool bResult = false;
+    //bool bResult = false;
 
     switch (type) {
         case CKA_CLASS:
             ulSize = sizeof(CK_ULONG);
-            bResult = true;
+            //bResult = true;
             break;
         case CKA_TOKEN:
             ulSize = sizeof(CK_BBOOL);
-            bResult = true;
+            //bResult = true;
             break;
         case CKA_PRIVATE:
             ulSize = sizeof(CK_BBOOL);
-            bResult = true;
+            //bResult = true;
             break;
-        case CKA_LABEL:
-            // Label is not stored in HsmObject for now; we'll return empty
-            ulSize = 0;
-            bResult = true;
+        case CKA_LABEL: {
+            auto it = extraAttrs_.find(CKA_LABEL);
+            ulSize = (it != extraAttrs_.end())
+                    ? static_cast<CK_ULONG>(it->second.size())
+                    : 0;
             break;
+        }
         case CKA_ID:
             // ID is stored in the object's id_ (SecureBuffer)
             ulSize = object_.getId().size();
-            bResult = true;
+            //bResult = true;
             break;
         case CKA_SENSITIVE:
             ulSize = sizeof(CK_BBOOL);
-            bResult = true;
+            //bResult = true;
             break;
         case CKA_EXTRACTABLE:
             ulSize = sizeof(CK_BBOOL);
-            bResult = true;
+            //bResult = true;
             break;
-        case CKA_VALUE:
-            // Value is not exposed via getAttribute for security; return error
-            return CKR_ATTRIBUTE_TYPE_INVALID;
+        case CKA_VALUE: {
+            auto it = extraAttrs_.find(CKA_VALUE);
+            ulSize = (it != extraAttrs_.end())
+                    ? static_cast<CK_ULONG>(it->second.size())
+                    : 0;
+            break;
+        }
         default:
             return CKR_ATTRIBUTE_TYPE_INVALID;
     }
@@ -92,8 +98,13 @@ CK_RV AttributeStore::getAttribute(CK_ATTRIBUTE_TYPE type, CK_VOID_PTR pValue, C
             break;
         }
         case CKA_LABEL: {
-            // Empty label
-            ::memset(pValue, 0, ulSize);
+            auto it = extraAttrs_.find(CKA_LABEL);
+            if (it != extraAttrs_.end() && !it->second.empty()) {
+                ::memcpy(pValue, it->second.data(), it->second.size());
+                ulSize = static_cast<CK_ULONG>(it->second.size());
+            } else {
+                ulSize = 0;
+            }
             break;
         }
         case CKA_ID: {
@@ -113,6 +124,16 @@ CK_RV AttributeStore::getAttribute(CK_ATTRIBUTE_TYPE type, CK_VOID_PTR pValue, C
         case CKA_EXTRACTABLE: {
             CK_BBOOL extractableValue = object_.isExtractable() ? CK_TRUE : CK_FALSE;
             ::memcpy(pValue, &extractableValue, ulSize);
+            break;
+        }
+        case CKA_VALUE: {
+            auto it = extraAttrs_.find(CKA_VALUE);
+            if (it != extraAttrs_.end() && !it->second.empty()) {
+                ::memcpy(pValue, it->second.data(), it->second.size());
+                ulSize = static_cast<CK_ULONG>(it->second.size());
+            } else {
+                ulSize = 0;
+            }
             break;
         }
         default:
@@ -154,8 +175,13 @@ CK_RV AttributeStore::setAttribute(CK_ATTRIBUTE_PTR pAttr) {
             return CKR_ATTRIBUTE_READ_ONLY;
         }
         case CKA_LABEL: {
-            // Label can be set; we don't store it in HsmObject for now, so ignore
-            // In a real implementation, we would store it in the object.
+            // Store label in extraAttrs_
+            if (pAttr->pValue != nullptr && pAttr->ulValueLen > 0) {
+                const u8* src = static_cast<const u8*>(pAttr->pValue);
+                extraAttrs_[CKA_LABEL].assign(src, src + pAttr->ulValueLen);
+            } else {
+                extraAttrs_[CKA_LABEL].clear();
+            }
             break;
         }
         case CKA_ID: {
@@ -192,8 +218,9 @@ CK_RV AttributeStore::setAttribute(CK_ATTRIBUTE_PTR pAttr) {
             break;
         }
         case CKA_VALUE: {
-            // Value is not settable via this method; use other mechanisms (e.g., C_CreateObject)
-            return CKR_ATTRIBUTE_READ_ONLY;
+            const u8* src = static_cast<const u8*>(pAttr->pValue);
+            extraAttrs_[pAttr->type].assign(src, src + pAttr->ulValueLen);
+            break;
         }
         default:
             return CKR_ATTRIBUTE_TYPE_INVALID;

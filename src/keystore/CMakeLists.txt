@@ -5,6 +5,7 @@ target_sources(vhsm_keystore
     hsm_object.cpp
     attribute_store.cpp
     object_store.cpp
+    key_wrap.cpp
 )
 
 target_include_directories(vhsm_keystore
@@ -14,5 +15,8 @@ target_include_directories(vhsm_keystore
 find_package(OpenSSL REQUIRED)
 
 target_link_libraries(vhsm_keystore
-    PUBLIC OpenSSL::SSL
+    PUBLIC
+    vhsm_core
+    vhsm_crypto
+    OpenSSL::SSL
 )

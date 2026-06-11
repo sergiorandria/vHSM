@@ -54,10 +54,11 @@ public:
 protected:
     virtual void wipe() noexcept; // override in derived to zero key material
 
-    ObjectType   type_;
-    bool         sensitive_;
-    bool         extractable_;
+    ObjectType  type_;
+    bool        sensitive_;
+    bool        extractable_;
     SecureBuffer id_;
+    bool        idSet_;
 
     friend class AttributeStore;
 };
