@@ -1,13 +1,11 @@
 #include "ctr_drbg_aes256.h"
 #include "SecureRNG.h"
 #include "../core/error.h"
-#include "CipherCtxGuard.h" 
+#include "CipherCtxGuard.h"
 
-#include <cstring>
-#include <stdexcept>
-#include <fstream>
-#include <sys/mman.h>
 #include <openssl/evp.h>
+#include <cstring>
+#include <fstream>
 
 namespace vhsm::crypto {
     void CTR_DRBG_AES256::increment_V() {
@@ -103,6 +101,7 @@ namespace vhsm::crypto {
         if (!source || !source.read(reinterpret_cast<char*>(entropy.data()), 48)) {
             throw std::runtime_error("RNG Failure: Enclave cannot reach system entropy source: " + source_path);
         }
+        
         return entropy;
     }
 }
