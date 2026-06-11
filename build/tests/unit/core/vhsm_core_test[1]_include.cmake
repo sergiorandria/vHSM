@@ -1,5 +1,5 @@
-if(EXISTS "/home/rastan/Documents/L3/dev/projet/vHSM/build/tests/unit/core/vhsm_core_test[1]_tests.cmake")
-  include("/home/rastan/Documents/L3/dev/projet/vHSM/build/tests/unit/core/vhsm_core_test[1]_tests.cmake")
+if(EXISTS "/home/misa/code/vHSM/build/tests/unit/core/vhsm_core_test[1]_tests.cmake")
+  include("/home/misa/code/vHSM/build/tests/unit/core/vhsm_core_test[1]_tests.cmake")
 else()
   add_test(vhsm_core_test_NOT_BUILT vhsm_core_test_NOT_BUILT)
 endif()
