@@ -1,8 +1,6 @@
 #include "attribute_store.h"
-#include "../core/error.h"
 
 #include <cstring>
-#include <stdexcept>
 
 namespace vhsm::keystore {
 

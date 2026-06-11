@@ -17,10 +17,10 @@ constexpr CK_ULONG CKA_CLASS            = 0x00000000;
 constexpr CK_ULONG CKA_TOKEN            = 0x00000001;
 constexpr CK_ULONG CKA_PRIVATE          = 0x00000002;
 constexpr CK_ULONG CKA_LABEL            = 0x00000003;
-constexpr CK_ULONG CKA_ID               = 0x00000010;
-constexpr CK_ULONG CKA_SENSITIVE        = 0x00000011;
-constexpr CK_ULONG CKA_EXTRACTABLE      = 0x00000012;
-constexpr CK_ULONG CKA_VALUE            = 0x00000013;
+constexpr CK_ULONG CKA_ID               = 0x000000102;
+constexpr CK_ULONG CKA_SENSITIVE        = 0x000000103;
+constexpr CK_ULONG CKA_EXTRACTABLE      = 0x000000162;
+constexpr CK_ULONG CKA_VALUE            = 0x00000011;
 
 // Object Classes
 constexpr CK_ULONG CKO_DATA             = 0x00000000;

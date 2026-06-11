@@ -738,10 +738,10 @@ option(VHSM_NOTIFY_BUS_SIZE "Notification ring buffer capacity"         1024)
 ### Phase 2 — Key Store & Object Model (Week 3)
 *Can run in parallel with Phase 1 after `core/types.h` is agreed.*
 
-- [x] Define `HsmObject` hierarchy 
+- [x] Define `HsmObject` hierarchy (Needs verification)
 - [ ] Implement `key_fingerprint.cpp` (SHA-256 of SPKI DER) (Gilbert)
-- [ ] Implement `ObjectStore` with handle allocation (Sergio)
-- [ ] Implement `AttributeStore` with `CKA_SENSITIVE` / `CKA_EXTRACTABLE` enforcement
+- [x] Implement `ObjectStore` with handle allocation (Sergio)
+- [x] Implement `AttributeStore` with `CKA_SENSITIVE` / `CKA_EXTRACTABLE` enforcement
 - [x] Implement `key_wrap.cpp` (RFC 3394) (Tanjona) 
 - [ ] Unit tests for attribute enforcement and fingerprint computation
 
@@ -820,26 +820,26 @@ option(VHSM_NOTIFY_BUS_SIZE "Notification ring buffer capacity"         1024)
 
 ## Security Considerations
 
-| Threat                                    | Mitigation                                                                         |
-|-------------------------------------------|------------------------------------------------------------------------------------|
-| Key material in plaintext memory          | `SecureBuffer` with `mlock`, `memzero` on free                                     |
-| PIN brute force                           | PBKDF2 600k iterations + failed-attempt lockout counter                            |
-| Key extraction via `C_GetAttributeValue`  | `CKA_SENSITIVE` prevents private key export                                        |
-| Vault file tampering                      | AES-256-GCM authentication tag covers entire blob                                  |
-| DB row tampering (signature forgery)      | Per-row `integrity_hmac` with HKDF-derived secret key                              |
-| DB HMAC key disclosure                    | Never stored on disk; derived in-memory from vault KEK at startup                  |
-| Unrecorded signatures returned to caller  | `require_db_write=true` returns `CKR_DEVICE_ERROR` on DB failure                  |
-| Timing side-channels                      | Constant-time `secure_compare()`, OpenSSL `BN_MONT_CTX`                           |
-| Session replay / TOCTOU                   | Session handles are random 64-bit IDs checked on every call                        |
-| Signature ID enumeration                  | UUIDs generated from `RAND_bytes`, not sequential integers                         |
-| Audit log tampering                       | HMAC-chained append-only log; `CheckDbIntegrity` RPC for full scan                 |
-| DB transport interception (PG/MySQL)      | `tls_mode = verify-full` enforced; cert pinning recommended                        |
-| Admin API abuse                           | mTLS client certificates required for all admin RPCs                               |
-| Memory disclosure (swap)                  | `mlock()` on all `SecureBuffer` instances including DB HMAC key                    |
-| Notification channel eavesdropping        | Email uses STARTTLS; webhook targets must be HTTPS; gRPC uses TLS                  |
-| Notification impersonation                | Outbound email signed with DKIM (SMTP relay responsibility); webhook uses HMAC sig  |
-| Subscriber registry tampering             | `notification_subscribers` rows protected by same `integrity_hmac` scheme          |
-| Notification overflow (event loss)        | Ring buffer overflow increments observable counter; CRITICAL events logged to audit |
+| Threat                                   | Mitigation                                                                          |
+| ------------------------------------------| -------------------------------------------------------------------------------------|
+| Key material in plaintext memory         | `SecureBuffer` with `mlock`, `memzero` on free                                      |
+| PIN brute force                          | PBKDF2 600k iterations + failed-attempt lockout counter                             |
+| Key extraction via `C_GetAttributeValue` | `CKA_SENSITIVE` prevents private key export                                         |
+| Vault file tampering                     | AES-256-GCM authentication tag covers entire blob                                   |
+| DB row tampering (signature forgery)     | Per-row `integrity_hmac` with HKDF-derived secret key                               |
+| DB HMAC key disclosure                   | Never stored on disk; derived in-memory from vault KEK at startup                   |
+| Unrecorded signatures returned to caller | `require_db_write=true` returns `CKR_DEVICE_ERROR` on DB failure                    |
+| Timing side-channels                     | Constant-time `secure_compare()`, OpenSSL `BN_MONT_CTX`                             |
+| Session replay / TOCTOU                  | Session handles are random 64-bit IDs checked on every call                         |
+| Signature ID enumeration                 | UUIDs generated from `RAND_bytes`, not sequential integers                          |
+| Audit log tampering                      | HMAC-chained append-only log; `CheckDbIntegrity` RPC for full scan                  |
+| DB transport interception (PG/MySQL)     | `tls_mode = verify-full` enforced; cert pinning recommended                         |
+| Admin API abuse                          | mTLS client certificates required for all admin RPCs                                |
+| Memory disclosure (swap)                 | `mlock()` on all `SecureBuffer` instances including DB HMAC key                     |
+| Notification channel eavesdropping       | Email uses STARTTLS; webhook targets must be HTTPS; gRPC uses TLS                   |
+| Notification impersonation               | Outbound email signed with DKIM (SMTP relay responsibility); webhook uses HMAC sig  |
+| Subscriber registry tampering            | `notification_subscribers` rows protected by same `integrity_hmac` scheme           |
+| Notification overflow (event loss)       | Ring buffer overflow increments observable counter; CRITICAL events logged to audit |
 
 ---
 

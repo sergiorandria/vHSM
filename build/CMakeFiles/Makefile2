@@ -409,12 +409,12 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/clean:
 src/keystore/CMakeFiles/vhsm_keystore.dir/all:
 	$(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/depend
 	$(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=23,24 "Built target vhsm_keystore"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=23,24,25,26 "Built target vhsm_keystore"
 .PHONY : src/keystore/CMakeFiles/vhsm_keystore.dir/all
 
 # Build rule for subdir invocation for target.
 src/keystore/CMakeFiles/vhsm_keystore.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/sergio/project/vHSM/build/CMakeFiles 2
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/sergio/project/vHSM/build/CMakeFiles 4
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 src/keystore/CMakeFiles/vhsm_keystore.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/sergio/project/vHSM/build/CMakeFiles 0
 .PHONY : src/keystore/CMakeFiles/vhsm_keystore.dir/rule
@@ -426,7 +426,7 @@ vhsm_keystore: src/keystore/CMakeFiles/vhsm_keystore.dir/rule
 # codegen rule for target.
 src/keystore/CMakeFiles/vhsm_keystore.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=23,24 "Finished codegen for target vhsm_keystore"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=23,24,25,26 "Finished codegen for target vhsm_keystore"
 .PHONY : src/keystore/CMakeFiles/vhsm_keystore.dir/codegen
 
 # clean rule for target.

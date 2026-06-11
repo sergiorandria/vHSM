@@ -185,6 +185,30 @@ vhsm_keystore/fast:
 	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/build
 .PHONY : vhsm_keystore/fast
 
+attribute_store.o: attribute_store.cpp.o
+.PHONY : attribute_store.o
+
+# target to build an object file
+attribute_store.cpp.o:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o
+.PHONY : attribute_store.cpp.o
+
+attribute_store.i: attribute_store.cpp.i
+.PHONY : attribute_store.i
+
+# target to preprocess a source file
+attribute_store.cpp.i:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.i
+.PHONY : attribute_store.cpp.i
+
+attribute_store.s: attribute_store.cpp.s
+.PHONY : attribute_store.s
+
+# target to generate assembly for a file
+attribute_store.cpp.s:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.s
+.PHONY : attribute_store.cpp.s
+
 hsm_object.o: hsm_object.cpp.o
 .PHONY : hsm_object.o
 
@@ -209,6 +233,30 @@ hsm_object.cpp.s:
 	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/hsm_object.cpp.s
 .PHONY : hsm_object.cpp.s
 
+object_store.o: object_store.cpp.o
+.PHONY : object_store.o
+
+# target to build an object file
+object_store.cpp.o:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/object_store.cpp.o
+.PHONY : object_store.cpp.o
+
+object_store.i: object_store.cpp.i
+.PHONY : object_store.i
+
+# target to preprocess a source file
+object_store.cpp.i:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/object_store.cpp.i
+.PHONY : object_store.cpp.i
+
+object_store.s: object_store.cpp.s
+.PHONY : object_store.s
+
+# target to generate assembly for a file
+object_store.cpp.s:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/object_store.cpp.s
+.PHONY : object_store.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -223,9 +271,15 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... test"
 	@echo "... vhsm_keystore"
+	@echo "... attribute_store.o"
+	@echo "... attribute_store.i"
+	@echo "... attribute_store.s"
 	@echo "... hsm_object.o"
 	@echo "... hsm_object.i"
 	@echo "... hsm_object.s"
+	@echo "... object_store.o"
+	@echo "... object_store.i"
+	@echo "... object_store.s"
 .PHONY : help
 
 
