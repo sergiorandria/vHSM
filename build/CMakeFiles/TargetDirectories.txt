@@ -28,6 +28,14 @@
 /home/sergio/project/vHSM/build/src/crypto/CMakeFiles/install.dir
 /home/sergio/project/vHSM/build/src/crypto/CMakeFiles/install/local.dir
 /home/sergio/project/vHSM/build/src/crypto/CMakeFiles/install/strip.dir
+/home/sergio/project/vHSM/build/src/keystore/CMakeFiles/vhsm_keystore.dir
+/home/sergio/project/vHSM/build/src/keystore/CMakeFiles/test.dir
+/home/sergio/project/vHSM/build/src/keystore/CMakeFiles/edit_cache.dir
+/home/sergio/project/vHSM/build/src/keystore/CMakeFiles/rebuild_cache.dir
+/home/sergio/project/vHSM/build/src/keystore/CMakeFiles/list_install_components.dir
+/home/sergio/project/vHSM/build/src/keystore/CMakeFiles/install.dir
+/home/sergio/project/vHSM/build/src/keystore/CMakeFiles/install/local.dir
+/home/sergio/project/vHSM/build/src/keystore/CMakeFiles/install/strip.dir
 /home/sergio/project/vHSM/build/tests/CMakeFiles/test.dir
 /home/sergio/project/vHSM/build/tests/CMakeFiles/edit_cache.dir
 /home/sergio/project/vHSM/build/tests/CMakeFiles/rebuild_cache.dir

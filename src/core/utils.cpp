@@ -1,10 +1,13 @@
 // Should be reviewed
 
 #include "utils.h"
+#include "types.h"
 
 #include <array>
-#include <cstdint>
+#include <cerrno>
+#include <cstddef>
 #include <cstdio>
+#include <format>
 #include <stdexcept>
 
 #ifdef _WIN32
@@ -16,11 +19,7 @@
 #endif
 
 namespace vhsm::utils {
-
-// ===========================================================================
 // UUID v4
-// ===========================================================================
-
 namespace {
 // Pseudo Random Number Generator 
 // Simple implementation
@@ -31,15 +30,29 @@ void csprng_fill(std::span<std::byte> buf) {
         reinterpret_cast<PUCHAR>(buf.data()),
         static_cast<ULONG>(buf.size()),
         BCRYPT_USE_SYSTEM_PREFERRED_RNG);
-    if (!BCRYPT_SUCCESS(s))
+    if (!BCRYPT_SUCCESS(s)) {
         throw std::runtime_error("BCryptGenRandom failed");
+    }
 #else
-    const ssize_t n = ::getrandom(buf.data(), buf.size(), 0);
-    if (n < 0 || static_cast<std::size_t>(n) != buf.size())
-        throw std::runtime_error("getrandom failed");
+    std::byte* ptr = buf.data();
+    std::size_t remaining = buf.size();
+    while (remaining > 0) {
+        const ssize_t n = ::getrandom(ptr, buf.size(), 0);
+        if (n < 0) {
+            if (errno == EINTR) [[likely]] {
+                // On POSIX, ::getrandom() can be interrupted by a signal
+                // returning EINTR. 
+                continue;
+            }
+
+            throw std::runtime_error("Invalid bytes from ::getrandom()");
+        }
+        
+        ptr += n;
+        remaining -= static_cast<std::size_t>(n);
+    }
 #endif
 }
-
 } // namespace
 
 std::string uuid_v4() {
@@ -47,23 +60,21 @@ std::string uuid_v4() {
     csprng_fill(rnd);
 
     // RFC 4122 §4.4 — set version and variant bits.
-    rnd[6] = static_cast<std::byte>((static_cast<uint8_t>(rnd[6]) & 0x0f) | 0x40); // version 4
-    rnd[8] = static_cast<std::byte>((static_cast<uint8_t>(rnd[8]) & 0x3f) | 0x80); // variant 10xx
+    rnd[6] = static_cast<std::byte>((static_cast<u8>(rnd[6]) & 0x0f) | 0x40); // version 4
+    rnd[8] = static_cast<std::byte>((static_cast<u8>(rnd[8]) & 0x3f) | 0x80); // variant 10xx
 
-    char buf[37];
-    const auto* b = reinterpret_cast<const uint8_t*>(rnd.data());
-    std::snprintf(buf, sizeof(buf),
-        "%02x%02x%02x%02x-"
-        "%02x%02x-"
-        "%02x%02x-"
-        "%02x%02x-"
-        "%02x%02x%02x%02x%02x%02x",
+    const auto* b = reinterpret_cast<const u8*>(rnd.data());
+    return std::format(
+        "{:02x}{:02x}{:02x}{:02x}-"
+        "{:02x}{:02x}-"
+        "{:02x}{:02x}-"
+        "{:02x}{:02x}-"
+        "{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
         b[0],  b[1],  b[2],  b[3],
         b[4],  b[5],
         b[6],  b[7],
         b[8],  b[9],
         b[10], b[11], b[12], b[13], b[14], b[15]);
-    return buf;
 }
 
 // Base64
@@ -72,29 +83,35 @@ static constexpr std::string_view kB64Chars =
 
 std::string base64_encode(std::span<const std::byte> data) {
     std::string out;
-    out.reserve(((data.size() + 2) / 3) * 4);
+    const std::size_t expected_size = ((data.size() + 2) / 3) * 4;
+    
+    // Allocates and writes directly, bypassing zero-initialization overhead
+    out.resize_and_overwrite(expected_size, [data](char* buf, std::size_t) {
+        std::size_t dst = 0;
+        for (std::size_t i = 0; i < data.size(); i += 3) {
+            const auto b0 = static_cast<u8>(data[i]);
+            const auto b1 = (i + 1 < data.size()) ? static_cast<u8>(data[i + 1]) : 0u;
+            const auto b2 = (i + 2 < data.size()) ? static_cast<u8>(data[i + 2]) : 0u;
 
-    for (std::size_t i = 0; i < data.size(); i += 3) {
-        const auto b0 = static_cast<uint8_t>(data[i]);
-        const auto b1 = (i + 1 < data.size()) ? static_cast<uint8_t>(data[i + 1]) : 0u;
-        const auto b2 = (i + 2 < data.size()) ? static_cast<uint8_t>(data[i + 2]) : 0u;
-
-        out += kB64Chars[ b0 >> 2];
-        out += kB64Chars[(b0 & 0x03) << 4 | b1 >> 4];
-        out += (i + 1 < data.size()) ? kB64Chars[(b1 & 0x0f) << 2 | b2 >> 6] : '=';
-        out += (i + 2 < data.size()) ? kB64Chars[ b2 & 0x3f] : '=';
-    }
+            buf[dst++] = kB64Chars[b0 >> 2];
+            buf[dst++] = kB64Chars[(b0 & 0x03) << 4 | b1 >> 4];
+            buf[dst++] = (i + 1 < data.size()) ? kB64Chars[(b1 & 0x0f) << 2 | b2 >> 6] : '=';
+            buf[dst++] = (i + 2 < data.size()) ? kB64Chars[b2 & 0x3f] : '=';
+        }
+        return dst;
+    });
+    
     return out;
 }
 
 // 0xFF = invalid character, 0xFE = padding ('=')
 static constexpr auto make_b64_decode_table() {
-    std::array<uint8_t, 256> t{};
+    std::array<u8, 256> t{};
     t.fill(0xFF);
-    for (uint8_t i = 0; i < 64; ++i) {
-        t[static_cast<uint8_t>(kB64Chars[i])] = i;
+    for (u8 i = 0; i < 64; ++i) {
+        t[static_cast<u8>(kB64Chars[i])] = i;
     }
-    t[static_cast<uint8_t>('=')] = 0xFE;
+    t[static_cast<u8>('=')] = 0xFE;
     return t;
 }
 
@@ -107,20 +124,19 @@ std::optional<std::vector<std::byte>> base64_decode(std::string_view s) {
     out.reserve((s.size() / 4) * 3);
 
     for (std::size_t i = 0; i < s.size(); i += 4) {
-        const uint8_t c0 = kB64Decode[static_cast<uint8_t>(s[i])];
-        const uint8_t c1 = kB64Decode[static_cast<uint8_t>(s[i + 1])];
-        const uint8_t c2 = kB64Decode[static_cast<uint8_t>(s[i + 2])];
-        const uint8_t c3 = kB64Decode[static_cast<uint8_t>(s[i + 3])];
+        const u8 c0 = kB64Decode[static_cast<u8>(s[i])];
+        const u8 c1 = kB64Decode[static_cast<u8>(s[i + 1])];
+        const u8 c2 = kB64Decode[static_cast<u8>(s[i + 2])];
+        const u8 c3 = kB64Decode[static_cast<u8>(s[i + 3])];
 
-        if (c0 == 0xFF || c0 == 0xFE) return std::nullopt; // c0 must be a real digit
-        if (c1 == 0xFF || c1 == 0xFE) return std::nullopt; // c1 must be a real digit
-        if (c2 == 0xFF || c3 == 0xFF) return std::nullopt; // invalid character
+        if (c0 >= 0xFE || c1 >= 0xFE) return std::nullopt; 
+        if (c2 == 0xFF || c3 == 0xFF) return std::nullopt;
 
-        const bool pad2 = (c2 == 0xFE);                    // "xx==" — 1 output byte
-        const bool pad1 = (c3 == 0xFE);                    // "xxx=" — 2 output bytes
+        const bool pad2 = (c2 == 0xFE);     // "xx==" — 1 output byte
+        const bool pad1 = (c3 == 0xFE);     // "xxx=" — 2 output bytes
 
-        if (pad2 && !pad1)                    return std::nullopt; // "xx=x" is invalid
-        if ((pad2 || pad1) && i + 4 != s.size()) return std::nullopt; // padding mid-string
+        if (pad2 && !pad1) return std::nullopt;                         // "xx=x" is invalid
+        if ((pad2 || pad1) && i + 4 != s.size()) return std::nullopt;   // padding mid-string
 
         out.push_back(static_cast<std::byte>( (c0 << 2)         | (c1 >> 4)));
         if (!pad2) out.push_back(static_cast<std::byte>((c1 << 4) | (c2 >> 2)));
@@ -134,19 +150,22 @@ static constexpr std::string_view kHexChars = "0123456789abcdef";
 
 std::string hex_encode(std::span<const std::byte> data) {
     std::string out;
-    out.resize(data.size() * 2);
-    for (std::size_t i = 0; i < data.size(); ++i) {
-        const auto b   = static_cast<uint8_t>(data[i]);
-        out[i * 2]     = kHexChars[b >> 4];
-        out[i * 2 + 1] = kHexChars[b & 0x0f];
-    }
+    out.resize_and_overwrite(data.size() * 2, [data](char* buf, std::size_t) {
+        std::size_t dst = 0;
+        for (const std::byte b_raw : data) {
+            const auto b = static_cast<u8>(b_raw);
+            buf[dst++] = kHexChars[b >> 4];
+            buf[dst++] = kHexChars[b & 0x0f];
+        }
+        return dst;
+    });
     return out;
 }
 
-static constexpr uint8_t hex_val(char c) noexcept {
-    if (c >= '0' && c <= '9') return static_cast<uint8_t>(c - '0');
-    if (c >= 'a' && c <= 'f') return static_cast<uint8_t>(c - 'a' + 10);
-    if (c >= 'A' && c <= 'F') return static_cast<uint8_t>(c - 'A' + 10);
+static constexpr u8 hex_val(char c) noexcept {
+    if (c >= '0' && c <= '9') return static_cast<u8>(c - '0');
+    if (c >= 'a' && c <= 'f') return static_cast<u8>(c - 'a' + 10);
+    if (c >= 'A' && c <= 'F') return static_cast<u8>(c - 'A' + 10);
     return 0xFF;
 }
 
@@ -157,8 +176,8 @@ std::optional<std::vector<std::byte>> hex_decode(std::string_view s) {
     out.reserve(s.size() / 2);
 
     for (std::size_t i = 0; i < s.size(); i += 2) {
-        const uint8_t hi = hex_val(s[i]);
-        const uint8_t lo = hex_val(s[i + 1]);
+        const u8 hi = hex_val(s[i]);
+        const u8 lo = hex_val(s[i + 1]);
         if (hi == 0xFF || lo == 0xFF) return std::nullopt;
         out.push_back(static_cast<std::byte>((hi << 4) | lo));
     }

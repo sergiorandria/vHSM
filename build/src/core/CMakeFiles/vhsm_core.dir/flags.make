@@ -6,5 +6,5 @@ CXX_DEFINES = -DVHSM_ADMIN_GRPC -DVHSM_DB_BACKEND_sqlite -DVHSM_NOTIFY_BUS_SIZE=
 
 CXX_INCLUDES = -I/home/sergio/project/vHSM/include
 
-CXX_FLAGS = -std=c++20 -O2 -Wall -Wextra -Werror -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE
+CXX_FLAGS = -std=c++23 -O2 -Wall -Wextra -Werror -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE
 

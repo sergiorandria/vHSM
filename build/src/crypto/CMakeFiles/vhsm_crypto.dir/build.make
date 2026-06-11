@@ -114,11 +114,41 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/aes_gcm.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/vhsm_crypto.dir/aes_gcm.cpp.s"
 	cd /home/sergio/project/vHSM/build/src/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/sergio/project/vHSM/src/crypto/aes_gcm.cpp -o CMakeFiles/vhsm_crypto.dir/aes_gcm.cpp.s
 
+src/crypto/CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.o: src/crypto/CMakeFiles/vhsm_crypto.dir/flags.make
+src/crypto/CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.o: /home/sergio/project/vHSM/src/crypto/ctr_drbg_aes256.cpp
+src/crypto/CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.o: src/crypto/CMakeFiles/vhsm_crypto.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object src/crypto/CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.o"
+	cd /home/sergio/project/vHSM/build/src/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT src/crypto/CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.o -MF CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.o.d -o CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.o -c /home/sergio/project/vHSM/src/crypto/ctr_drbg_aes256.cpp
+
+src/crypto/CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.i"
+	cd /home/sergio/project/vHSM/build/src/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/sergio/project/vHSM/src/crypto/ctr_drbg_aes256.cpp > CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.i
+
+src/crypto/CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.s"
+	cd /home/sergio/project/vHSM/build/src/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/sergio/project/vHSM/src/crypto/ctr_drbg_aes256.cpp -o CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.s
+
+src/crypto/CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.o: src/crypto/CMakeFiles/vhsm_crypto.dir/flags.make
+src/crypto/CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.o: /home/sergio/project/vHSM/src/crypto/SecureRNG.cpp
+src/crypto/CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.o: src/crypto/CMakeFiles/vhsm_crypto.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object src/crypto/CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.o"
+	cd /home/sergio/project/vHSM/build/src/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT src/crypto/CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.o -MF CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.o.d -o CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.o -c /home/sergio/project/vHSM/src/crypto/SecureRNG.cpp
+
+src/crypto/CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.i"
+	cd /home/sergio/project/vHSM/build/src/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/sergio/project/vHSM/src/crypto/SecureRNG.cpp > CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.i
+
+src/crypto/CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.s"
+	cd /home/sergio/project/vHSM/build/src/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/sergio/project/vHSM/src/crypto/SecureRNG.cpp -o CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.s
+
 # Object files for target vhsm_crypto
 vhsm_crypto_OBJECTS = \
 "CMakeFiles/vhsm_crypto.dir/rsa.cpp.o" \
 "CMakeFiles/vhsm_crypto.dir/ecc.cpp.o" \
-"CMakeFiles/vhsm_crypto.dir/aes_gcm.cpp.o"
+"CMakeFiles/vhsm_crypto.dir/aes_gcm.cpp.o" \
+"CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.o" \
+"CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.o"
 
 # External object files for target vhsm_crypto
 vhsm_crypto_EXTERNAL_OBJECTS =
@@ -126,9 +156,11 @@ vhsm_crypto_EXTERNAL_OBJECTS =
 src/crypto/libvhsm_crypto.a: src/crypto/CMakeFiles/vhsm_crypto.dir/rsa.cpp.o
 src/crypto/libvhsm_crypto.a: src/crypto/CMakeFiles/vhsm_crypto.dir/ecc.cpp.o
 src/crypto/libvhsm_crypto.a: src/crypto/CMakeFiles/vhsm_crypto.dir/aes_gcm.cpp.o
+src/crypto/libvhsm_crypto.a: src/crypto/CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.o
+src/crypto/libvhsm_crypto.a: src/crypto/CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.o
 src/crypto/libvhsm_crypto.a: src/crypto/CMakeFiles/vhsm_crypto.dir/build.make
 src/crypto/libvhsm_crypto.a: src/crypto/CMakeFiles/vhsm_crypto.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Linking CXX static library libvhsm_crypto.a"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Linking CXX static library libvhsm_crypto.a"
 	cd /home/sergio/project/vHSM/build/src/crypto && $(CMAKE_COMMAND) -P CMakeFiles/vhsm_crypto.dir/cmake_clean_target.cmake
 	cd /home/sergio/project/vHSM/build/src/crypto && $(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/vhsm_crypto.dir/link.txt --verbose=$(VERBOSE)
 
