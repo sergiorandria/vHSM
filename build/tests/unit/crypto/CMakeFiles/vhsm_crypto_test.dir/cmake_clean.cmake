@@ -1,4 +1,5 @@
 file(REMOVE_RECURSE
+  "CMakeFiles/vhsm_crypto_test.dir/link.d"
   "CMakeFiles/vhsm_crypto_test.dir/aes_gcm_test.cpp.o"
   "CMakeFiles/vhsm_crypto_test.dir/aes_gcm_test.cpp.o.d"
   "CMakeFiles/vhsm_crypto_test.dir/ecc_test.cpp.o"

@@ -1,0 +1,156 @@
+{
+  "tests": 24,
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "SecureBufferTest",
+      "tests": 6,
+      "testsuite": [
+        {
+          "name": "AllocationAndAccess",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
+          "line": 7
+        },
+        {
+          "name": "DataManipulation",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
+          "line": 25
+        },
+        {
+          "name": "MoveSemantics",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
+          "line": 47
+        },
+        {
+          "name": "WipeFunctionality",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
+          "line": 77
+        },
+        {
+          "name": "EqualityOperators",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
+          "line": 98
+        },
+        {
+          "name": "ReadWriteBoundsChecking",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
+          "line": 130
+        }
+      ]
+    },
+    {
+      "name": "SystemHsmClock",
+      "tests": 3,
+      "testsuite": [
+        {
+          "name": "ReturnsNonZeroTime",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 19
+        },
+        {
+          "name": "MonotonicallyIncreases",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 26
+        },
+        {
+          "name": "TruncatedToMilliseconds",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 34
+        }
+      ]
+    },
+    {
+      "name": "FrozenHsmClock",
+      "tests": 4,
+      "testsuite": [
+        {
+          "name": "ReturnsSameValueRepeatedly",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 49
+        },
+        {
+          "name": "AdvanceMovesTimeForward",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 58
+        },
+        {
+          "name": "SetSnapsToGivenTime",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 69
+        },
+        {
+          "name": "CanBeUsedViaInterface",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 75
+        }
+      ]
+    },
+    {
+      "name": "ClockUtils",
+      "tests": 10,
+      "testsuite": [
+        {
+          "name": "EpochMsRoundTrip",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 88
+        },
+        {
+          "name": "NegativeEpochMsBeforeUnixEpoch",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 97
+        },
+        {
+          "name": "ToIso8601UnixEpoch",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 108
+        },
+        {
+          "name": "ToIso8601KnownTimestamp",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 113
+        },
+        {
+          "name": "ToIso8601MillisecondPrecision",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 119
+        },
+        {
+          "name": "ToIso8601AlwaysEndsWithZ",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 125
+        },
+        {
+          "name": "FromIso8601RoundTrip",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 135
+        },
+        {
+          "name": "FromIso8601WithoutMilliseconds",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 145
+        },
+        {
+          "name": "FromIso8601RejectsLocalOffset",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 152
+        },
+        {
+          "name": "FromIso8601RejectsMalformed",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 156
+        }
+      ]
+    },
+    {
+      "name": "ClockInjection",
+      "tests": 1,
+      "testsuite": [
+        {
+          "name": "ComponentUsesInjectedClock",
+          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+          "line": 162
+        }
+      ]
+    }
+  ]
+}
