@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include "../../../src/crypto/ecc.h"
 
+using namespace vhsm::crypto;
+
 TEST(ECC, GenerateSignVerifyDerive)
 {
     ECKeyPair a = ECC::generate_key(Curve::P256);
