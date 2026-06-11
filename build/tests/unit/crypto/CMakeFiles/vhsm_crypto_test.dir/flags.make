@@ -6,5 +6,5 @@ CXX_DEFINES = -DGTEST_LINKED_AS_SHARED_LIBRARY=1 -DVHSM_ADMIN_GRPC -DVHSM_DB_BAC
 
 CXX_INCLUDES = -I/home/sergio/project/vHSM/include -I/home/sergio/project/vHSM
 
-CXX_FLAGS = -std=c++20 -O2 -Wall -Wextra -Werror -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE
+CXX_FLAGS = -std=c++23 -O2 -Wall -Wextra -Werror -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE
 

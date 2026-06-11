@@ -185,6 +185,30 @@ vhsm_crypto/fast:
 	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/crypto/CMakeFiles/vhsm_crypto.dir/build.make src/crypto/CMakeFiles/vhsm_crypto.dir/build
 .PHONY : vhsm_crypto/fast
 
+SecureRNG.o: SecureRNG.cpp.o
+.PHONY : SecureRNG.o
+
+# target to build an object file
+SecureRNG.cpp.o:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/crypto/CMakeFiles/vhsm_crypto.dir/build.make src/crypto/CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.o
+.PHONY : SecureRNG.cpp.o
+
+SecureRNG.i: SecureRNG.cpp.i
+.PHONY : SecureRNG.i
+
+# target to preprocess a source file
+SecureRNG.cpp.i:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/crypto/CMakeFiles/vhsm_crypto.dir/build.make src/crypto/CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.i
+.PHONY : SecureRNG.cpp.i
+
+SecureRNG.s: SecureRNG.cpp.s
+.PHONY : SecureRNG.s
+
+# target to generate assembly for a file
+SecureRNG.cpp.s:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/crypto/CMakeFiles/vhsm_crypto.dir/build.make src/crypto/CMakeFiles/vhsm_crypto.dir/SecureRNG.cpp.s
+.PHONY : SecureRNG.cpp.s
+
 aes_gcm.o: aes_gcm.cpp.o
 .PHONY : aes_gcm.o
 
@@ -208,6 +232,30 @@ aes_gcm.s: aes_gcm.cpp.s
 aes_gcm.cpp.s:
 	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/crypto/CMakeFiles/vhsm_crypto.dir/build.make src/crypto/CMakeFiles/vhsm_crypto.dir/aes_gcm.cpp.s
 .PHONY : aes_gcm.cpp.s
+
+ctr_drbg_aes256.o: ctr_drbg_aes256.cpp.o
+.PHONY : ctr_drbg_aes256.o
+
+# target to build an object file
+ctr_drbg_aes256.cpp.o:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/crypto/CMakeFiles/vhsm_crypto.dir/build.make src/crypto/CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.o
+.PHONY : ctr_drbg_aes256.cpp.o
+
+ctr_drbg_aes256.i: ctr_drbg_aes256.cpp.i
+.PHONY : ctr_drbg_aes256.i
+
+# target to preprocess a source file
+ctr_drbg_aes256.cpp.i:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/crypto/CMakeFiles/vhsm_crypto.dir/build.make src/crypto/CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.i
+.PHONY : ctr_drbg_aes256.cpp.i
+
+ctr_drbg_aes256.s: ctr_drbg_aes256.cpp.s
+.PHONY : ctr_drbg_aes256.s
+
+# target to generate assembly for a file
+ctr_drbg_aes256.cpp.s:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f src/crypto/CMakeFiles/vhsm_crypto.dir/build.make src/crypto/CMakeFiles/vhsm_crypto.dir/ctr_drbg_aes256.cpp.s
+.PHONY : ctr_drbg_aes256.cpp.s
 
 ecc.o: ecc.cpp.o
 .PHONY : ecc.o
@@ -271,9 +319,15 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... test"
 	@echo "... vhsm_crypto"
+	@echo "... SecureRNG.o"
+	@echo "... SecureRNG.i"
+	@echo "... SecureRNG.s"
 	@echo "... aes_gcm.o"
 	@echo "... aes_gcm.i"
 	@echo "... aes_gcm.s"
+	@echo "... ctr_drbg_aes256.o"
+	@echo "... ctr_drbg_aes256.i"
+	@echo "... ctr_drbg_aes256.s"
 	@echo "... ecc.o"
 	@echo "... ecc.i"
 	@echo "... ecc.s"
