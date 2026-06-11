@@ -48,6 +48,8 @@ public:
 
     virtual std::vector<u8> getPublicKeyInfo() const { return {}; }
     virtual size_t          getKeySize()       const noexcept { return 0; }
+    //virtual void            setSensitive(bool sensitive) noexcept { sensitive_ = sensitive; }
+    //virtual void            setExtractable(bool extractable) noexcept { extractable_ = extractable; }
 
 protected:
     virtual void wipe() noexcept; // override in derived to zero key material

@@ -8,7 +8,9 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
+  "/home/sergio/project/vHSM/src/keystore/attribute_store.cpp" "src/keystore/CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o" "gcc" "src/keystore/CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o.d"
   "/home/sergio/project/vHSM/src/keystore/hsm_object.cpp" "src/keystore/CMakeFiles/vhsm_keystore.dir/hsm_object.cpp.o" "gcc" "src/keystore/CMakeFiles/vhsm_keystore.dir/hsm_object.cpp.o.d"
+  "/home/sergio/project/vHSM/src/keystore/object_store.cpp" "src/keystore/CMakeFiles/vhsm_keystore.dir/object_store.cpp.o" "gcc" "src/keystore/CMakeFiles/vhsm_keystore.dir/object_store.cpp.o.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

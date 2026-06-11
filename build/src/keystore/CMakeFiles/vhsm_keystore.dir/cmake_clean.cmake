@@ -1,6 +1,10 @@
 file(REMOVE_RECURSE
+  "CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o"
+  "CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o.d"
   "CMakeFiles/vhsm_keystore.dir/hsm_object.cpp.o"
   "CMakeFiles/vhsm_keystore.dir/hsm_object.cpp.o.d"
+  "CMakeFiles/vhsm_keystore.dir/object_store.cpp.o"
+  "CMakeFiles/vhsm_keystore.dir/object_store.cpp.o.d"
   "libvhsm_keystore.a"
   "libvhsm_keystore.pdb"
 )

@@ -86,17 +86,49 @@ src/keystore/CMakeFiles/vhsm_keystore.dir/hsm_object.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/vhsm_keystore.dir/hsm_object.cpp.s"
 	cd /home/sergio/project/vHSM/build/src/keystore && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/sergio/project/vHSM/src/keystore/hsm_object.cpp -o CMakeFiles/vhsm_keystore.dir/hsm_object.cpp.s
 
+src/keystore/CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o: src/keystore/CMakeFiles/vhsm_keystore.dir/flags.make
+src/keystore/CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o: /home/sergio/project/vHSM/src/keystore/attribute_store.cpp
+src/keystore/CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o: src/keystore/CMakeFiles/vhsm_keystore.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object src/keystore/CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o"
+	cd /home/sergio/project/vHSM/build/src/keystore && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT src/keystore/CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o -MF CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o.d -o CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o -c /home/sergio/project/vHSM/src/keystore/attribute_store.cpp
+
+src/keystore/CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.i"
+	cd /home/sergio/project/vHSM/build/src/keystore && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/sergio/project/vHSM/src/keystore/attribute_store.cpp > CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.i
+
+src/keystore/CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.s"
+	cd /home/sergio/project/vHSM/build/src/keystore && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/sergio/project/vHSM/src/keystore/attribute_store.cpp -o CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.s
+
+src/keystore/CMakeFiles/vhsm_keystore.dir/object_store.cpp.o: src/keystore/CMakeFiles/vhsm_keystore.dir/flags.make
+src/keystore/CMakeFiles/vhsm_keystore.dir/object_store.cpp.o: /home/sergio/project/vHSM/src/keystore/object_store.cpp
+src/keystore/CMakeFiles/vhsm_keystore.dir/object_store.cpp.o: src/keystore/CMakeFiles/vhsm_keystore.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object src/keystore/CMakeFiles/vhsm_keystore.dir/object_store.cpp.o"
+	cd /home/sergio/project/vHSM/build/src/keystore && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT src/keystore/CMakeFiles/vhsm_keystore.dir/object_store.cpp.o -MF CMakeFiles/vhsm_keystore.dir/object_store.cpp.o.d -o CMakeFiles/vhsm_keystore.dir/object_store.cpp.o -c /home/sergio/project/vHSM/src/keystore/object_store.cpp
+
+src/keystore/CMakeFiles/vhsm_keystore.dir/object_store.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/vhsm_keystore.dir/object_store.cpp.i"
+	cd /home/sergio/project/vHSM/build/src/keystore && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/sergio/project/vHSM/src/keystore/object_store.cpp > CMakeFiles/vhsm_keystore.dir/object_store.cpp.i
+
+src/keystore/CMakeFiles/vhsm_keystore.dir/object_store.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/vhsm_keystore.dir/object_store.cpp.s"
+	cd /home/sergio/project/vHSM/build/src/keystore && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/sergio/project/vHSM/src/keystore/object_store.cpp -o CMakeFiles/vhsm_keystore.dir/object_store.cpp.s
+
 # Object files for target vhsm_keystore
 vhsm_keystore_OBJECTS = \
-"CMakeFiles/vhsm_keystore.dir/hsm_object.cpp.o"
+"CMakeFiles/vhsm_keystore.dir/hsm_object.cpp.o" \
+"CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o" \
+"CMakeFiles/vhsm_keystore.dir/object_store.cpp.o"
 
 # External object files for target vhsm_keystore
 vhsm_keystore_EXTERNAL_OBJECTS =
 
 src/keystore/libvhsm_keystore.a: src/keystore/CMakeFiles/vhsm_keystore.dir/hsm_object.cpp.o
+src/keystore/libvhsm_keystore.a: src/keystore/CMakeFiles/vhsm_keystore.dir/attribute_store.cpp.o
+src/keystore/libvhsm_keystore.a: src/keystore/CMakeFiles/vhsm_keystore.dir/object_store.cpp.o
 src/keystore/libvhsm_keystore.a: src/keystore/CMakeFiles/vhsm_keystore.dir/build.make
 src/keystore/libvhsm_keystore.a: src/keystore/CMakeFiles/vhsm_keystore.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX static library libvhsm_keystore.a"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Linking CXX static library libvhsm_keystore.a"
 	cd /home/sergio/project/vHSM/build/src/keystore && $(CMAKE_COMMAND) -P CMakeFiles/vhsm_keystore.dir/cmake_clean_target.cmake
 	cd /home/sergio/project/vHSM/build/src/keystore && $(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/vhsm_keystore.dir/link.txt --verbose=$(VERBOSE)
 
