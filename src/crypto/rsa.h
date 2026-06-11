@@ -1,4 +1,5 @@
-#pragma once
+#ifndef VHSM_CRYPTO_RSA 
+#define VHSM_CRYPTO_RSA
 
 #include <memory>
 #include <vector>
@@ -17,6 +18,7 @@
  * - Errors from OpenSSL are not propagated by these declarations; implementations
  *   should check and surface OpenSSL error information.
  */
+namespace vhsm::crypto { 
 
 struct RSAKeyPair 
 {
@@ -41,3 +43,5 @@ class RSAUtil
             const std::vector<uint8_t>& signature
         );
 };
+} // namespace vhsm::crypto
+#endif // VHSM_CRYPTO_RSA
