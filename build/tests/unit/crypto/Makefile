@@ -65,6 +65,16 @@ CMAKE_BINARY_DIR = /home/sergio/project/vHSM/build
 #=============================================================================
 # Targets provided globally by CMake.
 
+# Special rule for the target test
+test:
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --cyan "Running tests..."
+	/usr/bin/ctest $(ARGS)
+.PHONY : test
+
+# Special rule for the target test
+test/fast: test
+.PHONY : test/fast
+
 # Special rule for the target edit_cache
 edit_cache:
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --cyan "Running CMake cache editor..."
@@ -161,6 +171,92 @@ depend:
 	cd /home/sergio/project/vHSM/build && $(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles/Makefile.cmake 1
 .PHONY : depend
 
+# Convenience name for target.
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/rule:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/rule
+.PHONY : tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/rule
+
+# Convenience name for target.
+vhsm_crypto_test: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/rule
+.PHONY : vhsm_crypto_test
+
+# fast build rule for target.
+vhsm_crypto_test/fast:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build
+.PHONY : vhsm_crypto_test/fast
+
+aes_gcm_test.o: aes_gcm_test.cpp.o
+.PHONY : aes_gcm_test.o
+
+# target to build an object file
+aes_gcm_test.cpp.o:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/aes_gcm_test.cpp.o
+.PHONY : aes_gcm_test.cpp.o
+
+aes_gcm_test.i: aes_gcm_test.cpp.i
+.PHONY : aes_gcm_test.i
+
+# target to preprocess a source file
+aes_gcm_test.cpp.i:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/aes_gcm_test.cpp.i
+.PHONY : aes_gcm_test.cpp.i
+
+aes_gcm_test.s: aes_gcm_test.cpp.s
+.PHONY : aes_gcm_test.s
+
+# target to generate assembly for a file
+aes_gcm_test.cpp.s:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/aes_gcm_test.cpp.s
+.PHONY : aes_gcm_test.cpp.s
+
+ecc_test.o: ecc_test.cpp.o
+.PHONY : ecc_test.o
+
+# target to build an object file
+ecc_test.cpp.o:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ecc_test.cpp.o
+.PHONY : ecc_test.cpp.o
+
+ecc_test.i: ecc_test.cpp.i
+.PHONY : ecc_test.i
+
+# target to preprocess a source file
+ecc_test.cpp.i:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ecc_test.cpp.i
+.PHONY : ecc_test.cpp.i
+
+ecc_test.s: ecc_test.cpp.s
+.PHONY : ecc_test.s
+
+# target to generate assembly for a file
+ecc_test.cpp.s:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ecc_test.cpp.s
+.PHONY : ecc_test.cpp.s
+
+rsa_test.o: rsa_test.cpp.o
+.PHONY : rsa_test.o
+
+# target to build an object file
+rsa_test.cpp.o:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/rsa_test.cpp.o
+.PHONY : rsa_test.cpp.o
+
+rsa_test.i: rsa_test.cpp.i
+.PHONY : rsa_test.i
+
+# target to preprocess a source file
+rsa_test.cpp.i:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/rsa_test.cpp.i
+.PHONY : rsa_test.cpp.i
+
+rsa_test.s: rsa_test.cpp.s
+.PHONY : rsa_test.s
+
+# target to generate assembly for a file
+rsa_test.cpp.s:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/rsa_test.cpp.s
+.PHONY : rsa_test.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -173,6 +269,17 @@ help:
 	@echo "... install/strip"
 	@echo "... list_install_components"
 	@echo "... rebuild_cache"
+	@echo "... test"
+	@echo "... vhsm_crypto_test"
+	@echo "... aes_gcm_test.o"
+	@echo "... aes_gcm_test.i"
+	@echo "... aes_gcm_test.s"
+	@echo "... ecc_test.o"
+	@echo "... ecc_test.i"
+	@echo "... ecc_test.s"
+	@echo "... rsa_test.o"
+	@echo "... rsa_test.i"
+	@echo "... rsa_test.s"
 .PHONY : help
 
 

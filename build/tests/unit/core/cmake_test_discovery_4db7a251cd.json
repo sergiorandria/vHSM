@@ -45,17 +45,17 @@
         {
           "name": "ReturnsNonZeroTime",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 17
+          "line": 19
         },
         {
           "name": "MonotonicallyIncreases",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 24
+          "line": 26
         },
         {
           "name": "TruncatedToMilliseconds",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 32
+          "line": 34
         }
       ]
     },
@@ -66,22 +66,22 @@
         {
           "name": "ReturnsSameValueRepeatedly",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 47
+          "line": 49
         },
         {
           "name": "AdvanceMovesTimeForward",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 56
+          "line": 58
         },
         {
           "name": "SetSnapsToGivenTime",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 67
+          "line": 69
         },
         {
           "name": "CanBeUsedViaInterface",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 73
+          "line": 75
         }
       ]
     },
@@ -92,52 +92,52 @@
         {
           "name": "EpochMsRoundTrip",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 86
+          "line": 88
         },
         {
           "name": "NegativeEpochMsBeforeUnixEpoch",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 95
+          "line": 97
         },
         {
           "name": "ToIso8601UnixEpoch",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 106
+          "line": 108
         },
         {
           "name": "ToIso8601KnownTimestamp",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 111
+          "line": 113
         },
         {
           "name": "ToIso8601MillisecondPrecision",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 117
+          "line": 119
         },
         {
           "name": "ToIso8601AlwaysEndsWithZ",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 123
+          "line": 125
         },
         {
           "name": "FromIso8601RoundTrip",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 133
+          "line": 135
         },
         {
           "name": "FromIso8601WithoutMilliseconds",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 143
+          "line": 145
         },
         {
           "name": "FromIso8601RejectsLocalOffset",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 150
+          "line": 152
         },
         {
           "name": "FromIso8601RejectsMalformed",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 154
+          "line": 156
         }
       ]
     },
@@ -148,7 +148,7 @@
         {
           "name": "ComponentUsesInjectedClock",
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
-          "line": 175
+          "line": 162
         }
       ]
     }

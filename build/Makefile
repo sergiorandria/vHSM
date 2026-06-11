@@ -65,6 +65,16 @@ CMAKE_BINARY_DIR = /home/sergio/project/vHSM/build
 #=============================================================================
 # Targets provided globally by CMake.
 
+# Special rule for the target test
+test:
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --cyan "Running tests..."
+	/usr/bin/ctest $(ARGS)
+.PHONY : test
+
+# Special rule for the target test
+test/fast: test
+.PHONY : test/fast
+
 # Special rule for the target edit_cache
 edit_cache:
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --cyan "Running CMake cache editor..."
@@ -175,6 +185,19 @@ vhsm_core/fast:
 .PHONY : vhsm_core/fast
 
 #=============================================================================
+# Target rules for targets named vhsm_crypto
+
+# Build rule for target.
+vhsm_crypto: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 vhsm_crypto
+.PHONY : vhsm_crypto
+
+# fast build rule for target.
+vhsm_crypto/fast:
+	$(MAKE) $(MAKESILENT) -f src/crypto/CMakeFiles/vhsm_crypto.dir/build.make src/crypto/CMakeFiles/vhsm_crypto.dir/build
+.PHONY : vhsm_crypto/fast
+
+#=============================================================================
 # Target rules for targets named vhsm_core_test
 
 # Build rule for target.
@@ -186,6 +209,19 @@ vhsm_core_test: cmake_check_build_system
 vhsm_core_test/fast:
 	$(MAKE) $(MAKESILENT) -f tests/unit/core/CMakeFiles/vhsm_core_test.dir/build.make tests/unit/core/CMakeFiles/vhsm_core_test.dir/build
 .PHONY : vhsm_core_test/fast
+
+#=============================================================================
+# Target rules for targets named vhsm_crypto_test
+
+# Build rule for target.
+vhsm_crypto_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 vhsm_crypto_test
+.PHONY : vhsm_crypto_test
+
+# fast build rule for target.
+vhsm_crypto_test/fast:
+	$(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build
+.PHONY : vhsm_crypto_test/fast
 
 # Help Target
 help:
@@ -199,8 +235,11 @@ help:
 	@echo "... install/strip"
 	@echo "... list_install_components"
 	@echo "... rebuild_cache"
+	@echo "... test"
 	@echo "... vhsm_core"
 	@echo "... vhsm_core_test"
+	@echo "... vhsm_crypto"
+	@echo "... vhsm_crypto_test"
 .PHONY : help
 
 
