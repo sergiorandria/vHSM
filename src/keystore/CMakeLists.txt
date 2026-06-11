@@ -5,7 +5,10 @@ target_sources(vhsm_keystore
     hsm_object.cpp
     attribute_store.cpp
     object_store.cpp
+<<<<<<< Updated upstream
     key_wrap.cpp
+=======
+>>>>>>> Stashed changes
 )
 
 target_include_directories(vhsm_keystore
