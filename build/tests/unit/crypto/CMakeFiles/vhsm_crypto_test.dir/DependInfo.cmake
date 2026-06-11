@@ -9,7 +9,11 @@ set(CMAKE_DEPENDS_LANGUAGES
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/sergio/project/vHSM/tests/unit/crypto/aes_gcm_test.cpp" "tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/aes_gcm_test.cpp.o" "gcc" "tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/aes_gcm_test.cpp.o.d"
+  "/home/sergio/project/vHSM/tests/unit/crypto/cipherctxguard_test.cpp" "tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.o" "gcc" "tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.o.d"
+  "/home/sergio/project/vHSM/tests/unit/crypto/ctr_drbg_aes256_test.cpp" "tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.o" "gcc" "tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.o.d"
   "/home/sergio/project/vHSM/tests/unit/crypto/ecc_test.cpp" "tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ecc_test.cpp.o" "gcc" "tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ecc_test.cpp.o.d"
+  "/home/sergio/project/vHSM/tests/unit/crypto/mdctxguard_test.cpp" "tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.o" "gcc" "tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.o.d"
+  "/home/sergio/project/vHSM/tests/unit/crypto/pkeyctxguard_test.cpp" "tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.o" "gcc" "tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.o.d"
   "/home/sergio/project/vHSM/tests/unit/crypto/rsa_test.cpp" "tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/rsa_test.cpp.o" "gcc" "tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/rsa_test.cpp.o.d"
   "" "tests/unit/crypto/vhsm_crypto_test" "gcc" "tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/link.d"
   )

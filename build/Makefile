@@ -198,6 +198,19 @@ vhsm_crypto/fast:
 .PHONY : vhsm_crypto/fast
 
 #=============================================================================
+# Target rules for targets named vhsm_keystore
+
+# Build rule for target.
+vhsm_keystore: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 vhsm_keystore
+.PHONY : vhsm_keystore
+
+# fast build rule for target.
+vhsm_keystore/fast:
+	$(MAKE) $(MAKESILENT) -f src/keystore/CMakeFiles/vhsm_keystore.dir/build.make src/keystore/CMakeFiles/vhsm_keystore.dir/build
+.PHONY : vhsm_keystore/fast
+
+#=============================================================================
 # Target rules for targets named vhsm_core_test
 
 # Build rule for target.
@@ -240,6 +253,7 @@ help:
 	@echo "... vhsm_core_test"
 	@echo "... vhsm_crypto"
 	@echo "... vhsm_crypto_test"
+	@echo "... vhsm_keystore"
 .PHONY : help
 
 

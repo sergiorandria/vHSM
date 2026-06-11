@@ -3,7 +3,7 @@
 
 #include <openssl/evp.h>
 
-namespace {
+namespace vhsm::crypto {
     struct MdCtxGuard {
     EVP_MD_CTX* ctx;
     explicit MdCtxGuard(EVP_MD_CTX* c) noexcept : ctx(c) {}

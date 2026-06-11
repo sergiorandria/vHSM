@@ -122,6 +122,7 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/rsa.cpp.o: \
  /usr/include/c++/16.1.1/bits/basic_string.h \
  /usr/include/c++/16.1.1/string_view \
  /usr/include/c++/16.1.1/bits/string_view.tcc \
+ /usr/include/c++/16.1.1/bits/ranges_algobase.h \
  /usr/include/c++/16.1.1/ext/string_conversions.h \
  /usr/include/c++/16.1.1/cstdlib /usr/include/stdlib.h \
  /usr/include/bits/waitflags.h /usr/include/bits/waitstatus.h \
@@ -176,12 +177,13 @@ src/crypto/CMakeFiles/vhsm_crypto.dir/rsa.cpp.o: \
  /usr/include/c++/16.1.1/bits/atomic_wait.h \
  /usr/include/c++/16.1.1/backward/auto_ptr.h \
  /usr/include/c++/16.1.1/bits/ranges_uninitialized.h \
- /usr/include/c++/16.1.1/bits/ranges_algobase.h \
+ /usr/include/c++/16.1.1/bits/out_ptr.h \
  /usr/include/c++/16.1.1/pstl/glue_memory_defs.h \
  /usr/include/c++/16.1.1/pstl/execution_defs.h \
  /usr/include/c++/16.1.1/vector /usr/include/c++/16.1.1/bits/stl_vector.h \
  /usr/include/c++/16.1.1/bits/stl_bvector.h \
- /usr/include/c++/16.1.1/bits/vector.tcc /usr/include/openssl/evp.h \
+ /usr/include/c++/16.1.1/bits/vector.tcc \
+ /usr/include/c++/16.1.1/bits/formatfwd.h /usr/include/openssl/evp.h \
  /usr/include/openssl/macros.h /usr/include/openssl/opensslconf.h \
  /usr/include/openssl/configuration.h /usr/include/openssl/opensslv.h \
  /usr/include/openssl/types.h \

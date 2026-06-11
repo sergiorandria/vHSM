@@ -209,6 +209,54 @@ aes_gcm_test.cpp.s:
 	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/aes_gcm_test.cpp.s
 .PHONY : aes_gcm_test.cpp.s
 
+cipherctxguard_test.o: cipherctxguard_test.cpp.o
+.PHONY : cipherctxguard_test.o
+
+# target to build an object file
+cipherctxguard_test.cpp.o:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.o
+.PHONY : cipherctxguard_test.cpp.o
+
+cipherctxguard_test.i: cipherctxguard_test.cpp.i
+.PHONY : cipherctxguard_test.i
+
+# target to preprocess a source file
+cipherctxguard_test.cpp.i:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.i
+.PHONY : cipherctxguard_test.cpp.i
+
+cipherctxguard_test.s: cipherctxguard_test.cpp.s
+.PHONY : cipherctxguard_test.s
+
+# target to generate assembly for a file
+cipherctxguard_test.cpp.s:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.s
+.PHONY : cipherctxguard_test.cpp.s
+
+ctr_drbg_aes256_test.o: ctr_drbg_aes256_test.cpp.o
+.PHONY : ctr_drbg_aes256_test.o
+
+# target to build an object file
+ctr_drbg_aes256_test.cpp.o:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.o
+.PHONY : ctr_drbg_aes256_test.cpp.o
+
+ctr_drbg_aes256_test.i: ctr_drbg_aes256_test.cpp.i
+.PHONY : ctr_drbg_aes256_test.i
+
+# target to preprocess a source file
+ctr_drbg_aes256_test.cpp.i:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.i
+.PHONY : ctr_drbg_aes256_test.cpp.i
+
+ctr_drbg_aes256_test.s: ctr_drbg_aes256_test.cpp.s
+.PHONY : ctr_drbg_aes256_test.s
+
+# target to generate assembly for a file
+ctr_drbg_aes256_test.cpp.s:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.s
+.PHONY : ctr_drbg_aes256_test.cpp.s
+
 ecc_test.o: ecc_test.cpp.o
 .PHONY : ecc_test.o
 
@@ -232,6 +280,54 @@ ecc_test.s: ecc_test.cpp.s
 ecc_test.cpp.s:
 	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ecc_test.cpp.s
 .PHONY : ecc_test.cpp.s
+
+mdctxguard_test.o: mdctxguard_test.cpp.o
+.PHONY : mdctxguard_test.o
+
+# target to build an object file
+mdctxguard_test.cpp.o:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.o
+.PHONY : mdctxguard_test.cpp.o
+
+mdctxguard_test.i: mdctxguard_test.cpp.i
+.PHONY : mdctxguard_test.i
+
+# target to preprocess a source file
+mdctxguard_test.cpp.i:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.i
+.PHONY : mdctxguard_test.cpp.i
+
+mdctxguard_test.s: mdctxguard_test.cpp.s
+.PHONY : mdctxguard_test.s
+
+# target to generate assembly for a file
+mdctxguard_test.cpp.s:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.s
+.PHONY : mdctxguard_test.cpp.s
+
+pkeyctxguard_test.o: pkeyctxguard_test.cpp.o
+.PHONY : pkeyctxguard_test.o
+
+# target to build an object file
+pkeyctxguard_test.cpp.o:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.o
+.PHONY : pkeyctxguard_test.cpp.o
+
+pkeyctxguard_test.i: pkeyctxguard_test.cpp.i
+.PHONY : pkeyctxguard_test.i
+
+# target to preprocess a source file
+pkeyctxguard_test.cpp.i:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.i
+.PHONY : pkeyctxguard_test.cpp.i
+
+pkeyctxguard_test.s: pkeyctxguard_test.cpp.s
+.PHONY : pkeyctxguard_test.s
+
+# target to generate assembly for a file
+pkeyctxguard_test.cpp.s:
+	cd /home/sergio/project/vHSM/build && $(MAKE) $(MAKESILENT) -f tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.s
+.PHONY : pkeyctxguard_test.cpp.s
 
 rsa_test.o: rsa_test.cpp.o
 .PHONY : rsa_test.o
@@ -274,9 +370,21 @@ help:
 	@echo "... aes_gcm_test.o"
 	@echo "... aes_gcm_test.i"
 	@echo "... aes_gcm_test.s"
+	@echo "... cipherctxguard_test.o"
+	@echo "... cipherctxguard_test.i"
+	@echo "... cipherctxguard_test.s"
+	@echo "... ctr_drbg_aes256_test.o"
+	@echo "... ctr_drbg_aes256_test.i"
+	@echo "... ctr_drbg_aes256_test.s"
 	@echo "... ecc_test.o"
 	@echo "... ecc_test.i"
 	@echo "... ecc_test.s"
+	@echo "... mdctxguard_test.o"
+	@echo "... mdctxguard_test.i"
+	@echo "... mdctxguard_test.s"
+	@echo "... pkeyctxguard_test.o"
+	@echo "... pkeyctxguard_test.i"
+	@echo "... pkeyctxguard_test.s"
 	@echo "... rsa_test.o"
 	@echo "... rsa_test.i"
 	@echo "... rsa_test.s"

@@ -114,11 +114,71 @@ tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ecc_test.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/vhsm_crypto_test.dir/ecc_test.cpp.s"
 	cd /home/sergio/project/vHSM/build/tests/unit/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/sergio/project/vHSM/tests/unit/crypto/ecc_test.cpp -o CMakeFiles/vhsm_crypto_test.dir/ecc_test.cpp.s
 
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.o: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/flags.make
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.o: /home/sergio/project/vHSM/tests/unit/crypto/ctr_drbg_aes256_test.cpp
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.o: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.o"
+	cd /home/sergio/project/vHSM/build/tests/unit/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.o -MF CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.o.d -o CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.o -c /home/sergio/project/vHSM/tests/unit/crypto/ctr_drbg_aes256_test.cpp
+
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.i"
+	cd /home/sergio/project/vHSM/build/tests/unit/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/sergio/project/vHSM/tests/unit/crypto/ctr_drbg_aes256_test.cpp > CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.i
+
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.s"
+	cd /home/sergio/project/vHSM/build/tests/unit/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/sergio/project/vHSM/tests/unit/crypto/ctr_drbg_aes256_test.cpp -o CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.s
+
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.o: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/flags.make
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.o: /home/sergio/project/vHSM/tests/unit/crypto/mdctxguard_test.cpp
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.o: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.o"
+	cd /home/sergio/project/vHSM/build/tests/unit/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.o -MF CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.o.d -o CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.o -c /home/sergio/project/vHSM/tests/unit/crypto/mdctxguard_test.cpp
+
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.i"
+	cd /home/sergio/project/vHSM/build/tests/unit/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/sergio/project/vHSM/tests/unit/crypto/mdctxguard_test.cpp > CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.i
+
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.s"
+	cd /home/sergio/project/vHSM/build/tests/unit/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/sergio/project/vHSM/tests/unit/crypto/mdctxguard_test.cpp -o CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.s
+
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.o: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/flags.make
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.o: /home/sergio/project/vHSM/tests/unit/crypto/cipherctxguard_test.cpp
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.o: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.o"
+	cd /home/sergio/project/vHSM/build/tests/unit/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.o -MF CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.o.d -o CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.o -c /home/sergio/project/vHSM/tests/unit/crypto/cipherctxguard_test.cpp
+
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.i"
+	cd /home/sergio/project/vHSM/build/tests/unit/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/sergio/project/vHSM/tests/unit/crypto/cipherctxguard_test.cpp > CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.i
+
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.s"
+	cd /home/sergio/project/vHSM/build/tests/unit/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/sergio/project/vHSM/tests/unit/crypto/cipherctxguard_test.cpp -o CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.s
+
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.o: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/flags.make
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.o: /home/sergio/project/vHSM/tests/unit/crypto/pkeyctxguard_test.cpp
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.o: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.o"
+	cd /home/sergio/project/vHSM/build/tests/unit/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.o -MF CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.o.d -o CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.o -c /home/sergio/project/vHSM/tests/unit/crypto/pkeyctxguard_test.cpp
+
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.i"
+	cd /home/sergio/project/vHSM/build/tests/unit/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/sergio/project/vHSM/tests/unit/crypto/pkeyctxguard_test.cpp > CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.i
+
+tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.s"
+	cd /home/sergio/project/vHSM/build/tests/unit/crypto && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/sergio/project/vHSM/tests/unit/crypto/pkeyctxguard_test.cpp -o CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.s
+
 # Object files for target vhsm_crypto_test
 vhsm_crypto_test_OBJECTS = \
 "CMakeFiles/vhsm_crypto_test.dir/rsa_test.cpp.o" \
 "CMakeFiles/vhsm_crypto_test.dir/aes_gcm_test.cpp.o" \
-"CMakeFiles/vhsm_crypto_test.dir/ecc_test.cpp.o"
+"CMakeFiles/vhsm_crypto_test.dir/ecc_test.cpp.o" \
+"CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.o" \
+"CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.o" \
+"CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.o" \
+"CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.o"
 
 # External object files for target vhsm_crypto_test
 vhsm_crypto_test_EXTERNAL_OBJECTS =
@@ -126,6 +186,10 @@ vhsm_crypto_test_EXTERNAL_OBJECTS =
 tests/unit/crypto/vhsm_crypto_test: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/rsa_test.cpp.o
 tests/unit/crypto/vhsm_crypto_test: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/aes_gcm_test.cpp.o
 tests/unit/crypto/vhsm_crypto_test: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ecc_test.cpp.o
+tests/unit/crypto/vhsm_crypto_test: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.o
+tests/unit/crypto/vhsm_crypto_test: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.o
+tests/unit/crypto/vhsm_crypto_test: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.o
+tests/unit/crypto/vhsm_crypto_test: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.o
 tests/unit/crypto/vhsm_crypto_test: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/build.make
 tests/unit/crypto/vhsm_crypto_test: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/compiler_depend.ts
 tests/unit/crypto/vhsm_crypto_test: src/crypto/libvhsm_crypto.a
@@ -135,7 +199,7 @@ tests/unit/crypto/vhsm_crypto_test: /usr/lib/libssl.so
 tests/unit/crypto/vhsm_crypto_test: /usr/lib/libcrypto.so
 tests/unit/crypto/vhsm_crypto_test: /usr/lib/libgtest.so.1.17.0
 tests/unit/crypto/vhsm_crypto_test: tests/unit/crypto/CMakeFiles/vhsm_crypto_test.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Linking CXX executable vhsm_crypto_test"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/sergio/project/vHSM/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Linking CXX executable vhsm_crypto_test"
 	cd /home/sergio/project/vHSM/build/tests/unit/crypto && $(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/vhsm_crypto_test.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.
