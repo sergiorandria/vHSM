@@ -3,6 +3,8 @@
 
 #include <openssl/rand.h>
 
+using namespace vhsm::crypto;
+
 TEST(AESGCM, EncryptDecrypt)
 {
     std::vector<uint8_t> key(32);

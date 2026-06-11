@@ -97,7 +97,7 @@ SecureBuffer::SecureBuffer(std::size_t size) {
 #ifdef _WIN32
     // VirtualAlloc reserves and commits in one call; MEM_COMMIT | MEM_RESERVE.
     alloc_base_ = ::VirtualAlloc(nullptr, alloc_size_,
-                                 MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+                                MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (!alloc_base_) {
         throw std::runtime_error("SecureBuffer: VirtualAlloc failed");
     }
@@ -105,8 +105,8 @@ SecureBuffer::SecureBuffer(std::size_t size) {
 #else
     // MAP_ANONYMOUS | MAP_PRIVATE gives a zero-initialised private mapping.
     alloc_base_ = ::mmap(nullptr, alloc_size_,
-                         PROT_READ | PROT_WRITE,
-                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+                        PROT_READ | PROT_WRITE,
+                        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (alloc_base_ == MAP_FAILED) {
         throw std::runtime_error("SecureBuffer: mmap failed");
     }
@@ -250,8 +250,8 @@ void SecureBuffer::read(std::size_t offset,
 }
  
 void SecureBuffer::write(std::size_t    offset,
-                         const u8* src,
-                         std::size_t    len)
+                        const u8* src,
+                        std::size_t    len)
 {
     if (offset + len > size_) {
         throw std::out_of_range(
