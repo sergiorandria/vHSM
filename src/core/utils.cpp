@@ -183,5 +183,4 @@ std::optional<std::vector<std::byte>> hex_decode(std::string_view s) {
     }
     return out;
 }
-
 } // namespace vhsm::utils

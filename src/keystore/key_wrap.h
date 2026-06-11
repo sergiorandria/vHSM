@@ -16,9 +16,9 @@ namespace vhsm::keystore {
     public:
         /**
          * @brief Constructor that initializes the library with a specific KEK.
-         * @param master_kek The 32-byte (256-bit) Key Encryption Key.
+         * @param master_key The 32-byte (256-bit) Key Encryption Key.
          */
-        explicit KeyWrap(const std::vector<u8>& master_kek);
+        explicit KeyWrap(const std::vector<u8>& master_key);
 
         /**
          * @brief Destructor designed to securely erase the internal KEK from RAM.

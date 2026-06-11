@@ -5,8 +5,9 @@ target_sources(vhsm_crypto
     rsa.cpp
     ecc.cpp
     aes_gcm.cpp
-    ctr_drbg_aes256.cpp 
+    ctr_drbg_aes256.cpp
     SecureRNG.cpp
+    aes_ecb.cpp
 )
 
 target_include_directories(vhsm_crypto

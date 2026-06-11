@@ -110,9 +110,9 @@ This plan extends the baseline virtual HSM with two integrated capabilities:
 └──────┬──────────────────────────────┬───────────────────────┘
        │                              │
 ┌──────▼──────────────────┐  ┌────────▼──────────────────────┐
-│   DB Signature Store    │  │   Notification Bus             │
-│  SQLite / PG / MySQL    │  │  (in-process event emitter)    │
-│  SignatureRecord rows   │  │  Topics: SIGN / KEY / ALERT    │
+│   DB Signature Store    │  │   Notification Bus            │
+│  SQLite / PG / MySQL    │  │  (in-process event emitter)   │
+│  SignatureRecord rows   │  │  Topics: SIGN / KEY / ALERT   │
 │  + integrity HMAC col   │  └────────┬──────────────────────┘
 └─────────────────────────┘           │
        │                    ┌─────────▼──────────────────────┐
@@ -122,8 +122,8 @@ This plan extends the baseline virtual HSM with two integrated capabilities:
 │  (gRPC / REST)          │ └─────┬──────────┬───────────────┘
 └─────────────────────────┘       │          │
                          ┌────────▼──┐  ┌────▼──────────────┐
-                         │  Email    │  │  Webhook / gRPC    │
-                         │  Adapter  │  │  Push Adapter      │
+                         │  Email    │  │  Webhook / gRPC   │
+                         │  Adapter  │  │  Push Adapter     │
                          └───────────┘  └───────────────────┘
 ```
 
@@ -739,16 +739,16 @@ option(VHSM_NOTIFY_BUS_SIZE "Notification ring buffer capacity"         1024)
 *Can run in parallel with Phase 1 after `core/types.h` is agreed.*
 
 - [x] Define `HsmObject` hierarchy (Needs verification)
-- [ ] Implement `key_fingerprint.cpp` (SHA-256 of SPKI DER) (Gilbert)
+- [x] Implement `key_fingerprint.cpp` (SHA-256 of SPKI DER) (Gilbert)
 - [x] Implement `ObjectStore` with handle allocation (Sergio)
 - [x] Implement `AttributeStore` with `CKA_SENSITIVE` / `CKA_EXTRACTABLE` enforcement
-- [x] Implement `key_wrap.cpp` (RFC 3394) (Tanjona) 
-- [ ] Unit tests for attribute enforcement and fingerprint computation
+- [x] Implement `key_wrap.cpp` (RFC 3394) (Tanjona)
+- [x] Unit tests for attribute enforcement and fingerprint computation
 
 ### Phase 3 — Session & Slot Management (Week 4)
 - [ ] Implement `Slot`, `Token`, `Session` with `app_context_json` in `SignContext`
-- [ ] Implement `SessionManager` (thread-safe)
-- [ ] Implement `FindContext` and `OpContext` including `SignContext` accumulator
+- [ ] Implement `SessionManager` (thread-safe) ()
+- [ ] Implement `FindContext` and `OpContext` including `SignContext` accumulator (Gilbert)
 - [ ] Unit tests for concurrent sessions and `SignContext` lifecycle
 
 ### Phase 4 — Database Signature Store (Week 5–6)
@@ -863,15 +863,15 @@ option(VHSM_NOTIFY_BUS_SIZE "Notification ring buffer capacity"         1024)
 
 Since you are three engineers, a suggested ownership split (adjust as needed):
 
-| Area                                             | Owner   | Backup  |
-|--------------------------------------------------|---------|---------|
-| `core/`, `crypto/`, `keystore/`                  | Eng A   | Eng B   |
-| `session/`, `pkcs11/` (PKCS#11 facade)           | Eng B   | Eng A   |
-| `signature_store/`, `persistence/`               | Eng C   | Eng B   |
-| `notification/` (bus, dispatcher, adapters)      | Eng A   | Eng C   |
-| `admin/` (gRPC server + proto)                   | Eng C   | Eng B   |
-| CI / CMake / Docker Compose test infra           | Eng B   | Eng A   |
-| Security review (final pass)                     | All 3   | —       |
+| Area                                        | Owner | Backup |
+| ---------------------------------------------| -------| --------|
+| `core/`, `crypto/`, `keystore/`             | Eng A | Eng B  |
+| `session/`, `pkcs11/` (PKCS#11 facade)      | Eng B | Eng A  |
+| `signature_store/`, `persistence/`          | Eng C | Eng B  |
+| `notification/` (bus, dispatcher, adapters) | Eng A | Eng C  |
+| `admin/` (gRPC server + proto)              | Eng C | Eng B  |
+| CI / CMake / Docker Compose test infra      | Eng B | Eng A  |
+| Security review (final pass)                | All 3 | —      |
 
 **Important:** The three team members must each register a subscriber entry during Phase 5 manual
 testing (Step: "all 3 team members receive a `SIGN_CREATED` notification end-to-end"). This
