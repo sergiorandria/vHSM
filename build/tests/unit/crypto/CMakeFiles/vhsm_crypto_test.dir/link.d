@@ -5,6 +5,10 @@ vhsm_crypto_test: \
   CMakeFiles/vhsm_crypto_test.dir/rsa_test.cpp.o \
   CMakeFiles/vhsm_crypto_test.dir/aes_gcm_test.cpp.o \
   CMakeFiles/vhsm_crypto_test.dir/ecc_test.cpp.o \
+  CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.o \
+  CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.o \
+  CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.o \
+  CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.o \
   ../../../src/crypto/libvhsm_crypto.a \
   /usr/lib/libcrypto.so \
   /usr/lib/libgtest_main.so.1.17.0 \
@@ -59,6 +63,14 @@ CMakeFiles/vhsm_crypto_test.dir/rsa_test.cpp.o:
 CMakeFiles/vhsm_crypto_test.dir/aes_gcm_test.cpp.o:
 
 CMakeFiles/vhsm_crypto_test.dir/ecc_test.cpp.o:
+
+CMakeFiles/vhsm_crypto_test.dir/ctr_drbg_aes256_test.cpp.o:
+
+CMakeFiles/vhsm_crypto_test.dir/mdctxguard_test.cpp.o:
+
+CMakeFiles/vhsm_crypto_test.dir/cipherctxguard_test.cpp.o:
+
+CMakeFiles/vhsm_crypto_test.dir/pkeyctxguard_test.cpp.o:
 
 ../../../src/crypto/libvhsm_crypto.a:
 

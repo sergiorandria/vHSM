@@ -738,7 +738,7 @@ option(VHSM_NOTIFY_BUS_SIZE "Notification ring buffer capacity"         1024)
 ### Phase 2 — Key Store & Object Model (Week 3)
 *Can run in parallel with Phase 1 after `core/types.h` is agreed.*
 
-- [ ] Define `HsmObject` hierarchy 
+- [x] Define `HsmObject` hierarchy 
 - [ ] Implement `key_fingerprint.cpp` (SHA-256 of SPKI DER) (Gilbert)
 - [ ] Implement `ObjectStore` with handle allocation (Sergio)
 - [ ] Implement `AttributeStore` with `CKA_SENSITIVE` / `CKA_EXTRACTABLE` enforcement
