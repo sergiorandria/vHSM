@@ -1,4 +1,3 @@
-#include "../core/error.h"
 #include "SecureRNG.h"
 
 #include <openssl/ssl.h>
@@ -22,15 +21,14 @@ void SecureRNG::bytes(uint8_t* out_buffer, size_t size) {
     if (!out_buffer || size == 0) { 
         return;
     }
-    
+
     std::lock_guard<std::mutex> lock(engine_mutex);
 
     try {
         std::vector<uint8_t> data = engine->generate(size);
         std::memcpy(out_buffer, data.data(), size);
         OPENSSL_cleanse(data.data(), data.size());
-    } 
-    catch (const std::runtime_error&) {
+    } catch (const std::runtime_error&) {
         // Self-healing forced reseed via high-speed live urandom
         std::vector<uint8_t> live_seed = get_system_entropy("/dev/urandom");
         engine->reseed(live_seed);
