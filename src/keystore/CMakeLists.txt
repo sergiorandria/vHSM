@@ -6,6 +6,7 @@ target_sources(vhsm_keystore
     attribute_store.cpp
     object_store.cpp
     key_wrap.cpp
+    key_fingerprint.cpp
 )
 
 target_include_directories(vhsm_keystore
