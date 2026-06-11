@@ -8,32 +8,32 @@
       "testsuite": [
         {
           "name": "AllocationAndAccess",
-          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
           "line": 7
         },
         {
           "name": "DataManipulation",
-          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
           "line": 25
         },
         {
           "name": "MoveSemantics",
-          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
           "line": 47
         },
         {
           "name": "WipeFunctionality",
-          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
           "line": 77
         },
         {
           "name": "EqualityOperators",
-          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
           "line": 98
         },
         {
           "name": "ReadWriteBoundsChecking",
-          "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/secure_buffer_test.cpp",
           "line": 130
         }
       ]
@@ -44,17 +44,29 @@
       "testsuite": [
         {
           "name": "ReturnsNonZeroTime",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 19
         },
         {
           "name": "MonotonicallyIncreases",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 26
         },
         {
           "name": "TruncatedToMilliseconds",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 34
         }
       ]
@@ -65,22 +77,38 @@
       "testsuite": [
         {
           "name": "ReturnsSameValueRepeatedly",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 49
         },
         {
           "name": "AdvanceMovesTimeForward",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 58
         },
         {
           "name": "SetSnapsToGivenTime",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 69
         },
         {
           "name": "CanBeUsedViaInterface",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 75
         }
       ]
@@ -91,52 +119,92 @@
       "testsuite": [
         {
           "name": "EpochMsRoundTrip",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 88
         },
         {
           "name": "NegativeEpochMsBeforeUnixEpoch",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 97
         },
         {
           "name": "ToIso8601UnixEpoch",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 108
         },
         {
           "name": "ToIso8601KnownTimestamp",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 113
         },
         {
           "name": "ToIso8601MillisecondPrecision",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 119
         },
         {
           "name": "ToIso8601AlwaysEndsWithZ",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 125
         },
         {
           "name": "FromIso8601RoundTrip",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 135
         },
         {
           "name": "FromIso8601WithoutMilliseconds",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 145
         },
         {
           "name": "FromIso8601RejectsLocalOffset",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 152
         },
         {
           "name": "FromIso8601RejectsMalformed",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 156
         }
       ]
@@ -147,7 +215,11 @@
       "testsuite": [
         {
           "name": "ComponentUsesInjectedClock",
+<<<<<<< HEAD
           "file": "\/home\/sergio\/project\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+=======
+          "file": "\/home\/rastan\/Documents\/L3\/dev\/projet\/vHSM\/tests\/unit\/core\/clock_test.cpp",
+>>>>>>> ebd65df7dee19a5aedb9ddc978888b677146990f
           "line": 162
         }
       ]
