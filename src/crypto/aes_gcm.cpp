@@ -20,36 +20,12 @@
 #include <openssl/rand.h>
 #include <stdexcept>
 
-<<<<<<< Updated upstream
+namespace vhsm::crypto {
 // Encrypt: initializes a GCM context, sets IV length, provides the key/nonce,
 // then encrypts the plaintext producing ciphertext and the authentication tag.
 // The caller receives ciphertext, nonce and tag in AESGCMResult.
 AESGCMResult AESGCM::encrypt(const std::vector<uint8_t>& key, const std::vector<uint8_t>& plaintext)
 {
-=======
-namespace {
-
-// RAII wrapper, ensures EVP_CIPHER_CTX_free is called on every exit path.
-struct CtxGuard {
-    EVP_CIPHER_CTX* ctx;
-    explicit CtxGuard(EVP_CIPHER_CTX* c) noexcept : ctx(c) {}
-    ~CtxGuard() noexcept { if (ctx) EVP_CIPHER_CTX_free(ctx); }
-    
-    CtxGuard(const CtxGuard&) = delete;
-    CtxGuard& operator=(const CtxGuard&) = delete;
-};
-
-} // namespace
-
-namespace vhsm::crypto {
-// Encrypt: initializes a GCM context, sets IV length, provides the key/nonce,
-// then encrypts the plaintext producing ciphertext and the authentication tag.
-// The caller receives ciphertext, nonce and tag in AESGCMResult.
-AESGCMResult AESGCM::encrypt(const std::vector<u8>& key, const std::vector<u8>& plaintext)
-{
-    VHSM_CHECK_MSG(key.size() == 32, "AESGCM::encrypt: key must be 32 bytes (AES-256)");
-
->>>>>>> Stashed changes
     int len = 0, final_len = 0;
     AESGCMResult result;
 
