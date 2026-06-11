@@ -11,7 +11,6 @@
 *.sln.docstates
 
 .claude/
-PLAN.md
 .clangd
 
 # User-specific files (MonoDevelop/Xamarin Studio)
