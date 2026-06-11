@@ -16,6 +16,7 @@
 #include <vector>
 #include <openssl/evp.h>
 
+namespace vhsm::crypto {
 enum class Curve 
 {
     P256,
@@ -52,3 +53,4 @@ class ECC
             EVP_PKEY* peer_public_key
         );
 };
+}

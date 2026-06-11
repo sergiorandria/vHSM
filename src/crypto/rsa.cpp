@@ -6,105 +6,81 @@
  * EVP_MD_CTX. The implementation relies on the EVP high-level interface
  * so it supports algorithm agility and modern OpenSSL usage.
  *
- * The functions allocate OpenSSL objects (EVP_PKEY, EVP_MD_CTX) and return
- * raw pointers or vectors. Callers must free allocated EVP_PKEY objects with
- * EVP_PKEY_free when appropriate. Error handling is intentionally minimal in
- * these helpers; callers and tests should check OpenSSL error state on failures.
+ * All OpenSSL calls are checked via VHSM_CHECK / VHSM_CHECK_MSG.
+ * RAII guards ensure no context is leaked on any exception path.
  */
 
 #include "rsa.h"
+#include "../core/error.h"
+#include "PkeyCtxGuard.h"
+#include "MdCtxGuard.h"
 
 #include <openssl/rsa.h>
+#include <openssl/evp.h>
 #include <openssl/err.h>
-#include <stdexcept>
+
+namespace vhsm::crypto {
 
 // Generate an RSA keypair of the given bit size. Returns an RSAKeyPair
 // that contains a new EVP_PKEY*; caller must free with EVP_PKEY_free.
 RSAKeyPair RSAUtil::generate_key(int bits)
 {
-    EVP_PKEY_CTX* ctx =
-        EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr);
+    VHSM_CHECK_MSG(bits >= 2048, "RSAUtil::generate_key: key size must be >= 2048 bits");
 
-    if (!ctx)
-        throw std::runtime_error("ctx");
+    EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr);
+    VHSM_CHECK_MSG(ctx != nullptr, "RSAUtil::generate_key: EVP_PKEY_CTX_new_id failed");
+    PkeyCtxGuard guard(ctx);
 
-    if (EVP_PKEY_keygen_init(ctx) <= 0)
-        throw std::runtime_error("keygen init");
-
-    if (EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, bits) <= 0)
-        throw std::runtime_error("set bits");
+    VHSM_CHECK(EVP_PKEY_keygen_init(ctx) == 1);
+    VHSM_CHECK(EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, bits) == 1);
 
     EVP_PKEY* pkey = nullptr;
-
-    if (EVP_PKEY_keygen(ctx, &pkey) <= 0)
-        throw std::runtime_error("keygen");
-
-    EVP_PKEY_CTX_free(ctx);
+    VHSM_CHECK(EVP_PKEY_keygen(ctx, &pkey) == 1);
 
     return { pkey };
 }
 
 // Sign `data` using the provided EVP_PKEY RSA key and SHA-256.
-// Returns the signature bytes. On error an exception may be thrown by callers
-// after adding error checks in the implementation.
+// Returns the signature bytes.
 std::vector<uint8_t> RSAUtil::sign(EVP_PKEY* key, const std::vector<uint8_t>& data)
 {
+    VHSM_CHECK_MSG(key != nullptr, "RSAUtil::sign: key is null");
+
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    VHSM_CHECK_MSG(ctx != nullptr, "RSAUtil::sign: EVP_MD_CTX_new failed");
+    MdCtxGuard guard(ctx);
 
-    EVP_DigestSignInit
-    (
-        ctx,
-        nullptr,
-        EVP_sha256(),
-        nullptr,
-        key
-    );
+    VHSM_CHECK(EVP_DigestSignInit(ctx, nullptr, EVP_sha256(), nullptr, key) == 1);
 
+    // First call: obtain required signature length.
     size_t siglen = 0;
-
-    EVP_DigestSign
-    (
-        ctx,
-        nullptr,
-        &siglen,
-        data.data(),
-        data.size()
-    );
+    VHSM_CHECK(EVP_DigestSign(ctx, nullptr, &siglen, data.data(), data.size()) == 1);
 
     std::vector<uint8_t> sig(siglen);
 
-    EVP_DigestSign
-    (
-        ctx,
-        sig.data(),
-        &siglen,
-        data.data(),
-        data.size()
-    );
+    // Second call: produce the actual signature.
+    VHSM_CHECK(EVP_DigestSign(ctx, sig.data(), &siglen, data.data(), data.size()) == 1);
 
+    // siglen may be smaller than the initial estimate; trim to actual size.
     sig.resize(siglen);
-
-    EVP_MD_CTX_free(ctx);
 
     return sig;
 }
 
 // Verify a signature over `data` using the provided EVP_PKEY RSA key and SHA-256.
-// Returns true if verification succeeds.
+// Returns true if verification succeeds, false on signature mismatch.
+// Throws on OpenSSL internal error (rc < 0).
 bool RSAUtil::verify(EVP_PKEY* key, const std::vector<uint8_t>& data, const std::vector<uint8_t>& signature)
 {
+    VHSM_CHECK_MSG(key != nullptr, "RSAUtil::verify: key is null");
+
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    VHSM_CHECK_MSG(ctx != nullptr, "RSAUtil::verify: EVP_MD_CTX_new failed");
+    MdCtxGuard guard(ctx);
 
-    EVP_DigestVerifyInit
-    (
-        ctx,
-        nullptr,
-        EVP_sha256(),
-        nullptr,
-        key
-    );
+    VHSM_CHECK(EVP_DigestVerifyInit(ctx, nullptr, EVP_sha256(), nullptr, key) == 1);
 
-    int rc = EVP_DigestVerify
+    const int rc = EVP_DigestVerify
     (
         ctx,
         signature.data(),
@@ -113,7 +89,12 @@ bool RSAUtil::verify(EVP_PKEY* key, const std::vector<uint8_t>& data, const std:
         data.size()
     );
 
-    EVP_MD_CTX_free(ctx);
+    // rc == 1  → valid signature
+    // rc == 0  → invalid signature (not an OpenSSL error, just a mismatch)
+    // rc <  0  → OpenSSL internal error — propagate via VHSM_CHECK
+    VHSM_CHECK_MSG(rc >= 0, "RSAUtil::verify: EVP_DigestVerify returned an error");
 
     return rc == 1;
 }
+
+} // namespace vhsm::crypto
