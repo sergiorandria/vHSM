@@ -3,6 +3,8 @@
 #include <vector>
 #include <cstdint>
 
+#include "../core/types.h"
+
 /*
  * aes_gcm.h
  *
@@ -17,12 +19,12 @@
  *
  * Keys are expected to be 32 bytes for AES-256-GCM.
  */
-
+namespace vhsm::crypto {
 struct AESGCMResult 
 {
-    std::vector<uint8_t> ciphertext;
-    std::vector<uint8_t> nonce;
-    std::vector<uint8_t> tag;
+    std::vector<u8> ciphertext;
+    std::vector<u8> nonce;
+    std::vector<u8> tag;
 };
 
 class AESGCM 
@@ -30,13 +32,14 @@ class AESGCM
     public:
         static AESGCMResult encrypt
         (
-            const std::vector<uint8_t>& key,
-            const std::vector<uint8_t>& plaintext
+            const std::vector<u8>& key,
+            const std::vector<u8>& plaintext
         );
 
-        static std::vector<uint8_t> decrypt
+        static std::vector<u8> decrypt
         (
-            const std::vector<uint8_t>& key,
+            const std::vector<u8>& key,
             const AESGCMResult& data
         );
 };
+}

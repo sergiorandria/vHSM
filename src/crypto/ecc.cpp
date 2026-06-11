@@ -10,6 +10,7 @@
  */
 
 #include "ecc.h"
+#include "error.h"
 
 #include <openssl/ec.h>
 #include <stdexcept>
