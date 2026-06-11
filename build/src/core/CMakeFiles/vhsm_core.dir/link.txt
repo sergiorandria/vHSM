@@ -1,2 +1,0 @@
-/usr/bin/ar qc libvhsm_core.a CMakeFiles/vhsm_core.dir/secure_buffer.cpp.o CMakeFiles/vhsm_core.dir/utils.cpp.o CMakeFiles/vhsm_core.dir/frozen_hsm_clock.cpp.o CMakeFiles/vhsm_core.dir/system_hsm_clock.cpp.o
-/usr/bin/ranlib libvhsm_core.a
