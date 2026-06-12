@@ -3,10 +3,13 @@
 
 #include <gtest/gtest.h>
 #include "../../../src/session/FindContext.h"
+#include "../../../src/core/error.h"
+
+using namespace vhsm::session;
 
 // Test the nominal iteration over a list of object handles
 TEST(FindContextTest, NominalIteration) {
-    std::vector<ObjectHandle> handles = {101, 102, 103};
+    std::vector<CK_OBJECT_HANDLE> handles = {101, 102, 103};
     FindContext ctx(handles);
 
     // Check presence and value of each element
@@ -25,7 +28,7 @@ TEST(FindContextTest, NominalIteration) {
 
 // Test that reset brings the cursor back to the start
 TEST(FindContextTest, ResetBringsCursorBackToStart) {
-    FindContext ctx(std::vector<ObjectHandle>{42, 99});
+    FindContext ctx(std::vector<CK_OBJECT_HANDLE>{42, 99});
 
     EXPECT_EQ(ctx.next(), 42);
     
@@ -39,7 +42,7 @@ TEST(FindContextTest, ResetBringsCursorBackToStart) {
 
 // Safety test: out-of-bounds next() must throw
 TEST(FindContextTest, ThrowsExceptionOnOverflow) {
-    FindContext ctx(std::vector<ObjectHandle>{500});
+    FindContext ctx(std::vector<CK_OBJECT_HANDLE>{500});
 
     EXPECT_EQ(ctx.next(), 500);
     EXPECT_FALSE(ctx.has_next());
@@ -50,7 +53,7 @@ TEST(FindContextTest, ThrowsExceptionOnOverflow) {
 
 // Behavior when the initial list is empty
 TEST(FindContextTest, EmptyListBehavior) {
-    FindContext ctx(std::vector<ObjectHandle>{});
+    FindContext ctx(std::vector<CK_OBJECT_HANDLE>{});
 
     EXPECT_FALSE(ctx.has_next());
     EXPECT_THROW(ctx.next(), HsmException);

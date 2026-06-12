@@ -1,6 +1,7 @@
-#ifndef vHSM_OP_CONTEXT_H
-#define vHSM_OP_CONTEXT_H
+#ifndef VHSM_OP_CONTEXT_H
+#define VHSM_OP_CONTEXT_H
 
+namespace vhsm::session {
 /// OpContext is the abstract base class for operation-specific contexts
 /// used by the session layer (for example: SignContext, VerifyContext,
 /// EncryptContext, etc.). An OpContext instance encapsulates ephemeral
@@ -21,4 +22,5 @@ public:
     OpContext(OpContext&&) noexcept = default;
     OpContext& operator=(OpContext&&) noexcept = default;
 };
-#endif
+} // namespace vhsm::session
+#endif // VHSM_OP_CONTEXT_H

@@ -3,13 +3,18 @@
 // error handling for invalid inputs.
 
 #include <gtest/gtest.h>
-#include "../../../src/session/SignContext.h"
 #include <string>
+
+#include "../../../src/session/SignContext.h"
+#include "../../../src/core/error.h"
+#include "../../../src/core/types.h"
+
+using namespace vhsm::session;
 
 // Test correct initialization and initial state
 TEST(SignContextTest, InitializationAndProperties) {
-    Mechanism mech = CKM_SHA256_RSA_PKCS;
-    ObjectHandle key = 77;
+    CK_MECHANISM_TYPE mech = CKM_SHA256_RSA_PKCS;
+    CK_OBJECT_HANDLE key = 77;
 
     SignContext ctx(mech, key);
 
@@ -20,7 +25,7 @@ TEST(SignContextTest, InitializationAndProperties) {
 
 // Passing an invalid key handle must throw
 TEST(SignContextTest, ThrowsOnInvalidKeyHandle) {
-    EXPECT_THROW(SignContext(CKM_SHA256_RSA_PKCS, INVALID_HANDLE), CryptoException);
+    EXPECT_THROW(SignContext(CKM_SHA256_RSA_PKCS, CKR_OBJECT_HANDLE_INVALID), CryptoException);
 }
 
 // Accumulate multiple chunks of data and verify concatenation

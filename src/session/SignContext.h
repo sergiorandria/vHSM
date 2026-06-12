@@ -1,24 +1,12 @@
 #ifndef vHSM_SIGN_CONTEXT_H
 #define vHSM_SIGN_CONTEXT_H
 
-#include "Types.h"
+#include "../core/types.h"
 #include "OpContext.h"
 #include <vector>
 #include <memory>
 
-// ============================================================================
-// Session operation context base
-// ============================================================================
-
-/// OpContext is the abstract base class for operation-specific contexts
-/// (sign, verify, encrypt, etc.). It provides a small polymorphic handle
-/// allowing operation state to be stored and passed around in the session
-/// layer. Implementations are non-copyable and moveable.
-
-
-// ============================================================================
-// SignContext
-// ============================================================================
+namespace vhsm::session {
 /// SignContext accumulates input data for a signing operation and stores the
 /// mechanism and key handle to be used when the actual signing primitive is
 /// invoked by higher-level code.
@@ -31,7 +19,7 @@
 /// - clear() removes accumulated data without throwing.
 class SignContext : public OpContext {
 public:
-    SignContext(Mechanism mech, ObjectHandle key);
+    SignContext(CK_MECHANISM_TYPE mech, CK_OBJECT_HANDLE key);
     ~SignContext() override = default;
 
     /// Append raw bytes to the signing accumulator.
@@ -43,13 +31,13 @@ public:
     /// Access the accumulated data buffer (read-only).
     const std::vector<uint8_t>& data() const noexcept { return m_accumulator; }
 
-    Mechanism mechanism() const noexcept { return m_mechanism; }
-    ObjectHandle key_handle() const noexcept { return m_key_handle; }
+    CK_MECHANISM_TYPE mechanism() const noexcept { return m_mechanism; }
+    CK_OBJECT_HANDLE key_handle() const noexcept { return m_key_handle; }
 
 private:
-    Mechanism m_mechanism;
-    ObjectHandle m_key_handle;
+    CK_MECHANISM_TYPE m_mechanism;
+    CK_OBJECT_HANDLE m_key_handle;
     std::vector<uint8_t> m_accumulator;
 };
-
+} // namespace vhsm::session
 #endif

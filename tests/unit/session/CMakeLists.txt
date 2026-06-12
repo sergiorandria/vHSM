@@ -5,6 +5,8 @@ find_package(GTest REQUIRED)
 add_executable(vhsm_session_test
     session_manager_test.cpp
     session_test.cpp
+    find_context_test.cpp
+    sign_context_test.cpp
 )
 
 # Include the project root so tests can include headers as <crypto/...>

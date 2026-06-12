@@ -1,14 +1,12 @@
-#ifndef vHSM_FIND_CONTEXT_H
-#define vHSM_FIND_CONTEXT_H
+#ifndef VHSM_FIND_CONTEXT_H
+#define VHSM_FIND_CONTEXT_H
 
-#include "Types.h"
+#include "../core/types.h"
+#include "OpContext.h"
 #include <vector>
 #include <memory>
 
-// ============================================================================
-// FindContext
-// ============================================================================
-
+namespace vhsm::session {
 /// FindContext provides a lightweight, sequential iterator over a set of
 /// object handles produced by a find operation. It is intended to be used by
 /// session-layer code that implements C_FindObjects* style operations.
@@ -19,9 +17,9 @@
 /// - `next()` will throw `HsmException` if called when no elements remain.
 /// - The object is non-copyable (to avoid accidental duplication of the
 ///   iteration state) but is movable.
-class FindContext {
+class FindContext: public OpContext {
 public:
-    explicit FindContext(std::vector<ObjectHandle> initial_matches);
+    explicit FindContext(std::vector<CK_OBJECT_HANDLE> initial_matches);
     
     ~FindContext() = default;
     FindContext(const FindContext&) = delete;
@@ -34,14 +32,14 @@ public:
 
     /// Return the next ObjectHandle and advance the internal cursor.
     /// Throws HsmException if no matches remain.
-    ObjectHandle next();
+    CK_OBJECT_HANDLE next();
 
     /// Reset the internal cursor to the beginning so iteration can start over.
     void reset() noexcept;
 
 private:
-    std::vector<ObjectHandle> m_matches;
+    std::vector<CK_OBJECT_HANDLE> m_matches;
     size_t m_current_index{0};
 };
-
-#endif
+} // namespace vhsm::session
+#endif // VHSM_FIND_CONTEXT_H
