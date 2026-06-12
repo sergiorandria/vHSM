@@ -156,6 +156,49 @@ typedef CK_ULONG CK_RV;
 #define CKU_USER 1
 #define CKU_SO 2
 
+// PKCS#11 slot ID
+typedef CK_ULONG CK_SLOT_ID;
+
+// PKCS#11 session state
+typedef CK_ULONG CK_STATE;
+
+// Session state values
+#define CKS_RO_PUBLIC_SESSION               ((CK_STATE) 0x00000000UL)
+#define CKS_RO_USER_FUNCTIONS               ((CK_STATE) 0x00000001UL)
+#define CKS_RO_SO_FUNCTIONS                 ((CK_STATE) 0x00000005UL)
+#define CKS_RW_PUBLIC_SESSION               ((CK_STATE) 0x00000002UL)
+#define CKS_RW_USER_FUNCTIONS               ((CK_STATE) 0x00000003UL)
+#define CKS_RW_SO_FUNCTIONS                 ((CK_STATE) 0x00000004UL)
+
+// PKCS#11 session flags
+#define CKF_RW_SESSION                      0x00000002UL
+#define CKF_SERIAL_SESSION                  0x00000004UL
+
+// PKCS#11 notification types
+typedef CK_ULONG CK_NOTIFICATION;
+
+// PKCS#11 notification callback
+typedef CK_RV (*CK_NOTIFY)(CK_SESSION_HANDLE hSession, CK_NOTIFICATION event, CK_VOID_PTR pApplication);
+
+// PKCS#11 notification types
+#define CKN_SURRENDER               0
+#define CKN_COMPLETE                1
+#define CKN_FACTOR                  2
+#define CKN_RELOCATE                3
+
+// The CK_SESSION_INFO structure
+typedef struct CK_SESSION_INFO {
+    CK_SLOT_ID      slotID;
+    CK_STATE        state;
+    CK_FLAGS        flags;
+    CK_ULONG        ulDeviceError;
+} CK_SESSION_INFO;
+
+typedef CK_SESSION_INFO* CK_SESSION_INFO_PTR;
+
+// Pointer to CK_SESSION_HANDLE
+typedef CK_SESSION_HANDLE* CK_SESSION_HANDLE_PTR;
+
 namespace vhsm::crypto {
 // SignResult struct returned by CryptoEngine::sign()
 struct SignResult {
