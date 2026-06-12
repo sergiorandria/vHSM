@@ -33,6 +33,22 @@ typedef CK_ULONG CK_ATTRIBUTE_TYPE;
 typedef void*    CK_VOID_PTR;
 typedef CK_ULONG* CK_ULONG_PTR;
 
+// PKCS#11 v3.0 mechanism types — AES family
+// Source: PKCS#11 Base Specification v3.0, Table 9-14
+#define CKM_AES_KEY_GEN     0x00001080UL
+#define CKM_AES_ECB         0x00001081UL
+#define CKM_AES_CBC         0x00001082UL
+#define CKM_AES_MAC         0x00001083UL
+#define CKM_AES_MAC_GENERAL 0x00001084UL
+#define CKM_AES_CBC_PAD     0x00001085UL
+#define CKM_AES_OFB         0x00001086UL
+#define CKM_AES_CFB64       0x00001087UL
+#define CKM_AES_CFB8        0x00001088UL
+#define CKM_AES_CFB128      0x00001089UL
+#define CKM_AES_CFB1        0x0000108AUL
+#define CKM_AES_XCBC_MAC    0x0000108BUL
+#define CKM_AES_XCBC_MAC_96 0x0000108CUL
+
 // The CK_ATTRIBUTE structure
 typedef struct CK_ATTRIBUTE {
     CK_ATTRIBUTE_TYPE type;

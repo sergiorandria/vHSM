@@ -19,7 +19,6 @@ Session::Session(CK_SESSION_HANDLE handle, CK_SLOT_ID slotID, CK_FLAGS flags, CK
 Session::~Session() {
     // Destructor - cleanup any ongoing operations
     if (operationInitialized_) {
-        // In a real implementation, we would finalize the operation
         operationInitialized_ = false;
     }
 }
