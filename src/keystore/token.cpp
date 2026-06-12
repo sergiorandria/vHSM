@@ -19,8 +19,8 @@ Token::Token(const std::string& label, const std::string& id)
 
 Token::~Token() {
     // Zero out PINs
-    user_pin_.zeroize();
-    so_pin_.zeroize();
+    user_pin_.wipe();
+    so_pin_.wipe();
 }
 
 const std::string& Token::getLabel() const noexcept {
@@ -76,22 +76,22 @@ CK_USER_TYPE Token::getLoginState() const noexcept {
 // Object management
 template<typename T, typename... Args>
 std::pair<CK_OBJECT_HANDLE, T*> Token::createObject(Args&&... args) {
-    std::lock_guard<std::shared_lock<std::shared_mutex>> lock(mutex_);
+    std::shared_lock<std::shared_mutex> lock(mutex_);
     return object_store_.createObject<T>(std::forward<Args>(args)...);
 }
 
 HsmObject* Token::getObject(CK_OBJECT_HANDLE handle) {
-    std::lock_guard<std::shared_lock<std::shared_mutex>> lock(mutex_);
+    std::shared_lock<std::shared_mutex> lock(mutex_);
     return object_store_.getObject(handle);
 }
 
 const HsmObject* Token::getObject(CK_OBJECT_HANDLE handle) const {
-    std::lock_guard<std::shared_lock<std::shared_mutex>> lock(mutex_);
+    std::shared_lock<std::shared_mutex> lock(mutex_);
     return object_store_.getObject(handle);
 }
 
 bool Token::destroyObject(CK_OBJECT_HANDLE handle) {
-    std::lock_guard<std::shared_lock<std::shared_mutex>> lock(mutex_);
+    std::shared_lock<std::shared_mutex> lock(mutex_);
     return object_store_.destroyObject(handle);
 }
 
@@ -101,7 +101,7 @@ CK_RV Token::initializeUserPin(const CK_CHAR* pin, CK_ULONG pinLen) {
     if (user_pin_set_.load() == CK_TRUE) {
         return CKR_USER_PIN_ALREADY_INITIALIZED;
     }
-    user_pin_.assign(pin, pinLen);
+    user_pin_.write(sizeof(decltype(pin[0])), pin, pinLen);
     user_pin_set_.store(CK_TRUE);
     return CKR_OK;
 }
@@ -111,7 +111,7 @@ CK_RV Token::initializeSoPin(const CK_CHAR* pin, CK_ULONG pinLen) {
     if (so_pin_set_.load() == CK_TRUE) {
         return CKR_SO_PIN_ALREADY_INITIALIZED;
     }
-    so_pin_.assign(pin, pinLen);
+    so_pin_.write(sizeof(decltype(pin[0])), pin, pinLen);
     so_pin_set_.store(CK_TRUE);
     return CKR_OK;
 }
@@ -126,7 +126,7 @@ CK_RV Token::setUserPin(const CK_CHAR* oldPin, CK_ULONG oldLen, const CK_CHAR* n
         return CKR_PIN_INCORRECT;
     }
     // Set new PIN
-    user_pin_.assign(newPin, newLen);
+    user_pin_.write(sizeof(decltype(newPin[0])), newPin, newLen);
     return CKR_OK;
 }
 
@@ -140,7 +140,7 @@ CK_RV Token::setSoPin(const CK_CHAR* oldPin, CK_ULONG oldLen, const CK_CHAR* new
         return CKR_PIN_INCORRECT;
     }
     // Set new PIN
-    so_pin_.assign(newPin, newLen);
+    so_pin_.write(sizeof(decltype(newPin[0])), newPin, newLen);
     return CKR_OK;
 }
 

@@ -29,8 +29,8 @@ vhsm::SecureBuffer makePin(const char* s) {
 constexpr CK_SESSION_HANDLE kHandle  = 1;
 constexpr CK_SLOT_ID        kSlot    = 0;
 
-    // PKCS#11 mechanism types for testing
-    constexpr CK_MECHANISM_TYPE CKM_AES_CBC = 0x00000008UL;
+// PKCS#11 mechanism types for testing
+constexpr CK_MECHANISM_TYPE CKM_AES_CBC = 0x00000008UL;
 } // anonymous namespace
 
 using namespace vhsm::session;
