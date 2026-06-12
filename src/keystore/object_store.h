@@ -45,6 +45,7 @@ public:
      * @param handle The object handle
      * @return Pointer to the object if handle is valid, nullptr otherwise
      */
+    [[nodiscard]]
     HsmObject* getObject(CK_OBJECT_HANDLE handle);
 
     /**
@@ -52,6 +53,7 @@ public:
      * @param handle The object handle
      * @return Const pointer to the object if handle is valid, nullptr otherwise
      */
+    [[nodiscard]]
     const HsmObject* getObject(CK_OBJECT_HANDLE handle) const;
 
     /**

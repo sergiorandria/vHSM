@@ -95,4 +95,19 @@ private:
 
 } // namespace vhsm
 
+namespace vhsm {
+// Template variant of SecureBuffer for arbitrary element types. 
+// This is a separate class to avoid template bloat in the main SecureBuffer class.
+template <typename T = u8>
+class SecureBufferT {
+public: 
+    SecureBufferT(std::size_t element_count = 1)
+        : buffer_(element_count * sizeof(T)) {}
+
+    ~SecureBufferT() noexcept = default;
+
+private: 
+    SecureBuffer buffer_;
+};
+} // namespace vhsm
 #endif // VHSM_CORE_SECURE_BUFFER_H
