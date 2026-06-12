@@ -42,14 +42,30 @@ typedef struct CK_ATTRIBUTE {
 
 typedef CK_ATTRIBUTE* CK_ATTRIBUTE_PTR;
 
-// Boolean types
-typedef unsigned char CK_BBOOL;
-typedef unsigned char CK_CHAR;
 #define CK_FALSE 0
 #define CK_TRUE  1
 
+// an unsigned 8-bit value 
+typedef unsigned char CK_BYTE;
+
+// an unsigned 8-bit character
+typedef CK_BYTE CK_CHAR;
+
+// an 8-bit UTF-8 character
+typedef CK_BYTE CK_UTF8CHAR;
+
+// a BYTE-sized Boolean flag
+typedef CK_BYTE CK_BBOOL;
+
+/* a signed value, the same size as a CK_ULONG */
+typedef long int CK_LONG;
+
+/* at least 32 bits; each bit is a Boolean flag */
+typedef CK_ULONG CK_FLAGS;
+
 // Status return values (CK_RV)
 typedef CK_ULONG CK_RV;
+
 #define CKR_OK                            ((CK_RV) 0x00000000UL)
 #define CKR_CANCEL                        ((CK_RV) 0x00000001UL)
 #define CKR_HOST_MEMORY                   ((CK_RV) 0x00000002UL)
