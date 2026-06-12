@@ -8,6 +8,8 @@ target_sources(vhsm_crypto
     ctr_drbg_aes256.cpp
     SecureRNG.cpp
     aes_ecb.cpp
+    gentry_ideal_lattice.cpp 
+    gentry_polynomial.cpp
 )
 
 target_include_directories(vhsm_crypto
