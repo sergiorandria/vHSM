@@ -4,6 +4,8 @@ target_sources(vhsm_session
     PRIVATE
     session_manager.cpp
     session.cpp
+    FindContext.cpp
+    SignContext.cpp
 )
 
 target_include_directories(vhsm_session

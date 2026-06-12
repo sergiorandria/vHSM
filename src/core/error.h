@@ -32,4 +32,17 @@
         } \
     } while (0)
 
+/// Base class for session-related errors.
+/// Encapsulates an explanatory message.
+class HsmException : public std::runtime_error {
+public:
+    explicit HsmException(const std::string& message) : std::runtime_error(message) {}
+};
+
+/// Errors originating from cryptographic operations (signature, digest, etc.).
+class CryptoException : public HsmException {
+public:
+    explicit CryptoException(const std::string& message) : HsmException(message) {}
+};
+
 #endif // VHSM_CORE_ERROR_H
