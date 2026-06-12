@@ -9,15 +9,15 @@
 typedef std::uint8_t u8;
 typedef std::uint16_t u16;
 typedef std::uint32_t u32;
-typedef std::uint64_t u64; 
+typedef std::uint64_t u64;
 
 // Will be used in future implementations
-// Preferred overed their std::uintXX correspondance, 
-// Better for multi-threaded applications, 
+// Preferred overed their std::uintXX correspondance,
+// Better for multi-threaded applications,
 typedef std::atomic_int8_t ts8;
-typedef std::atomic_int16_t ts16; 
-typedef std::atomic_int32_t ts32; 
-typedef std::atomic_int64_t ts64; 
+typedef std::atomic_int16_t ts16;
+typedef std::atomic_int32_t ts32;
+typedef std::atomic_int64_t ts64;
 
 // PKCS#11 types
 typedef unsigned long CK_ULONG;
@@ -44,6 +44,7 @@ typedef CK_ATTRIBUTE* CK_ATTRIBUTE_PTR;
 
 // Boolean types
 typedef unsigned char CK_BBOOL;
+typedef unsigned char CK_CHAR;
 #define CK_FALSE 0
 #define CK_TRUE  1
 
@@ -123,24 +124,21 @@ typedef CK_ULONG CK_RV;
 #define CKR_KEY_EXTRACTABLE               ((CK_RV) 0x00000099UL)
 #define CKR_KEY_TYPE_INCONSISTENT         ((CK_RV) 0x0000009AUL)
 #define CKR_KEY_NOT_NEEDS_CHANGE          ((CK_RV) 0x0000009BUL)
-#define CKR_KEY_CHANGED                   ((CK_RV) 0x00000094UL)
-#define CKR_KEY_NEEDED                    ((CK_RV) 0x00000095UL)
-#define CKR_KEY_INDIGESTIBLE              ((CK_RV) 0x00000096UL)
-#define CKR_KEY_FUNCTION_NOT_PERMITTED    ((CK_RV) 0x00000097UL)
-#define CKR_KEY_NOT_WRAPPABLE             ((CK_RV) 0x00000098UL)
-#define CKR_KEY_EXTRACTABLE               ((CK_RV) 0x00000099UL)
-#define CKR_KEY_TYPE_INCONSISTENT         ((CK_RV) 0x0000009AUL)
-#define CKR_KEY_NOT_NEEDS_CHANGE          ((CK_RV) 0x0000009BUL)
-#define CKR_KEY_CHANGED                   ((CK_RV) 0x00000094UL)
-#define CKR_KEY_NEEDED                    ((CK_RV) 0x00000095UL)
-#define CKR_KEY_INDIGESTIBLE              ((CK_RV) 0x00000096UL)
-#define CKR_KEY_FUNCTION_NOT_PERMITTED    ((CK_RV) 0x00000097UL)
-#define CKR_KEY_NOT_WRAPPABLE             ((CK_RV) 0x00000098UL)
-#define CKR_KEY_EXTRACTABLE               ((CK_RV) 0x00000099UL)
-#define CKR_KEY_TYPE_INCONSISTENT         ((CK_RV) 0x0000009AUL)
-#define CKR_KEY_NOT_NEEDS_CHANGE          ((CK_RV) 0x0000009BUL)
 #define CKR_HASH_KEY                      ((CK_RV) 0x000000A0UL)
 #define CKR_APPLICATION_NAME_INVALID      ((CK_RV) 0x00000101UL)
+#define CKR_USER_PIN_ALREADY_INITIALIZED  ((CK_RV) 0x00000102UL)
+#define CKR_USER_PIN_LOCKED               ((CK_RV) 0x00000103UL)
+#define CKR_USER_PIN_EXPIRED              ((CK_RV) 0x00000104UL)
+#define CKR_USER_PIN_INCORRECT            ((CK_RV) 0x00000105UL)
+#define CKR_USER_ELSE_LOCKED              ((CK_RV) 0x00000106UL)
+#define CKR_SO_PIN_NOT_INITIALIZED        ((CK_RV) 0x00000107UL)
+#define CKR_SO_PIN_ALREADY_INITIALIZED    ((CK_RV) 0x00000108UL)
+#define CKR_SO_PIN_LOCKED                 ((CK_RV) 0x00000109UL)
+#define CKR_SO_PIN_EXPIRED                ((CK_RV) 0x00000110UL)
+#define CKR_SO_PIN_INCORRECT              ((CK_RV) 0x00000111UL)
+#define CKU_INVALID 0
+#define CKU_USER 1
+#define CKU_SO 2
 
 namespace vhsm::crypto {
 // SignResult struct returned by CryptoEngine::sign()
