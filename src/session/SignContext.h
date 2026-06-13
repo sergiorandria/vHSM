@@ -34,10 +34,17 @@ public:
     CK_MECHANISM_TYPE mechanism() const noexcept { return m_mechanism; }
     CK_OBJECT_HANDLE key_handle() const noexcept { return m_key_handle; }
 
+    /// Set application context JSON (optional, forwarded to signature records).
+    void set_app_context_json(const std::string& json) { m_app_context_json = json; }
+
+    /// Get application context JSON.
+    const std::string& app_context_json() const noexcept { return m_app_context_json; }
+
 private:
     CK_MECHANISM_TYPE m_mechanism;
     CK_OBJECT_HANDLE m_key_handle;
     std::vector<uint8_t> m_accumulator;
+    std::string m_app_context_json;
 };
 } // namespace vhsm::session
 #endif
