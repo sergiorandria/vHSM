@@ -9,9 +9,10 @@
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build)
 
 add_executable(vhsm_session_test
-    
-    findcontext_test.cpp
-    signcontext_test.cpp
+    session_manager_test.cpp 
+    session_test.cpp
+    find_context_test.cpp
+    sign_context_test.cpp
 )
 
 target_include_directories(vhsm_session_test
