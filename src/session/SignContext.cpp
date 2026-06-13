@@ -3,7 +3,7 @@
 
 namespace vhsm::session {
 SignContext::SignContext(CK_MECHANISM_TYPE mech, CK_OBJECT_HANDLE key)
-    : m_mechanism(mech), m_key_handle(key) {
+    : m_mechanism(mech), m_key_handle(key), m_app_context_json() {
     if (key == CKR_OBJECT_HANDLE_INVALID) {
         throw CryptoException("SignContext: Clé de signature invalide.");
     }
