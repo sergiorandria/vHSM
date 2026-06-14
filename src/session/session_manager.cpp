@@ -1,4 +1,5 @@
 #include "session_manager.h"
+#include <thread>
 
 namespace vhsm::session {
 
