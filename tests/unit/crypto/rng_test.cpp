@@ -1,8 +1,9 @@
 #include <gtest/gtest.h>
-#include "rng.h"
+#include <cstdint>
+#include <cstddef>
 #include <thread>
-#include <vector>
-#include <set>
+
+#include "../../../src/crypto/SecureRNG.h"
 
 // Test Fixture for organizing vHSM RNG tests
 class SecureRNGTest : public ::testing::Test {
