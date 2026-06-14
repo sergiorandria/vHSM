@@ -15,6 +15,7 @@
 #include "../../../src/session/session.h"
 #include "../../../src/core/types.h"
 #include "../../../src/core/secure_buffer.h"
+#include <thread>
 
 // --------------------------------------------------------------------------
 // Minimal stubs so the TU compiles without the full project tree.

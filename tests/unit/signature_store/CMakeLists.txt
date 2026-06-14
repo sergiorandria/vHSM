@@ -11,6 +11,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build)
 
 add_executable(vhsm_signature_store_test
     db_tests.cpp
+    sqlite_connection_tests.cpp
+    sqlite_transaction_tests.cpp
 )
 
 target_include_directories(vhsm_signature_store_test
@@ -27,6 +29,8 @@ target_link_libraries(vhsm_signature_store_test
         vhsm_keystore
         GTest::gtest
         GTest::gtest_main
+        sqlite3
+        pthread
 )
 
 # Disable some warnings for test build
