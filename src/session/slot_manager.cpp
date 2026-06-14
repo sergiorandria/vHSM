@@ -1,6 +1,8 @@
 #include "slot_manager.h"
 
-namespace vhsm {
+namespace vhsm::session {
+
+using namespace keystore;
 
 SlotManager& SlotManager::get_instance() {
     // Garantit une initialisation unique et thread-safe (Meyers' Singleton)

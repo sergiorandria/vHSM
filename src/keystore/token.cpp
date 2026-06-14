@@ -17,170 +17,229 @@ Token::Token(const std::string& label, const std::string& id)
 }
 
 Token::~Token() {
-    // Zero out PINs
+    // Zero out PINs.
+    //
+    // NOTE: these wipes are not protected by user_pin_mutex_ / so_pin_mutex_.
+    // This is safe ONLY under the invariant that no other thread can be
+    // inside verifyUserPin/setUserPin/etc. while ~Token() runs — i.e. the
+    // Token must already be unreachable (last shared_ptr reference dropped,
+    // no live Session holds a raw pointer to it). This invariant is enforced
+    // by SlotManager/SessionManager lifetime rules and is NOT re-checked here.
+    // If that ever changes, these wipes must be moved under the respective
+    // mutexes.
     user_pin_.wipe();
     so_pin_.wipe();
 }
 
-const std::string& Token::getLabel() const noexcept {
+const std::string& Token::get_label() const noexcept {
     return label_;
 }
 
-const std::string& Token::getId() const noexcept {
+const std::string& Token::get_id() const noexcept {
     return id_;
 }
 
-CK_ULONG Token::getMaxSessionCount() const noexcept {
+CK_ULONG Token::get_max_session_count() const noexcept {
     // For simplicity, we'll return a large number
     return 1024;
 }
 
-CK_ULONG Token::getSessionCount() const noexcept {
+CK_ULONG Token::get_session_count() const noexcept {
     return session_count_.load();
 }
 
-CK_ULONG Token::getMaxRwSessionCount() const noexcept {
+CK_ULONG Token::get_max_rw_session_count() const noexcept {
     return 1024;
 }
 
-CK_ULONG Token::getRwSessionCount() const noexcept {
+CK_ULONG Token::get_rw_session_count() const noexcept {
     return rw_session_count_.load();
 }
 
-CK_BBOOL Token::isTokenInitialized() const noexcept {
+CK_BBOOL Token::is_token_initialized() const noexcept {
     return token_initialized_.load();
 }
 
-CK_BBOOL Token::isUserPinSet() const noexcept {
+CK_BBOOL Token::is_user_pin_set() const noexcept {
     return user_pin_set_.load();
 }
 
-CK_BBOOL Token::isSoPinSet() const noexcept {
+CK_BBOOL Token::is_so_pin_set() const noexcept {
     return so_pin_set_.load();
 }
 
-CK_BBOOL Token::isUserLoginRequired() const noexcept {
+CK_BBOOL Token::is_user_login_required() const noexcept {
     return user_login_required_.load();
 }
 
-CK_BBOOL Token::isSoLoginRequired() const noexcept {
+CK_BBOOL Token::is_so_login_required() const noexcept {
     return so_login_required_.load();
 }
 
-CK_USER_TYPE Token::getLoginState() const noexcept {
-    // This is not really per token, but per session. We'll return CKU_INVALID as placeholder.
-    return CKU_INVALID;
-}
+// NOTE: getLoginState() removed — see token.h for rationale. Login state is
+// tracked per-Session, not per-Token.
 
-// Object management
-template<typename T, typename... Args>
-std::pair<CK_OBJECT_HANDLE, T*> Token::createObject(Args&&... args) {
-    std::shared_lock<std::shared_mutex> lock(mutex_);
-    return object_store_.createObject<T>(std::forward<Args>(args)...);
-}
-
-HsmObject* Token::getObject(CK_OBJECT_HANDLE handle) {
+HsmObject* Token::get_object(CK_OBJECT_HANDLE handle) {
     std::shared_lock<std::shared_mutex> lock(mutex_);
     return object_store_.getObject(handle);
 }
 
-const HsmObject* Token::getObject(CK_OBJECT_HANDLE handle) const {
+const HsmObject* Token::get_object(CK_OBJECT_HANDLE handle) const {
     std::shared_lock<std::shared_mutex> lock(mutex_);
     return object_store_.getObject(handle);
 }
 
-bool Token::destroyObject(CK_OBJECT_HANDLE handle) {
-    std::shared_lock<std::shared_mutex> lock(mutex_);
+bool Token::destroy_object(CK_OBJECT_HANDLE handle) {
+    // destroyObject MUTATES object_store_ (frees a slot). ObjectStore itself
+    // is internally synchronized (its own std::mutex), but — same rationale
+    // as createObject() in token.h — we take a unique_lock here for
+    // forward-compatibility and to make the "this is a write" intent explicit.
+    std::unique_lock<std::shared_mutex> lock(mutex_);
     return object_store_.destroyObject(handle);
 }
 
-// PIN management
-CK_RV Token::initializeUserPin(const CK_CHAR* pin, CK_ULONG pinLen) {
+bool Token::secure_pin_equals(const SecureBuffer& stored,
+                               std::size_t stored_len,
+                               const CK_CHAR* candidate,
+                               CK_ULONG candidate_len) noexcept {
+    // Constant-time comparison: always compare up to the larger of the two
+    // lengths (capped at the stored buffer's capacity) so that timing does
+    // not leak the length of the stored PIN or where the first mismatching
+    // byte occurs.
+    //
+    // Strategy:
+    //  - Compute a length-mismatch flag (non-zero if stored_len != candidate_len).
+    //  - Byte-compare over `stored.byte_size()` bytes regardless of candidate_len,
+    //    treating out-of-range candidate bytes as 0. This keeps the loop length
+    //    constant (== capacity), independent of either input length.
+    //  - OR all per-byte differences and the length-mismatch flag together.
+
+    const u8* stored_data = stored.data();
+    const std::size_t capacity = stored.byte_size();
+
+    unsigned char diff = static_cast<unsigned char>(
+        (stored_len != static_cast<std::size_t>(candidate_len)) ? 1 : 0);
+
+    for (std::size_t i = 0; i < capacity; ++i) {
+        unsigned char candidate_byte = 0;
+        if (i < static_cast<std::size_t>(candidate_len)) {
+            candidate_byte = static_cast<unsigned char>(candidate[i]);
+        }
+        unsigned char stored_byte =
+            (i < stored_len) ? static_cast<unsigned char>(stored_data[i]) : 0;
+
+        diff |= static_cast<unsigned char>(stored_byte ^ candidate_byte);
+    }
+
+    return diff == 0;
+}
+
+CK_RV Token::initialize_user_pin(const CK_CHAR* pin, CK_ULONG pinLen) {
     std::lock_guard<std::mutex> lock(user_pin_mutex_);
     if (user_pin_set_.load() == CK_TRUE) {
         return CKR_USER_PIN_ALREADY_INITIALIZED;
     }
-    user_pin_.write(sizeof(decltype(pin[0])), pin, pinLen);
+    if (static_cast<std::size_t>(pinLen) > user_pin_.byte_size()) {
+        return CKR_PIN_LEN_RANGE;
+    }
+    // FIX: previously wrote at offset = sizeof(CK_CHAR) (i.e. offset 1),
+    // which shifted the PIN by one byte and left byte 0 untouched/garbage.
+    // The PIN must start at offset 0.
+    user_pin_.write(0, reinterpret_cast<const u8*>(pin), pinLen);
+    user_pin_len_ = pinLen;
     user_pin_set_.store(CK_TRUE);
     return CKR_OK;
 }
 
-CK_RV Token::initializeSoPin(const CK_CHAR* pin, CK_ULONG pinLen) {
+CK_RV Token::initialize_so_pin(const CK_CHAR* pin, CK_ULONG pinLen) {
     std::lock_guard<std::mutex> lock(so_pin_mutex_);
     if (so_pin_set_.load() == CK_TRUE) {
         return CKR_SO_PIN_ALREADY_INITIALIZED;
     }
-    so_pin_.write(sizeof(decltype(pin[0])), pin, pinLen);
+    if (static_cast<std::size_t>(pinLen) > so_pin_.byte_size()) {
+        return CKR_PIN_LEN_RANGE;
+    }
+    so_pin_.write(0, reinterpret_cast<const u8*>(pin), pinLen);
+    so_pin_len_ = pinLen;
     so_pin_set_.store(CK_TRUE);
     return CKR_OK;
 }
 
-CK_RV Token::setUserPin(const CK_CHAR* oldPin, CK_ULONG oldLen, const CK_CHAR* newPin, CK_ULONG newLen) {
+CK_RV Token::set_user_pin(const CK_CHAR* oldPin, CK_ULONG oldLen, const CK_CHAR* newPin, CK_ULONG newLen) {
     std::lock_guard<std::mutex> lock(user_pin_mutex_);
     if (user_pin_set_.load() == CK_FALSE) {
         return CKR_USER_PIN_NOT_INITIALIZED;
     }
-    // Verify old PIN
-    if (oldLen != user_pin_.size() || std::memcmp(oldPin, user_pin_.data(), oldLen) != 0) {
+    // FIX: compare against user_pin_len_ (actual stored length), not
+    // user_pin_.size() (== 256, the buffer capacity). The old check
+    // `oldLen != user_pin_.size()` would reject every real PIN.
+    // Also use a constant-time comparison.
+    if (!secure_pin_equals(user_pin_, user_pin_len_, oldPin, oldLen)) {
         return CKR_PIN_INCORRECT;
     }
-    // Set new PIN
-    user_pin_.write(sizeof(decltype(newPin[0])), newPin, newLen);
+    if (static_cast<std::size_t>(newLen) > user_pin_.byte_size()) {
+        return CKR_PIN_LEN_RANGE;
+    }
+    user_pin_.write(0, reinterpret_cast<const u8*>(newPin), newLen);
+    user_pin_len_ = newLen;
     return CKR_OK;
 }
 
-CK_RV Token::setSoPin(const CK_CHAR* oldPin, CK_ULONG oldLen, const CK_CHAR* newPin, CK_ULONG newLen) {
+CK_RV Token::set_so_pin(const CK_CHAR* oldPin, CK_ULONG oldLen, const CK_CHAR* newPin, CK_ULONG newLen) {
     std::lock_guard<std::mutex> lock(so_pin_mutex_);
     if (so_pin_set_.load() == CK_FALSE) {
         return CKR_SO_PIN_NOT_INITIALIZED;
     }
-    // Verify old PIN
-    if (oldLen != so_pin_.size() || std::memcmp(oldPin, so_pin_.data(), oldLen) != 0) {
+    if (!secure_pin_equals(so_pin_, so_pin_len_, oldPin, oldLen)) {
         return CKR_PIN_INCORRECT;
     }
-    // Set new PIN
-    so_pin_.write(sizeof(decltype(newPin[0])), newPin, newLen);
+    if (static_cast<std::size_t>(newLen) > so_pin_.byte_size()) {
+        return CKR_PIN_LEN_RANGE;
+    }
+    so_pin_.write(0, reinterpret_cast<const u8*>(newPin), newLen);
+    so_pin_len_ = newLen;
     return CKR_OK;
 }
 
-CK_RV Token::verifyUserPin(const CK_CHAR* pin, CK_ULONG pinLen) {
+CK_RV Token::verify_user_pin(const CK_CHAR* pin, CK_ULONG pinLen) {
     std::lock_guard<std::mutex> lock(user_pin_mutex_);
     if (user_pin_set_.load() == CK_FALSE) {
         return CKR_USER_PIN_NOT_INITIALIZED;
     }
-    if (pinLen != user_pin_.size() || std::memcmp(pin, user_pin_.data(), pinLen) != 0) {
+    if (!secure_pin_equals(user_pin_, user_pin_len_, pin, pinLen)) {
         return CKR_PIN_INCORRECT;
     }
     return CKR_OK;
 }
 
-CK_RV Token::verifySoPin(const CK_CHAR* pin, CK_ULONG pinLen) {
+CK_RV Token::verify_so_pin(const CK_CHAR* pin, CK_ULONG pinLen) {
     std::lock_guard<std::mutex> lock(so_pin_mutex_);
     if (so_pin_set_.load() == CK_FALSE) {
         return CKR_SO_PIN_NOT_INITIALIZED;
     }
-    if (pinLen != so_pin_.size() || std::memcmp(pin, so_pin_.data(), pinLen) != 0) {
+    if (!secure_pin_equals(so_pin_, so_pin_len_, pin, pinLen)) {
         return CKR_PIN_INCORRECT;
     }
     return CKR_OK;
 }
 
-CK_RV Token::changeUserPin(const CK_CHAR* oldPin, CK_ULONG oldLen, const CK_CHAR* newPin, CK_ULONG newLen) {
-    return setUserPin(oldPin, oldLen, newPin, newLen);
+CK_RV Token::change_user_pin(const CK_CHAR* oldPin, CK_ULONG oldLen, const CK_CHAR* newPin, CK_ULONG newLen) {
+    return set_user_pin(oldPin, oldLen, newPin, newLen);
 }
 
-CK_RV Token::changeSoPin(const CK_CHAR* oldPin, CK_ULONG oldLen, const CK_CHAR* newPin, CK_ULONG newLen) {
-    return setSoPin(oldPin, oldLen, newPin, newLen);
+CK_RV Token::change_so_pin(const CK_CHAR* oldPin, CK_ULONG oldLen, const CK_CHAR* newPin, CK_ULONG newLen) {
+    return set_so_pin(oldPin, oldLen, newPin, newLen);
 }
 
 CK_RV Token::login(CK_USER_TYPE userType, const CK_CHAR* pin, CK_ULONG pinLen) {
-    // In a real implementation, we would update the session's login state.
-    // For now, we just verify the PIN and return success.
-    // The actual login state is tracked per session.
+    // Token::login() only VERIFIES the PIN. Recording "this session is now
+    // logged in as USER/SO" is the Session's responsibility — PKCS#11 allows
+    // multiple sessions with independent login states, so that state cannot
+    // live here.
     if (userType == CKU_USER) {
-        return verifyUserPin(pin, pinLen);
+        return verify_user_pin(pin, pinLen);
     } else if (userType == CKU_SO) {
-        return verifySoPin(pin, pinLen);
+        return verify_so_pin(pin, pinLen);
     }
     return CKR_USER_TYPE_INVALID;
 }
@@ -195,27 +254,24 @@ CK_RV Token::logout(CK_USER_TYPE userType) {
     return CKR_USER_TYPE_INVALID;
 }
 
-void Token::incrementSessionCount() {
+void Token::increment_session_count() {
     session_count_.fetch_add(1);
 }
 
-void Token::decrementSessionCount() {
+void Token::decrement_session_count() {
     if (session_count_.load() > 0) {
         session_count_.fetch_sub(1);
     }
 }
 
-void Token::incrementRwSessionCount() {
+void Token::increment_rw_session_count() {
     rw_session_count_.fetch_add(1);
 }
 
-void Token::decrementRwSessionCount() {
+void Token::decrement_rw_session_count() {
     if (rw_session_count_.load() > 0) {
         rw_session_count_.fetch_sub(1);
     }
 }
-
-// Explicit instantiation for common object types if needed
-// We'll keep the template in the header for now.
 
 } // namespace vhsm::keystore

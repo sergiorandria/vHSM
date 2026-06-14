@@ -13,17 +13,21 @@ add_executable(vhsm_session_test
     session_test.cpp
     find_context_test.cpp
     sign_context_test.cpp
+    slot_tests.cpp
+    slot_manager_tests.cpp
 )
 
 target_include_directories(vhsm_session_test
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../../src
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../../src/session
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../../src/keystore
 )
 
 target_link_libraries(vhsm_session_test
     PRIVATE
         vhsm_session
+        vhsm_keystore
         GTest::gtest
         GTest::gtest_main
 )

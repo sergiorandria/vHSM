@@ -8,7 +8,7 @@
 #include <cstdint>
 #include "../keystore/slot.h"  // Inclusion de ton composant Slot documenté
 
-namespace vhsm {
+namespace vhsm::session {
 
 /**
  * @class SlotManager
@@ -44,7 +44,7 @@ public:
      * @param slot_id The identifier of the target slot.
      * @return std::shared_ptr<Slot> Pointer to the Slot instance, or nullptr if not found.
      */
-    std::shared_ptr<Slot> get_slot(uint64_t slot_id) const;
+    std::shared_ptr<keystore::Slot> get_slot(uint64_t slot_id) const;
 
     /**
      * @brief Compiles a list of all currently registered slot identifiers.
@@ -65,7 +65,7 @@ private:
     /**
      * @brief Internal registry mapping unique Slot IDs to their shared pointer instances.
      */
-    std::unordered_map<uint64_t, std::shared_ptr<Slot>> slots_;
+    std::unordered_map<uint64_t, std::shared_ptr<keystore::Slot>> slots_;
 
     /**
      * @brief Mutex guarding the internal slots registry mapping from concurrent modifications.
