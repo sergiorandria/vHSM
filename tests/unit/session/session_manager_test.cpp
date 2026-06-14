@@ -13,6 +13,7 @@
 
 #include <gtest/gtest.h>
 #include "../../../src/session/session_manager.h"
+#include <thread>
 
 using namespace vhsm::session;
 
