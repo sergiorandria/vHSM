@@ -16,7 +16,7 @@ public:
     OpContext() = default;
     virtual ~OpContext() = default;
 
-    /// Non-copyable, moveable (Rule-of-five simplified)
+    /// Non-copyable, moveable
     OpContext(const OpContext&) = delete;
     OpContext& operator=(const OpContext&) = delete;
     OpContext(OpContext&&) noexcept = default;

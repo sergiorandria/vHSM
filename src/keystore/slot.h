@@ -61,7 +61,7 @@ public:
      * @brief Safely attaches a cryptographic token to this slot.
      * @param token Shared pointer to the token instance to insert.
      */
-    void insert_token(std::shared_ptr<token> token);
+    void insert_token(std::shared_ptr<Token> token);
 
     /**
      * @brief Detaches and releases the current token from the slot.
@@ -72,7 +72,7 @@ public:
      * @brief Retrieves a thread-safe reference pointer to the active token.
      * @return std::shared_ptr<token> Pointer to the token, or nullptr if the slot is empty.
      */
-    std::shared_ptr<token> get_token() const;
+    std::shared_ptr<Token> get_token() const;
 
     /**
      * @brief Gets the structural text description of the slot.
@@ -94,7 +94,7 @@ public:
 
 private:
     uint64_t slot_id_;
-    std::shared_ptr<token> token_;
+    std::shared_ptr<Token> token_;
     
     std::string description_;
     std::string manufacturer_id_;

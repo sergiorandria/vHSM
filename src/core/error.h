@@ -45,4 +45,22 @@ public:
     explicit CryptoException(const std::string& message) : HsmException(message) {}
 };
 
+class DbError : public std::runtime_error {
+public:
+    enum class Kind {
+        SchemaError,
+        ConstraintError,
+        ConnectionError,
+        TransactionError
+    };
+
+    DbError(Kind kind, const std::string& message)
+        : std::runtime_error(message), kind_(kind) {}
+
+    Kind kind() const { return kind_; }
+
+private:
+    Kind kind_;
+};
+
 #endif // VHSM_CORE_ERROR_H

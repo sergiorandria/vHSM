@@ -19,6 +19,11 @@ typedef std::atomic_int16_t ts16;
 typedef std::atomic_int32_t ts32;
 typedef std::atomic_int64_t ts64;
 
+typedef std::int8_t i8;
+typedef std::int16_t i16;
+typedef std::int32_t i32;
+typedef std::int64_t i64;
+
 // PKCS#11 types
 typedef unsigned long CK_ULONG;
 typedef CK_ULONG CK_OBJECT_HANDLE;
@@ -190,6 +195,9 @@ typedef CK_ULONG CK_STATE;
 // PKCS#11 session flags
 #define CKF_RW_SESSION                      0x00000002UL
 #define CKF_SERIAL_SESSION                  0x00000004UL
+#define CKF_TOKEN_PRESENT                   0x00000001UL
+#define CKF_HW_SLOT                         0x00000002UL
+#define CKF_REMOVABLE_DEVICE                0x00000004UL    
 
 // PKCS#11 notification types
 typedef CK_ULONG CK_NOTIFICATION;
