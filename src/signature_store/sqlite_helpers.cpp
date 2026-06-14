@@ -1,6 +1,6 @@
 // sqlite_helpers.cpp
 #include "sqlite_helpers.h"
-#include "../core/error.h" // Pour DbError
+#include "../core/error.h" // For DbError
 
 // Internal helpers
 namespace vhsm::signature_store::db::internal {

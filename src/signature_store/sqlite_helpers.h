@@ -5,17 +5,17 @@
 #include <sqlite3.h>
 #include <string>
 #include <vector>
-#include "db_result_set.h" // Ajustez selon votre structure (où est défini DbResultSet)
+#include "db_result_set.h" 
 
 namespace vhsm::signature_store::db::internal {
 
-    // Déclaration de la fonction d'erreur
+    // Declaration of the error helper function.
     [[noreturn]] void throw_sqlite_error(sqlite3* db, int rc, const char* context);
 
-    // Déclaration du liage de paramètres
+    // Declaration of the parameter binding helper.
     void bind_params(sqlite3* db, sqlite3_stmt* stmt, const std::vector<std::string>& params);
 
-    // Déclaration de la collecte de lignes
+    // Declaration of the row collection helper.
     DbResultSet collect_rows(sqlite3* db, sqlite3_stmt* stmt);
 
 } // namespace vhsm::signature_store::db::internal
