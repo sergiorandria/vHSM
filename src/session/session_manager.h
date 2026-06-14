@@ -16,7 +16,7 @@ public:
 
     // Open a new session
     CK_RV openSession(CK_SLOT_ID slotID, CK_FLAGS flags, CK_VOID_PTR pApplication,
-                     CK_NOTIFY notify, CK_SESSION_HANDLE_PTR phSession);
+                      CK_NOTIFY notify, CK_SESSION_HANDLE_PTR phSession);
 
     // Close an existing session
     CK_RV closeSession(CK_SESSION_HANDLE hSession);
