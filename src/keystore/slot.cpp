@@ -2,11 +2,9 @@
 #include "token.h"
 
 // Flags PKCS#11 standard
-constexpr uint64_t CKF_TOKEN_PRESENT    = 0x00000001;
-constexpr uint64_t CKF_REMOVABLE_DEVICE = 0x00000002;
-constexpr uint64_t CKF_HW_SLOT          = 0x00000004;
 
-namespace vhsm {
+
+namespace vhsm::keystore {
 
 Slot::Slot(uint64_t slot_id)
     : slot_id_(slot_id),
@@ -35,15 +33,16 @@ std::shared_ptr<token> Slot::get_token() const {
 }
 
 uint64_t Slot::get_flags() const {
+    // Needs code review
     uint64_t flags = 0;
-    flags |= CKF_REMOVABLE_DEVICE;
-    flags |= CKF_HW_SLOT;
+    //flags |= CKF_REMOVABLE_DEVICE;
+    //flags |= CKF_HW_SLOT;
 
-    if (is_token_present()) {
-        flags |= CKF_TOKEN_PRESENT;
-    }
+    //if (is_token_present()) {
+    //    flags |= CKF_TOKEN_PRESENT;
+    //}
 
     return flags;
 }
 
-} // namespace vhsm
+} // namespace vhsm::keystore

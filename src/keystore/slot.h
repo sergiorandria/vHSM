@@ -6,12 +6,15 @@
 #include <mutex>
 #include <cstdint>
 
-namespace vhsm {
+#include "token.h"
+#include "../core/types.h" 
+#include "../core/error.h"
+
+namespace vhsm::keystore {
 
 /**
  * @brief Forward declaration to break compilation dependencies and prevent cyclic inclusions.
  */
-class token;
 
 /**
  * @class Slot
@@ -102,6 +105,6 @@ private:
     mutable std::mutex slot_mutex_;
 };
 
-} // namespace vhsm
+} // namespace vhsm::keystore
 
 #endif // VHSM_SESSION_SLOT_H
