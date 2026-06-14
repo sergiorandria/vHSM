@@ -3,6 +3,7 @@ add_library(vhsm_signature_store)
 target_sources(vhsm_signature_store
     PRIVATE
     db_schema.cpp
+    db_row.cpp
 )
 
 target_include_directories(vhsm_signature_store
