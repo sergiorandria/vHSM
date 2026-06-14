@@ -51,7 +51,8 @@ public:
         SchemaError,
         ConstraintError,
         ConnectionError,
-        TransactionError
+        TransactionError, 
+        IoError
     };
 
     DbError(Kind kind, const std::string& message)

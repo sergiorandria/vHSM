@@ -746,10 +746,10 @@ option(VHSM_NOTIFY_BUS_SIZE "Notification ring buffer capacity"         1024)
 - [x] Unit tests for attribute enforcement and fingerprint computation
 
 ### Phase 3 — Session & Slot Management (Week 4)
-- [ ] Implement `Slot`, `Token`, `Session` with `app_context_json` in `SignContext`
-- [ ] Implement `SessionManager` (thread-safe)
-- [ ] Implement `FindContext` and `OpContext` including `SignContext` accumulator
-- [ ] Unit tests for concurrent sessions and `SignContext` lifecycle
+- [x] Implement `Slot`, `Token`, `Session` with `app_context_json` in `SignContext`
+- [x] Implement `SessionManager` (thread-safe)
+- [x] Implement `FindContext` and `OpContext` including `SignContext` accumulator
+- [x] Unit tests for concurrent sessions and `SignContext` lifecycle
 
 ### Phase 4 — Database Signature Store (Week 5–6)
 *Highest risk phase — unblock DB backend decision before starting.*
