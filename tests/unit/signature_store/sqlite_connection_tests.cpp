@@ -1,3 +1,9 @@
+// sqlite_connection_tests.cpp — Unit tests for SqliteConnection
+//
+// Tests cover: opening an in-memory database, basic insert/query, using
+// with_transaction to commit changes, and ensuring rollback on exceptions.
+// Build: add to test target in CMake or compile linking with sqlite3 and GTest.
+
 #include <gtest/gtest.h>
 
 #include <string>
@@ -32,11 +38,13 @@ TEST(SqliteConnectionTest, WithTransactionCommit) {
     SqliteConnection conn(":memory:");
     conn.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT);");
 
+    // Use with_transaction to ensure the insert is committed
     conn.with_transaction([&](IDbTransaction& tx) {
         i64 c = tx.exec("INSERT INTO t(v) VALUES(?);", { "x" });
         EXPECT_GE(c, 1);
     });
 
+    // Query the count of rows to verify insertion
     DbResultSet rs = conn.query("SELECT COUNT(*) FROM t;");
     ASSERT_EQ(rs.rows_count(), 1u);
     auto cnt = rs.get<i64>(rs.rows_[0], 0);
@@ -48,6 +56,7 @@ TEST(SqliteConnectionTest, WithTransactionRollbackOnException) {
     SqliteConnection conn(":memory:");
     conn.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT);");
 
+    // Ensure that an exception during the transaction causes a rollback
     EXPECT_THROW(
         conn.with_transaction([&](IDbTransaction& tx) {
             tx.exec("INSERT INTO t(v) VALUES(?);", { "x" });
@@ -55,6 +64,7 @@ TEST(SqliteConnectionTest, WithTransactionRollbackOnException) {
         }),
         std::runtime_error);
 
+    // Query the count of rows to verify rollback
     DbResultSet rs = conn.query("SELECT COUNT(*) FROM t;");
     ASSERT_EQ(rs.rows_count(), 1u);
     auto cnt = rs.get<i64>(rs.rows_[0], 0);

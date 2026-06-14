@@ -1,10 +1,7 @@
-// =============================================================================
 // db_tests.cpp — Unit tests for db_row, db_connection (DbResultSet), db_schema
 //
-// Build:
-//   g++ -std=c++20 db_tests.cpp db_row.cpp db_schema.cpp 
-//       -I.. -lgtest -lgtest_main -pthread -o db_tests
-//   ./db_tests
+// Build: g++ -std=c++20 db_tests.cpp db_row.cpp db_schema.cpp -I.. -lgtest -lgtest_main -pthread -o db_tests
+// Or add to CMake test target.
 //
 // Or with CMake (recommended):
 //   add_executable(db_tests db_tests.cpp db_row.cpp db_schema.cpp)
