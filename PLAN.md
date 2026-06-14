@@ -739,24 +739,16 @@ option(VHSM_NOTIFY_BUS_SIZE "Notification ring buffer capacity"         1024)
 *Can run in parallel with Phase 1 after `core/types.h` is agreed.*
 
 - [x] Define `HsmObject` hierarchy (Needs verification)
-<<<<<<< Updated upstream
 - [x] Implement `key_fingerprint.cpp` (SHA-256 of SPKI DER) (Gilbert)
 - [x] Implement `ObjectStore` with handle allocation (Sergio)
 - [x] Implement `AttributeStore` with `CKA_SENSITIVE` / `CKA_EXTRACTABLE` enforcement
 - [x] Implement `key_wrap.cpp` (RFC 3394) (Tanjona) 
 - [x] Unit tests for attribute enforcement and fingerprint computation
-=======
-- [ ] Implement `key_fingerprint.cpp` (SHA-256 of SPKI DER) (Gilbert)
-- [x] Implement `ObjectStore` with handle allocation (Sergio)
-- [x] Implement `AttributeStore` with `CKA_SENSITIVE` / `CKA_EXTRACTABLE` enforcement
-- [ ] Implement `key_wrap.cpp` (RFC 3394) (Tanjona)
-- [ ] Unit tests for attribute enforcement and fingerprint computation
->>>>>>> Stashed changes
 
 ### Phase 3 — Session & Slot Management (Week 4)
 - [ ] Implement `Slot`, `Token`, `Session` with `app_context_json` in `SignContext`
-- [ ] Implement `SessionManager` (thread-safe) ()
-- [ ] Implement `FindContext` and `OpContext` including `SignContext` accumulator (Gilbert)
+- [ ] Implement `SessionManager` (thread-safe)
+- [ ] Implement `FindContext` and `OpContext` including `SignContext` accumulator
 - [ ] Unit tests for concurrent sessions and `SignContext` lifecycle
 
 ### Phase 4 — Database Signature Store (Week 5–6)
