@@ -5,6 +5,7 @@
 #include "../core/secure_buffer.h"
 #include "hsm_object.h"
 #include "object_store.h"
+#include "attribute_store.h"
 
 #include <string>
 #include <mutex>
@@ -64,6 +65,52 @@ public:
         return object_store_.template createObject<T>(std::forward<Args>(args)...);
     }
 
+    /**
+     * Find an object by its label and id.
+     * @tparam T The expected type of the object (must derive from HsmObject).
+     * @param label The label to match (CKA_LABEL).
+     * @param id The id to match (CKA_ID).
+     * @return Pointer to the object if found and of type T, nullptr otherwise.
+     * @note The caller must ensure that the object is of type T; the function
+     *       does not perform a runtime type check beyond the HsmObject base.
+     */
+    template<typename T>
+    T* find_object_by_label_and_id(const std::string& label, const std::string& id) {
+        auto result = object_store_.find_object_if([&](HsmObject* obj) {
+            // Check label and id using AttributeStore
+            AttributeStore attr_store(*obj);
+            // Get label
+            std::vector<u8> label_value;
+            CK_ULONG label_len = 0;
+            CK_RV rv = attr_store.getAttribute(CKA_LABEL, nullptr, &label_len);
+            if (rv != CKR_OK) return false;
+            label_value.resize(label_len);
+            rv = attr_store.getAttribute(CKA_LABEL, label_value.data(), &label_len);
+            if (rv != CKR_OK) return false;
+            // Get id
+            std::vector<u8> id_value;
+            CK_ULONG id_len = 0;
+            rv = attr_store.getAttribute(CKA_ID, nullptr, &id_len);
+            if (rv != CKR_OK) return false;
+            id_value.resize(id_len);
+            rv = attr_store.getAttribute(CKA_ID, id_value.data(), &id_len);
+            if (rv != CKR_OK) return false;
+            // Compare
+            std::string obj_label(reinterpret_cast<char*>(label_value.data()), label_len);
+            std::string obj_id(reinterpret_cast<char*>(id_value.data()), id_len);
+            if (obj_label != label || obj_id != id) return false;
+            // Optionally, check the object class if we can
+            // We'll skip for now.
+            return true;
+        });
+        if (result.second) {
+            // We assume the object is of type T, so we static_cast.
+            // This is unsafe if the object is not of type T, but the caller should ensure that.
+            return static_cast<T*>(result.second);
+        }
+        return nullptr;
+    }
+
     HsmObject* get_object(CK_OBJECT_HANDLE handle);
     const HsmObject* get_object(CK_OBJECT_HANDLE handle) const;
     bool destroy_object(CK_OBJECT_HANDLE handle);
@@ -85,6 +132,11 @@ public:
     void decrement_session_count();
     void increment_rw_session_count();
     void decrement_rw_session_count();
+
+    // Retrieve the Key Encryption Key (KEK) used for wrapping/unwrapping.
+    // Returns the raw key bytes if a KEK object with label "KEK" exists,
+    // otherwise returns empty vector.
+    std::vector<std::uint8_t> get_kek() const;
 
 private:
     // Internal helper: constant-time comparison of a candidate PIN against a

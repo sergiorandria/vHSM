@@ -8,24 +8,10 @@
 #include "../core/types.h"
 #include "db_connection.h"
 #include "signature_repository.h"
-
-// Forward declarations for dependencies (assume they exist in other modules)
-namespace vhsm::notification {
-class NotificationBus;
-enum class EventType;
-enum class Severity;
-struct NotificationEvent;
-} // namespace vhsm::notification
-
-namespace vhsm::audit {
-class AuditLog;
-} // namespace vhsm::audit
-
-namespace vhsm::rekor {
-class RekorClient;
-struct RekorEntry;
-struct HashedRekordPayload;
-} // namespace vhsm::rekor
+#include "../keystore/token.h"
+#include "../notification/notification_bus.h"
+#include "../notification/notification_event.h"
+#include "../audit/audit_log.h"
 
 namespace vhsm::signature_store {
 namespace db {
@@ -34,6 +20,7 @@ class SignatureDispatcher {
 public:
     SignatureDispatcher(
         IDbConnection& conn,
+        vhsm::keystore::Token& token,
         vhsm::notification::NotificationBus& notification_bus,
         vhsm::audit::AuditLog& audit_log,
         vhsm::rekor::RekorClient& rekor_client);
@@ -57,6 +44,7 @@ public:
 
 private:
     IDbConnection& conn_;
+    vhsm::keystore::Token& token_;
     SignatureRepository signature_repository_;
     vhsm::notification::NotificationBus& notification_bus_;
     vhsm::audit::AuditLog& audit_log_;
@@ -66,7 +54,9 @@ private:
     vhsm::rekor::HashedRekordPayload build_rekor_payload(
         const vhsm::crypto::SignResult& sign_result,
         const std::string& key_id,
-        const std::string& key_fingerprint) const;
+        const std::string& key_fingerprint,
+        const std::string& token_label,
+        int slot_id) const;
 };
 
 }  // namespace db

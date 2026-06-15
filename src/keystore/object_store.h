@@ -76,6 +76,27 @@ public:
      */
     bool isValidHandle(CK_OBJECT_HANDLE handle) const;
 
+    /**
+     * Find an object that matches the given predicate.
+     * @param pred A predicate that takes an HsmObject* and returns true if it matches.
+     * @return Pair of (handle, pointer to object) or (CK_INVALID_HANDLE, nullptr) on failure.
+     */
+    template<typename Predicate>
+    std::pair<CK_OBJECT_HANDLE, HsmObject*> find_object_if(Predicate pred) const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (size_t i = 0; i < table_.size(); ++i) {
+            if (!table_[i].isFree && table_[i].object) {
+                HsmObject* obj = table_[i].object.get();
+                if (pred(obj)) {
+                    uint32_t version = table_[i].version.load();
+                    CK_OBJECT_HANDLE handle = composeHandle(i, version);
+                    return {handle, obj};
+                }
+            }
+        }
+        return {CK_INVALID_HANDLE, nullptr};
+    }
+
 private:
     // Entry in the object store table
     struct ObjectEntry {

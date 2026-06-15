@@ -11,25 +11,13 @@
 #include "../core/types.h"
 #include "db_connection.h"
 #include "row_integrity.h"
+#include "../keystore/token.h"
 
 #ifdef VHSM_REKOR_MODULE
-#define VHSM_REKOR_ENABLED 
+#define VHSM_REKOR_ENABLED
 
 #include "../rekor/rekor_client.h"
 
-#if defined(REKOR_MODULE_VERSION) && REKOR_MODULE_VERSION >= 1
-// Forward declaration of RekorEntry from the rekor module.
-// If the rekor module is not available, we define a minimal version here.
-namespace vhsm::rekor {
-    struct RekorEntry {
-        std::string entry_uuid;      // 64-char hex UUID from Rekor
-        int64_t log_index;           // monotonic log index
-        std::string integrated_time; // RFC3339 timestamp from Rekor SET
-        std::string inclusion_proof; // JSON-serialized InclusionProof
-        std::string set_b64;         // Signed Entry Timestamp (base64)
-    };
-} // namespace vhsm::rekor
-#endif // REKOR_MODULE_VERSION
 #endif // VHSM_REKOR_MODULE
 
 namespace vhsm::signature_store {
@@ -37,7 +25,7 @@ namespace db {
 
 class SignatureRepository {
 public:
-    explicit SignatureRepository(IDbConnection& conn);
+    SignatureRepository(IDbConnection& conn, vhsm::keystore::Token& token);
 
     // Insert a new signature record.
     // Returns the generated signature ID on success, or nullopt on failure.
@@ -67,6 +55,7 @@ public:
 
 private:
     IDbConnection& conn_;
+    vhsm::keystore::Token& token_;
     RowIntegrity row_integrity_;
 };
 

@@ -10,7 +10,9 @@ Slot::Slot(uint64_t slot_id)
     : slot_id_(slot_id),
       token_(nullptr),
       description_("Virtual HSM Slot " + std::to_string(slot_id)),
-      manufacturer_id_("vHSM Team Corp") {}
+      manufacturer_id_("vHSM Team Corp"), 
+      hardware_version_("1.0"), 
+      firmware_version_("1.0") {}
 
 bool Slot::is_token_present() const {
     std::lock_guard<std::mutex> lock(slot_mutex_);

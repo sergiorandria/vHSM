@@ -5,23 +5,25 @@
 #include <chrono>
 #include <sstream>
 #include <vector>
-#include <utility>
-#include <span>
 
-// Include the dependencies (assume they exist)
+// Include the dependencies (now fully defined)
 #include "../notification/notification_bus.h"
+#include "../notification/notification_event.h"
 #include "../audit/audit_log.h"
+#include "../rekor/rekor_client.h"
 
 namespace vhsm::signature_store {
 namespace db {
 
 SignatureDispatcher::SignatureDispatcher(
     IDbConnection& conn,
+    vhsm::keystore::Token& token,
     vhsm::notification::NotificationBus& notification_bus,
     vhsm::audit::AuditLog& audit_log,
     vhsm::rekor::RekorClient& rekor_client)
     : conn_(conn),
-      signature_repository_(conn),
+      token_(token),
+      signature_repository_(conn, token),
       notification_bus_(notification_bus),
       audit_log_(audit_log),
       rekor_client_(rekor_client) {}
@@ -41,9 +43,9 @@ void SignatureDispatcher::dispatch(
     // Build the SignatureRecord fields.
     std::string payload_digest = sign_result.payload_digest; // already hex string
     std::string signature_b64 = vhsm::utils::base64_encode(
-        std::as_const(std::span<const std::byte>(
+        std::span<const std::byte>(
             reinterpret_cast<const std::byte*>(sign_result.signature.data()),
-            sign_result.signature.size())));
+            sign_result.signature.size()));
 
     // Insert into DB
     auto signature_id_opt = signature_repository_.insert(
@@ -66,8 +68,8 @@ void SignatureDispatcher::dispatch(
         // For now, we'll just return (or we could publish a DB_WRITE_FAILED event).
         // We'll publish a DB_WRITE_FAILED notification.
         vhsm::notification::NotificationEvent event;
-        event.type = vhsm::notification::EventType::DB_WRITE_FAILED;
-        event.severity = vhsm::notification::Severity::CRITICAL;
+        event.type = vhsm::notification::NotificationEvent::EventType::DB_WRITE_FAILED;
+        event.severity = vhsm::notification::NotificationEvent::Severity::CRITICAL;
         event.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
         event.source = "slot:" + std::to_string(slot_id) + "/token:" + token_label;
@@ -85,8 +87,8 @@ void SignatureDispatcher::dispatch(
 
     // Publish SIGN_CREATED notification
     vhsm::notification::NotificationEvent sign_event;
-    sign_event.type = vhsm::notification::EventType::SIGN_CREATED;
-    sign_event.severity = vhsm::notification::Severity::INFO;
+    sign_event.type = vhsm::notification::NotificationEvent::EventType::SIGN_CREATED;
+    sign_event.severity = vhsm::notification::NotificationEvent::Severity::INFO;
     sign_event.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
     sign_event.source = "slot:" + std::to_string(slot_id) + "/token:" + token_label;
@@ -106,7 +108,7 @@ void SignatureDispatcher::dispatch(
 
     // Asynchronously submit to Rekor
     // Build the Rekor payload
-    vhsm::rekor::HashedRekordPayload payload = build_rekor_payload(sign_result, key_id, key_fingerprint);
+    vhsm::rekor::HashedRekordPayload payload = build_rekor_payload(sign_result, key_id, key_fingerprint, token_label, slot_id);
     // We assume the RekorClient has an async method or we use a RekorWorker.
     // Since we don't have the RekorWorker here, we will call the RekorClient's async method if available.
     // For simplicity, we will submit synchronously? But the plan says async.
@@ -135,18 +137,20 @@ void SignatureDispatcher::dispatch(
 vhsm::rekor::HashedRekordPayload SignatureDispatcher::build_rekor_payload(
     const vhsm::crypto::SignResult& sign_result,
     const std::string& key_id,
-    const std::string& key_fingerprint) const {
+    const std::string& key_fingerprint,
+    const std::string& token_label,
+    int slot_id) const {
     vhsm::rekor::HashedRekordPayload payload;
     payload.data.hash.algorithm = "sha256";
     payload.data.hash.value = sign_result.payload_digest; // already hex
     payload.signature.content = vhsm::utils::base64_encode(
-        std::as_const(std::span<const std::byte>(
+        std::span<const std::byte>(
             reinterpret_cast<const std::byte*>(sign_result.signature.data()),
-            sign_result.signature.size())));
+            sign_result.signature.size()));
     // We need the public key in SPKI format. We don't have it here.
     // We assume we can get it from the key_id or key_fingerprint? Not possible.
     // We'll leave it empty for now and note that we need to fetch the public key from the keystore.
-    payload.signature.publicKey.content = ""; // TODO: fetch public key from keystore using key_id
+    payload.publicKey.content = ""; // TODO: fetch public key from keystore using key_id
     return payload;
 }
 

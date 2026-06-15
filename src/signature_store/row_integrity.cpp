@@ -1,7 +1,5 @@
 #include "row_integrity.h"
 
-#include "../core/error.h"
-#include "../core/utils.h"
 #include "db_connection.h"
 #include "db_hmac_key.h"
 
@@ -15,11 +13,13 @@
 namespace vhsm::signature_store {
 namespace db {
 
-RowIntegrity::RowIntegrity(IDbConnection& conn) : conn_(conn) {}
+RowIntegrity::RowIntegrity(IDbConnection& conn, vhsm::keystore::Token& token)
+    : conn_(conn)
+    , token_(token) {}
 
 std::string RowIntegrity::compute_hmac(const std::vector<std::optional<std::string>>& column_values) const {
     // Get the HMAC key
-    DbHmacKey hmac_key(conn_);
+    DbHmacKey hmac_key(conn_, token_);
     std::vector<std::uint8_t> key = hmac_key.get_key();
     if (key.empty()) {
         // If we cannot get the key, return empty HMAC (or throw?)

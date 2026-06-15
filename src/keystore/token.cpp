@@ -1,4 +1,6 @@
 #include "token.h"
+#include "../keystore/attribute_store.h"
+#include "../keystore/hsm_object.h"
 
 namespace vhsm::keystore {
 
@@ -96,6 +98,71 @@ bool Token::destroy_object(CK_OBJECT_HANDLE handle) {
     // forward-compatibility and to make the "this is a write" intent explicit.
     std::unique_lock<std::shared_mutex> lock(mutex_);
     return object_store_.destroyObject(handle);
+}
+
+std::vector<std::uint8_t> Token::get_kek() const {
+    // Find an object with label "KEK" and type CKO_SECRET_KEY
+    auto result = object_store_.find_object_if([&](HsmObject* obj) {
+        AttributeStore attr_store(*obj);
+        // Get label
+        std::vector<u8> label_value;
+        CK_ULONG label_len = 0;
+        CK_RV rv = attr_store.getAttribute(CKA_LABEL, nullptr, &label_len);
+        if (rv != CKR_OK) {
+            return false;
+        }
+
+        label_value.resize(label_len);
+        rv = attr_store.getAttribute(CKA_LABEL, label_value.data(), &label_len);
+        if (rv != CKR_OK) {
+            return false;
+        }
+
+        std::string obj_label(reinterpret_cast<char*>(label_value.data()), label_len);
+        if (obj_label != "KEK"){
+            return false;
+        }
+
+        // Optionally check class is CKO_SECRET_KEY
+        // Get CKA_CLASS
+        std::vector<u8> class_value;
+        CK_ULONG class_len = 0;
+        rv = attr_store.getAttribute(CKA_CLASS, nullptr, &class_len);
+        if (rv != CKR_OK) {
+            return false;
+        }
+
+        class_value.resize(class_len);
+        rv = attr_store.getAttribute(CKA_CLASS, class_value.data(), &class_len);
+        if (rv != CKR_OK) {
+            return false;
+        }
+
+        if (class_value.size() != sizeof(CK_ULONG)) {
+            return false;
+        }
+
+        CK_ULONG obj_class = 0;
+        std::memcpy(&obj_class, class_value.data(), sizeof(CK_ULONG));
+        if (obj_class != CKO_SECRET_KEY) {
+            return false;
+        }
+        
+        return true;
+    });
+    if (!result.second) {
+        return {};
+    }
+    // Now extract the CKA_VALUE attribute
+    AttributeStore attr_store(*result.second);
+    std::vector<u8> key_value;
+    CK_ULONG key_len = 0;
+    CK_RV rv = attr_store.getAttribute(CKA_VALUE, nullptr, &key_len);
+    if (rv != CKR_OK) return {};
+    key_value.resize(key_len);
+    rv = attr_store.getAttribute(CKA_VALUE, key_value.data(), &key_len);
+    if (rv != CKR_OK) return {};
+    return key_value;
 }
 
 bool Token::secure_pin_equals(const SecureBuffer& stored,

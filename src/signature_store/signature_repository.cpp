@@ -3,15 +3,14 @@
 #include "../core/error.h"
 #include "../core/utils.h"
 
-#include <chrono>
-#include <sstream>
+
 #include <vector>
 
 namespace vhsm::signature_store {
 namespace db {
 
-SignatureRepository::SignatureRepository(IDbConnection& conn)
-    : conn_(conn), row_integrity_(conn) {}
+SignatureRepository::SignatureRepository(IDbConnection& conn, vhsm::keystore::Token& token)
+    : conn_(conn), token_(token), row_integrity_(conn, token) {}
 
 std::optional<std::string> SignatureRepository::insert(
     int64_t created_at,
