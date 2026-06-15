@@ -14,6 +14,7 @@
 .clangd
 build/
 docker-compose.yml
+.vscode
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs

@@ -32,7 +32,7 @@ std::optional<std::string> SignatureRepository::insert(
     // Prepare column values as strings for the first 17 columns (excluding integrity_hmac)
     // We use empty string for NULL text columns and "0" for NULL integer column.
     std::vector<std::string> column_values;
-    column_values.reserve(17);
+    column_values.reserve(18);
 
     column_values.push_back(id); // id
     column_values.push_back(std::to_string(created_at)); // created_at

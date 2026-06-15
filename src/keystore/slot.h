@@ -92,6 +92,12 @@ public:
      */
     uint64_t get_flags() const;
 
+    /** 
+     * @brief Define the firmware version. Should be newer than the current version 
+     * @return 
+    */
+    void define_firmware_version(const std::string&);
+
 private:
     uint64_t slot_id_;
     std::shared_ptr<Token> token_;
@@ -100,7 +106,7 @@ private:
     std::string manufacturer_id_;
     std::string hardware_version_; 
     std::string firmware_version_; 
-    
+
     /**
      * @brief Mutex protecting the internal token state pointer during runtime hot-plugging operations.
      */
