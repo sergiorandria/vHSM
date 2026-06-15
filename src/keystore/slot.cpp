@@ -46,11 +46,19 @@ uint64_t Slot::get_flags() const {
     return flags;
 }
 
-void Slot::define_firmware_version(const std::string& firmware_version) 
-{ 
-    std::string_view current_firmware_major_version = this->firmware_version_; 
+void Slot::define_firmware_version(const std::string& firmware_version)
+{
+    const std::size_t dot_pos = firmware_version.find('.');
+    auto major_version = firmware_version.substr(0, dot_pos);
+    auto minor_version = firmware_version.substr(dot_pos+1, firmware_version.length());
 
+    //if (major_version <= firmware_version_.major_version 
+    //        && ((major_version != firmware_version_.major_version) || minor_version <= firmware_version_.minor_version)) 
+    {
+        
+    }
 
+    firmware_version_ = firmware_version;
 }
 
 } // namespace vhsm::keystore
