@@ -1,0 +1,5 @@
+#ifndef VHSM_REKOR_CLIENT_H
+#define VHSM_REKOR_CLIENT_H
+
+
+#endif // VHSM_REKOR_CLIENT_H

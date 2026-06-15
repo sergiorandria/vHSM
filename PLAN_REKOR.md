@@ -880,7 +880,7 @@ option(VHSM_REKOR_URL       "Rekor server URL"      "http://localhost:3000")  # 
 
 ### Phase 4 — Database Signature Store (Week 5–6)
 
-- [ ] Implement `db_connection.cpp` with SQLite backend; add PG/MySQL stubs
+- [x] Implement `db_connection.cpp` with SQLite backend; add PG/MySQL stubs
 - [ ] Write and validate SQL schemas including `rekor_*` columns and `key_rekor_registry` table ← NEW
 - [ ] Implement `db_schema.cpp`: bootstrap, seed `db_meta`, migration runner
 - [ ] Implement `db_hmac_key.cpp`: derive from KEK via HKDF

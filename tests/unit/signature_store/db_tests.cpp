@@ -529,8 +529,8 @@ TEST_F(DbSchemaBootstrapTest, Bootstrap_AlreadyAtCurrentVersion_IsNoop) {
 TEST_F(DbSchemaBootstrapTest, Bootstrap_FutureVersion_ThrowsDbError) {
     // If the DB reports a version *newer* than kCurrentSchemaVersion, bootstrap
     // must throw rather than silently proceed.
-    conn_.seed_meta("schema_version",
-                    std::to_string(kCurrentSchemaVersion + 1));
+    conn_.seed_meta("schema_version", std::to_string(kCurrentSchemaVersion + 1));
+    
     for (const char* tbl : { "db_meta", "signature_records",
                                "signature_verifications",
                                "notification_subscribers",
