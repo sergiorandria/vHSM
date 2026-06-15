@@ -98,6 +98,8 @@ private:
     
     std::string description_;
     std::string manufacturer_id_;
+    std::string hardware_version_; 
+    std::string firmware_version_; 
     
     /**
      * @brief Mutex protecting the internal token state pointer during runtime hot-plugging operations.

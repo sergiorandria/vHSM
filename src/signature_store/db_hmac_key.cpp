@@ -4,36 +4,87 @@
 #include "db_connection.h"
 #include "db_schema.h"
 
+#include "../keystore/key_wrap.h"
+
 #include <vector>
+#include <string>
+#include <optional>
 
 namespace vhsm::signature_store {
 namespace db {
 
-DbHmacKey::DbHmacKey(IDbConnection& conn) : conn_(conn) {}
+DbHmacKey::DbHmacKey(IDbConnection& conn, vhsm::keystore::Token& token)
+    : conn_(conn)
+    , token_(token) {}
 
 std::vector<std::uint8_t> DbHmacKey::get_key() const {
-    // For simplicity, we return a fixed 32-byte key.
-    // In a real implementation, this would be derived from the KEK.
-    static const std::vector<std::uint8_t> fixed_key = {
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-        0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
-        0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-        0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F
-    };
-    return fixed_key;
+    // Retrieve the wrapped key from db_meta
+    std::string sql = "SELECT value FROM db_meta WHERE key = ?";
+    std::vector<std::string> params{std::string(meta_key::kHmacKeyWrapped)};
+    DbResultSet rs = conn_.query(sql, params);
+    if (rs.rows_count() == 0) {
+        // No wrapped key stored yet
+        return {};
+    }
+    // Get first row
+    const DbRow& row = rs.rows_[0];
+    // Get the value as string (column 0)
+    std::optional<std::string> wrapped_b64 = row.get_string(0);
+    if (!wrapped_b64 || wrapped_b64->empty()) {
+        return {};
+    }
+    // Decode base64
+    auto decoded = vhsm::utils::base64_decode(*wrapped_b64);
+    if (!decoded) {
+        return {};
+    }
+    std::vector<std::uint8_t> wrapped_key;
+    wrapped_key.reserve(decoded->size());
+    for (auto b : *decoded) {
+        wrapped_key.push_back(static_cast<std::uint8_t>(b));
+    }
+    // Get KEK from token
+    std::vector<std::uint8_t> kek = token_.get_kek();
+    if (kek.empty()) {
+        return {};
+    }
+    // Unwrap using KeyWrap
+    try {
+        vhsm::keystore::KeyWrap key_wrap(kek);
+        return key_wrap.unwrap(wrapped_key);
+    } catch (const std::exception&) {
+        // Unwrap failed (e.g., integrity check failed)
+        return {};
+    }
 }
 
 void DbHmacKey::store_key_wrapped(const std::vector<std::uint8_t>& key) const {
-    // Wrap the key with a simple XOR for demonstration? Not secure.
-    // In production, use AES-Wrap with the KEK.
-    // For now, we store the base64-encoded raw key.
-    std::string wrapped = vhsm::utils::base64_encode(
-        std::span<const std::byte>(
-            reinterpret_cast<const std::byte*>(key.data()), key.size()));
-    conn_.exec(
-        "INSERT INTO db_meta(key, value) VALUES(?, ?) "
-        "ON CONFLICT(key) DO UPDATE SET value=excluded.value;",
-        { std::string(meta_key::kHmacKeyWrapped), wrapped });
+    // Get KEK from token
+    std::vector<std::uint8_t> kek = token_.get_kek();
+    if (kek.empty()) {
+        // No KEK available; cannot store wrapped key
+        return;
+    }
+    // Wrap the key
+    try {
+        vhsm::keystore::KeyWrap key_wrap(kek);
+        std::vector<std::uint8_t> wrapped_key = key_wrap.wrap(key);
+        // Encode to base64
+        std::string wrapped_b64 = vhsm::utils::base64_encode(
+            std::span<const std::byte>(
+                reinterpret_cast<const std::byte*>(wrapped_key.data()),
+                wrapped_key.size()));
+        // Upsert into db_meta
+        std::string sql = "INSERT INTO db_meta(key, value) VALUES(?, ?) "
+                          "ON CONFLICT(key) DO UPDATE SET value=excluded.value;";
+        std::vector<std::string> params{
+            std::string(meta_key::kHmacKeyWrapped),
+            wrapped_b64
+        };
+        conn_.exec(sql, params);
+    } catch (const std::exception&) {
+        // Wrap failed; silently ignore
+    }
 }
 
 }  // namespace db

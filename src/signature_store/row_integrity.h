@@ -7,6 +7,7 @@
 
 #include "../core/types.h"
 #include "db_connection.h"
+#include "../keystore/token.h"
 
 namespace vhsm::signature_store {
 namespace db {
@@ -16,7 +17,7 @@ namespace db {
 // The column order must match the order in the CREATE TABLE statement for signature_records.
 class RowIntegrity {
 public:
-    explicit RowIntegrity(IDbConnection& conn);
+    RowIntegrity(IDbConnection& conn, vhsm::keystore::Token& token);
 
     // Computes the HMAC for the given column values.
     // The values must be in the same order as the columns in the table.
@@ -29,6 +30,7 @@ public:
 
 private:
     IDbConnection& conn_;
+    vhsm::keystore::Token& token_;
 };
 
 }  // namespace db

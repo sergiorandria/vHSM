@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "../core/types.h"
+#include "../keystore/token.h"
 
 namespace vhsm::signature_store {
 namespace db {
@@ -17,7 +18,7 @@ class IDbConnection;
 // In production, this should be securely retrieved from the key store.
 class DbHmacKey {
 public:
-    explicit DbHmacKey(IDbConnection& conn);
+    DbHmacKey(IDbConnection& conn, vhsm::keystore::Token& token);
 
     // Returns the HMAC key as a byte vector.
     // If the key is not yet available, returns empty vector.
@@ -29,6 +30,7 @@ public:
 
 private:
     IDbConnection& conn_;
+    vhsm::keystore::Token& token_;
 };
 
 }  // namespace db
