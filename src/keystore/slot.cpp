@@ -45,4 +45,12 @@ uint64_t Slot::get_flags() const {
 
     return flags;
 }
+
+void Slot::define_firmware_version(const std::string& firmware_version) 
+{ 
+    std::string_view current_firmware_major_version = this->firmware_version_; 
+
+
+}
+
 } // namespace vhsm::keystore
