@@ -8,6 +8,9 @@ target_sources(vhsm_signature_store
     sqlite_connection.cpp
     sqlite_transaction.cpp
     sqlite_helpers.cpp
+    db_config.h
+    db_hmac_key.cpp
+    row_integrity.cpp
 )
 
 target_include_directories(vhsm_signature_store

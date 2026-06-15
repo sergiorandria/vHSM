@@ -32,7 +32,7 @@ std::string DbSchema::sql_create_signature_records() const {
     // HMAC covers: id, created_at, slot_id, token_label, key_id,
     //              key_fingerprint, mechanism, payload_digest, signature_b64,
     //              session_handle, user_label, app_context,
-    //              rekor_entry_uuid, rekor_log_index, rekor_set_b64, rekor_status
+    //              rekor_entry_uuid, rekor_log_index, rekor_integrated_time, rekor_inclusion_proof, rekor_set_b64, rekor_status
     //
     // integrity_hmac is excluded from its own computation (chicken-and-egg).
     // Note: PLAN_REKOR drops integrity_hmac per the user's explicit decision
@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS signature_records (
     app_context       TEXT,
     rekor_entry_uuid  TEXT,
     rekor_log_index   INTEGER,
+    rekor_integrated_time TEXT,
+    rekor_inclusion_proof TEXT,
     rekor_set_b64     TEXT,
     rekor_status      TEXT    NOT NULL DEFAULT 'PENDING'
         CHECK(rekor_status IN ('PENDING','COMMITTED','FAILED','DISABLED'))
@@ -203,7 +205,12 @@ void DbSchema::bootstrap() {
 
     if (version == kCurrentSchemaVersion) {
         // Schema is already at the target version — nothing to do.
-        return;
+        //return;
+        throw DbError(DbError::Kind::SchemaError,
+                      "DB schema version " + std::to_string(version) +
+                      " is already at the current version " +
+                      std::to_string(kCurrentSchemaVersion) +
+                      ". No bootstrap needed.");
     }
 
     if (version > kCurrentSchemaVersion) {
@@ -293,8 +300,13 @@ int DbSchema::migrate() {
         ++current;
     }
 
+    if (current == 2) {
+        migrate_v2_to_v3();
+        ++current;
+    }
+
     // Add future migrations here:
-    // if (current == 2) { migrate_v2_to_v3(); ++current; }
+    // if (current == 3) { migrate_v3_to_v4(); ++current; }
 
     return from_version;
 }
@@ -341,6 +353,25 @@ void DbSchema::migrate_v1_to_v2() {
 
         // Bump schema version.
         tx.exec("UPDATE db_meta SET value='2' WHERE key='schema_version';");
+    });
+}
+
+// Migration v2 → v3
+//
+// What changed in v3:
+//   - signature_records gains 2 Rekor columns (rekor_integrated_time,
+//     rekor_inclusion_proof)
+//
+// Both columns are nullable until the async Rekor commit completes.
+
+void DbSchema::migrate_v2_to_v3() {
+    conn_.with_transaction([this](IDbTransaction& tx) {
+        // --- signature_records ---
+        tx.exec("ALTER TABLE signature_records ADD COLUMN rekor_integrated_time TEXT;");
+        tx.exec("ALTER TABLE signature_records ADD COLUMN rekor_inclusion_proof TEXT;");
+
+        // Bump schema version.
+        tx.exec("UPDATE db_meta SET value='3' WHERE key='schema_version';");
     });
 }
 
