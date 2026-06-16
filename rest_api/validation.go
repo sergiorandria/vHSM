@@ -32,7 +32,7 @@ func ValidateSubmission(req SubmissionRequest) error {
 		return fmt.Errorf("grade must be between %.1f and %.1f, got %.2f", minGrade, maxGrade, gradeVal)
 	}
 
-	if req.Metadata == nil || len(req.Metadata) == 0 {
+	if len(req.Metadata) == 0 {
 		return fmt.Errorf("metadata is required and must not be empty")
 	}
 
