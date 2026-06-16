@@ -46,8 +46,7 @@ public:
 
     // Update the Rekor fields for a given signature record and recompute the integrity HMAC.
     // Returns true on success.
-    bool update_rekor_fields(const std::string& signature_id,
-                             const vhsm::rekor::RekorEntry& entry);
+    bool update_rekor_fields(const std::string& signature_id, const vhsm::rekor::RekorEntry& entry);
 
     // Retrieve a signature record by its ID.
     // Returns nullopt if not found.
