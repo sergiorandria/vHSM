@@ -96,7 +96,7 @@ public:
      * @brief Define the firmware version. Should be newer than the current version 
      * @return 
     */
-    void define_firmware_version(const std::string&);
+    void define_firmware_version(const struct version&);
 
 private:
     uint64_t slot_id_;
@@ -104,8 +104,8 @@ private:
     
     std::string description_;
     std::string manufacturer_id_;
-    std::string hardware_version_; 
-    std::string firmware_version_; 
+    struct version hardware_version_; 
+    struct version firmware_version_; 
 
     /**
      * @brief Mutex protecting the internal token state pointer during runtime hot-plugging operations.
