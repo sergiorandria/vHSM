@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sergiorandria/go-rest-api/internal/canon"
+	"github.com/sergiorandria/go-rest-api/canon"
 )
 
 // SubmissionRequest is the expected shape of the incoming payload, though
