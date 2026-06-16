@@ -11,8 +11,8 @@ Slot::Slot(uint64_t slot_id)
       token_(nullptr),
       description_("Virtual HSM Slot " + std::to_string(slot_id)),
       manufacturer_id_("vHSM Team Corp"), 
-      hardware_version_("1.0"), 
-      firmware_version_("1.0") {}
+      hardware_version_({1, 0}), 
+      firmware_version_({1,0}) {}
 
 bool Slot::is_token_present() const {
     std::lock_guard<std::mutex> lock(slot_mutex_);
@@ -46,16 +46,15 @@ uint64_t Slot::get_flags() const {
     return flags;
 }
 
-void Slot::define_firmware_version(const std::string& firmware_version)
+void Slot::define_firmware_version(const struct version& firmware_version)
 {
-    const std::size_t dot_pos = firmware_version.find('.');
-    auto major_version = firmware_version.substr(0, dot_pos);
-    auto minor_version = firmware_version.substr(dot_pos+1, firmware_version.length());
+    auto major_version = firmware_version.major_version;
+    auto minor_version = firmware_version.minor_version;
 
-    //if (major_version <= firmware_version_.major_version 
-    //        && ((major_version != firmware_version_.major_version) || minor_version <= firmware_version_.minor_version)) 
+    if (major_version <= firmware_version_.major_version 
+            && ((major_version != firmware_version_.major_version) || minor_version <= firmware_version_.minor_version)) 
     {
-        
+        throw VersionException("Incoherent version affectation");
     }
 
     firmware_version_ = firmware_version;

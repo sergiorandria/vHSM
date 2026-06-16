@@ -768,19 +768,19 @@ option(VHSM_LEDGER_CHAINCODE "Fabric chaincode name"         "signature_ledger")
 
 ## Dependencies
 
-| Library              | Version    | Purpose                                    | License            |
-|----------------------|------------|--------------------------------------------|--------------------|
-| OpenSSL              | ≥ 3.0      | All cryptographic primitives               | Apache-2.0         |
-| SQLite3              | ≥ 3.42     | Embedded DB backend (default)              | Public Domain      |
-| libpqxx              | ≥ 7.8      | PostgreSQL backend (optional)              | BSD-3              |
-| mysql-connector-cpp  | ≥ 8.1      | MySQL backend (optional)                   | GPL-2 / Commercial |
-| protobuf             | ≥ 3.21     | Token serialization, Fabric Gateway protos | BSD-3              |
-| gRPC                 | ≥ 1.50     | Admin + Signature + Event Stream API, Fabric Gateway | Apache-2.0 |
-| spdlog               | ≥ 1.11     | Structured logging                         | MIT                |
-| nlohmann/json        | ≥ 3.11     | Config, `app_context`                      | MIT                |
-| libcurl              | ≥ 7.88     | Email (SMTP), webhook                      | MIT/curl           |
-| Google Test          | ≥ 1.13     | Unit & integration tests                   | BSD-3              |
-| **Hyperledger Fabric** | **≥ 2.5** | **Permissioned blockchain network (peers, orderer)** | **Apache-2.0** ← NEW |
+| Library                | Version   | Purpose                                                    | License              |
+| ------------------------| -----------| ------------------------------------------------------------| ----------------------|
+| OpenSSL                | ≥ 3.0     | All cryptographic primitives                               | Apache-2.0           |
+| SQLite3                | ≥ 3.42    | Embedded DB backend (default)                              | Public Domain        |
+| libpqxx                | ≥ 7.8     | PostgreSQL backend (optional)                              | BSD-3                |
+| mysql-connector-cpp    | ≥ 8.1     | MySQL backend (optional)                                   | GPL-2 / Commercial   |
+| protobuf               | ≥ 3.21    | Token serialization, Fabric Gateway protos                 | BSD-3                |
+| gRPC                   | ≥ 1.50    | Admin + Signature + Event Stream API, Fabric Gateway       | Apache-2.0           |
+| spdlog                 | ≥ 1.11    | Structured logging                                         | MIT                  |
+| nlohmann/json          | ≥ 3.11    | Config, `app_context`                                      | MIT                  |
+| libcurl                | ≥ 7.88    | Email (SMTP), webhook                                      | MIT/curl             |
+| Google Test            | ≥ 1.13    | Unit & integration tests                                   | BSD-3                |
+| **Hyperledger Fabric** | **≥ 2.5** | **Permissioned blockchain network (peers, orderer)**       | **Apache-2.0** ← NEW |
 | **Fabric Gateway SDK** | **≥ 1.4** | **Client SDK (gRPC) for submitting/querying transactions** | **Apache-2.0** ← NEW |
 
 > **No HTTP client needed for the ledger module.** The Fabric Gateway client uses gRPC (already a

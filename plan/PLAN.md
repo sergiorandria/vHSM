@@ -699,18 +699,18 @@ option(VHSM_NOTIFY_BUS_SIZE "Notification ring buffer capacity"         1024)
 
 ## Dependencies
 
-| Library              | Version    | Purpose                              | License            |
-|----------------------|------------|--------------------------------------|--------------------|
-| OpenSSL              | ≥ 3.0      | All cryptographic primitives         | Apache-2.0         |
-| SQLite3              | ≥ 3.42     | Embedded DB backend (default)        | Public Domain      |
-| libpqxx              | ≥ 7.8      | PostgreSQL backend (optional)        | BSD-3              |
-| mysql-connector-cpp  | ≥ 8.1      | MySQL backend (optional)             | GPL-2 / Commercial |
-| protobuf             | ≥ 3.21     | Token serialization                  | BSD-3              |
-| gRPC                 | ≥ 1.50     | Admin + Signature + Event Stream API | Apache-2.0         |
-| spdlog               | ≥ 1.11     | Structured logging                   | MIT                |
-| nlohmann/json        | ≥ 3.11     | Config parsing, `app_context`        | MIT                |
-| libcurl              | ≥ 7.88     | Email (SMTP) and webhook adapters    | MIT/curl           |
-| Google Test          | ≥ 1.13     | Unit & integration tests             | BSD-3              |
+| Library             | Version | Purpose                              | License            |
+| ---------------------| ---------| --------------------------------------| --------------------|
+| OpenSSL             | ≥ 3.0   | All cryptographic primitives         | Apache-2.0         |
+| SQLite3             | ≥ 3.42  | Embedded DB backend (default)        | Public Domain      |
+| libpqxx             | ≥ 7.8   | PostgreSQL backend (optional)        | BSD-3              |
+| mysql-connector-cpp | ≥ 8.1   | MySQL backend (optional)             | GPL-2 / Commercial |
+| protobuf            | ≥ 3.21  | Token serialization                  | BSD-3              |
+| gRPC                | ≥ 1.50  | Admin + Signature + Event Stream API | Apache-2.0         |
+| spdlog              | ≥ 1.11  | Structured logging                   | MIT                |
+| nlohmann/json       | ≥ 3.11  | Config parsing, `app_context`        | MIT                |
+| libcurl             | ≥ 7.88  | Email (SMTP) and webhook adapters    | MIT/curl           |
+| Google Test         | ≥ 1.13  | Unit & integration tests             | BSD-3              |
 
 > **⚠ Caveat — MySQL license:** `mysql-connector-cpp` is GPL-2 unless you purchase a commercial
 > license. If the final build is linked into a non-GPL product, use PostgreSQL or SQLite instead, or

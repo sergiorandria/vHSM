@@ -45,6 +45,11 @@ public:
     explicit CryptoException(const std::string& message) : HsmException(message) {}
 };
 
+class VersionException : public std::runtime_error {
+public: 
+    explicit VersionException(const std::string& message) : std::runtime_error(message) {}
+};
+
 class DbError : public std::runtime_error {
 public:
     enum class Kind {

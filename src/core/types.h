@@ -266,4 +266,10 @@ struct NotificationEvent {
     std::string  hsm_instance;   // instance_id from db_meta
 };
 } // namespace vhsm::crypto
+
+struct version { 
+    u8 major_version; 
+    u8  minor_version;
+};
+
 #endif // VHSM_CORE_TYPES_H
