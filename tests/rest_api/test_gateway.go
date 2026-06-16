@@ -2,17 +2,16 @@ package main
 
 import (
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/sergiorandria/go-rest-api/gateway_sdk" 
 
 	"github.com/hyperledger/fabric-gateway/pkg/identity"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-
-	// Local module import pointing to your generic gateway SDK
-	"github.com/sergiorandria/go-rest-api/gateway_sdk"
 )
 
 const (
@@ -20,7 +19,7 @@ const (
 	channelName   = "mychannel"
 	chaincodeName = "jurychaincode"
 
-	// Absolute cryptographic asset paths matching your local infrastructure
+	// CORRECTION : Utilisation de chemins absolus (/home/lika/...)
 	cryptoPath      = "/home/lika/project/Fabric/fabric-samples/test-network/organizations/peerOrganizations/org1.example.com"
 	certPath        = cryptoPath + "/users/User1@org1.example.com/msp/signcerts/User1@org1.example.com-cert.pem"
 	keyPath         = cryptoPath + "/users/User1@org1.example.com/msp/keystore"
@@ -29,68 +28,87 @@ const (
 	gatewayPeerName = "peer0.org1.example.com"
 )
 
+type ThesisMetadata struct {
+	ThesisTitle string `json:"thesisTitle"`
+	DefenseDate string `json:"DefenseDate"`
+}
+
+type ThesisPayload struct {
+	ThesisID string         `json:"thesisId"`
+	Grade    float64        `json:"grade"`
+	Metadata ThesisMetadata `json:"metadata"`
+}
+
 func main() {
-	log.Println("Starting standalone execution test for GatewayClient...")
+	fmt.Println("Starting Gateway Client Execution...")
 
-	// 1. Prepare asset payload parameters
-	mockThesisID := "T124"
+	payload := ThesisPayload{
+		ThesisID: "T123",
+		Grade:    16.5,
+		Metadata: ThesisMetadata{
+			ThesisTitle: "Distributed Ledger Integrity Verification",
+			DefenseDate: "2026-06-16",
+		},
+	}
 
-	// 2. Initialize the low-level TLS secure gRPC channel link
+	thesisID := payload.ThesisID
+	gradeStr := fmt.Sprintf("%.1f", payload.Grade)
+
+	metadataBytes, err := json.Marshal(payload.Metadata)
+	if err != nil {
+		fmt.Printf("failed to marshal metadata: %s\n", err)
+		return
+	}
+	metadataJSONStr := string(metadataBytes)
+
 	clientConn, err := newGrpcConnection()
 	if err != nil {
-		log.Fatalf("gRPC connection initialization failed: %v", err)
+		fmt.Printf("failed to create gRPC connection: %s\n", err)
+		return
 	}
 	defer clientConn.Close()
 
-	// 3. Generate the required organizational identity structures
 	id, err := newIdentity()
 	if err != nil {
-		log.Fatalf("Failed to establish target identity context: %v", err)
+		fmt.Printf("failed to create identity: %s\n", err)
+		return
 	}
 
 	sign, err := newSign()
 	if err != nil {
-		log.Fatalf("Failed to instantiate signing keystore link: %v", err)
+		fmt.Printf("failed to create signing function: %s\n", err)
+		return
 	}
 
-	// 4. Construct your agnostic GatewayClient layer
-	fabricClient, err := gateway_sdk.NewGatewayClient(clientConn, channelName, chaincodeName, id, sign)
+	client, err := gateway_sdk.NewGatewayClient(clientConn, channelName, chaincodeName, id, sign)
 	if err != nil {
-		log.Fatalf("Initialization of custom GatewayClient failed: %v", err)
+		fmt.Printf("failed to initialize gateway client: %s\n", err)
+		return
 	}
-	defer fabricClient.Close()
+	defer client.Close()
 
-	// 5. Invoke the modular transaction mapping execution layer
-	// Running 'CreateAsset' to match your current active asset-transfer-basic container image setup
-	log.Printf("Invoking transaction dynamically for key [%s]...", mockThesisID)
-	err = fabricClient.ExecuteTransaction(
-		"CreateAsset",
-		mockThesisID,       // Asset ID (param1)
-		"Yellow",           // Color (param2)
-		"18",               // Size (param3)
-		"Lika",             // Owner (param4)
-		"100",              // AppraisedValue (param5) -> Expected integer string
-	)
+	fmt.Printf("Executing state-changing transaction via SDK wrapper for key [%s]...\n", thesisID)
+	err = client.ExecuteTransaction("CreateThesisRecord", thesisID, metadataJSONStr, gradeStr)
 	if err != nil {
-		log.Fatalf("Ledger transaction submission failed: %v", err)
+		fmt.Printf("transaction execution failed: %s\n", err)
+		return
 	}
 
-	log.Println("Test execution complete: Transaction committed successfully to the ledger!")
+	fmt.Println("Transaction successfully committed to the ledger!")
 }
 
-// --- Cryptographic and Infrastructure Credential Parsers ---
+
+// REMARQUE: Shouldn't those function be on a separated file or those are juste for the simulaion?
 
 func newGrpcConnection() (*grpc.ClientConn, error) {
 	certPEM, err := os.ReadFile(tlsCertPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read TLS CA certificate: %w", err)
+		return nil, fmt.Errorf("failed to read TLS cert: %w", err)
 	}
-
 	certPool := x509.NewCertPool()
 	if !certPool.AppendCertsFromPEM(certPEM) {
-		return nil, fmt.Errorf("failed to append TLS CA certificate to pool")
+		return nil, fmt.Errorf("failed to add TLS cert to pool")
 	}
-
 	transportCreds := credentials.NewClientTLSFromCert(certPool, gatewayPeerName)
 	return grpc.NewClient(peerEndpoint, grpc.WithTransportCredentials(transportCreds))
 }
@@ -98,40 +116,30 @@ func newGrpcConnection() (*grpc.ClientConn, error) {
 func newIdentity() (*identity.X509Identity, error) {
 	certPEM, err := os.ReadFile(certPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read user signing certificate: %w", err)
+		return nil, fmt.Errorf("failed to read certificate: %w", err)
 	}
-
-	docCert, err := identity.CertificateFromPEM(certPEM)
+	cert, err := identity.CertificateFromPEM(certPEM)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse X.509 certificate structural properties: %w", err)
+		return nil, fmt.Errorf("failed to parse certificate: %w", err)
 	}
-
-	return identity.NewX509Identity(mspID, docCert)
+	return identity.NewX509Identity(mspID, cert)
 }
 
 func newSign() (identity.Sign, error) {
 	files, err := os.ReadDir(keyPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan keystore directory layout: %w", err)
+		return nil, fmt.Errorf("failed to read keystore directory: %w", err)
 	}
 	if len(files) == 0 {
-		return nil, fmt.Errorf("no valid private key found under target directory route %s", keyPath)
+		return nil, fmt.Errorf("no private key found in keystore directory %s", keyPath)
 	}
-
 	keyPEM, err := os.ReadFile(filepath.Join(keyPath, files[0].Name()))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read keystore asset file: %w", err)
+		return nil, fmt.Errorf("failed to read private key: %w", err)
 	}
-
 	privateKey, err := identity.PrivateKeyFromPEM(keyPEM)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse ECDSA/RSA private key configurations: %w", err)
+		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
-
 	return identity.NewPrivateKeySign(privateKey)
 }
-
-
-// go mod tidy
-// cd to the vHSM/rest_api directory
-// run : go run -a ../tests/rest_api/test_gateway.go
