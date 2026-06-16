@@ -1,19 +1,24 @@
 package main
 
 import (
+	"bytes"
+	"crypto"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
-	"github.com/sergiorandria/go-rest-api/internal/canon"
+	"github.com/HOKK-FINANCE-FZCO/crypto11"
+	"github.com/sergiorandria/go-rest-api/canon"
 )
 
-// SubmissionRequest is the expected shape of the incoming payload, though
-// note that hashing operates on the raw JSON bytes (not this struct) so
-// that the hash reflects exactly what the frontend sent, before any
-// reserialization on our side could subtly change it.
+// SubmissionRequest is the expected shape of the incoming payload. Grade is
+// decoded as json.Number (not float64) so malformed/out-of-range values can
+// be rejected explicitly in ValidateSubmission rather than silently coerced.
 type SubmissionRequest struct {
 	ThesisID string                 `json:"thesisId"`
 	Grade    json.Number            `json:"grade"`
@@ -23,8 +28,56 @@ type SubmissionRequest struct {
 type SubmissionResponse struct {
 	ThesisID      string `json:"thesisId"`
 	DocHash       string `json:"docHash"`
+	Signature     string `json:"signature"`
 	CanonicalJSON string `json:"canonicalJson"`
 	ReceivedAt    string `json:"receivedAt"`
+}
+
+// hsmCtx is opened once at startup and reused across requests, rather than
+// opening a new PKCS#11 session per submission.
+var hsmCtx *crypto11.Context
+
+func initHSM() error {
+	pin := os.Getenv("HSM_PIN")
+	if pin == "" {
+		return fmt.Errorf("HSM_PIN environment variable not set")
+	}
+
+	config := &crypto11.Config{
+		Path:       "/usr/lib/softhsm/libsofthsm2.so",
+		TokenLabel: "FabricToken",
+		Pin:        pin,
+	}
+
+	ctx, err := crypto11.Configure(config)
+	if err != nil {
+		return fmt.Errorf("failed to configure HSM: %w", err)
+	}
+	hsmCtx = ctx
+	return nil
+}
+
+// signHash signs an already-computed SHA256 digest (given as hex) using the
+// long-lived HSM session. The caller is responsible for ensuring hashHex is
+// the exact hash that should be reported alongside the signature, so the
+// signed value and the displayed hash are provably the same bytes.
+func signHash(hashHex string) (string, error) {
+	hashed, err := hex.DecodeString(hashHex)
+	if err != nil {
+		return "", fmt.Errorf("invalid hash hex: %w", err)
+	}
+
+	signer, err := hsmCtx.FindKeyPair(nil, []byte("MyKey"))
+	if err != nil {
+		return "", fmt.Errorf("failed to find key pair: %w", err)
+	}
+
+	signature, err := signer.Sign(nil, hashed, crypto.SHA256)
+	if err != nil {
+		return "", fmt.Errorf("signing failed: %w", err)
+	}
+
+	return hex.EncodeToString(signature), nil
 }
 
 func handleSubmission(w http.ResponseWriter, r *http.Request) {
@@ -33,9 +86,11 @@ func handleSubmission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "failed to read request body", http.StatusBadRequest)
+		http.Error(w, "request body too large or unreadable", http.StatusBadRequest)
 		return
 	}
 	defer r.Body.Close()
@@ -45,38 +100,45 @@ func handleSubmission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse just enough to extract thesisId for the response / logging.
-	// Hashing itself happens on the raw bytes via canon.HashJSON, not on
-	// this struct, to avoid any lossy reserialization before hashing.
-	var parsedForID struct {
-		ThesisID string `json:"thesisId"`
-	}
-	if err := json.Unmarshal(raw, &parsedForID); err != nil {
+	// Decode using json.Number for Grade so numeric validation is explicit
+	// (see ValidateSubmission) rather than relying on lossy/implicit
+	// float64 coercion.
+	var req SubmissionRequest
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	if err := dec.Decode(&req); err != nil {
 		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	if parsedForID.ThesisID == "" {
-		http.Error(w, "thesisId is required", http.StatusBadRequest)
+	if err := ValidateSubmission(req); err != nil {
+		http.Error(w, "validation failed: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	// Hashing operates on the raw bytes (canonicalized), not the decoded
+	// struct, so the hash reflects exactly what was received before any
+	// reserialization could subtly change it.
 	hashHex, canonicalBytes, err := canon.HashJSON(raw)
 	if err != nil {
 		http.Error(w, "failed to hash payload: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	signature, err := signHash(hashHex)
+	if err != nil {
+		http.Error(w, "failed to sign payload: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	resp := SubmissionResponse{
-		ThesisID:      parsedForID.ThesisID,
+		ThesisID:      req.ThesisID,
 		DocHash:       hashHex,
+		Signature:     signature,
 		CanonicalJSON: string(canonicalBytes),
 		ReceivedAt:    time.Now().UTC().Format(time.RFC3339),
 	}
 
-	// At this point, hashHex is what gets handed to the SoftHSM signing
-	// step (next stage in the pipeline) and eventually to the Fabric
-	// chaincode submission. This handler's job ends at "JSON in, hash out."
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
@@ -85,6 +147,11 @@ func handleSubmission(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	if err := initHSM(); err != nil {
+		log.Fatalf("HSM initialization failed: %v", err)
+	}
+	defer hsmCtx.Close()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/submissions", handleSubmission)
 
