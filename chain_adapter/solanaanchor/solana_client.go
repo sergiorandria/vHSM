@@ -28,17 +28,49 @@ type Client struct {
 	payer     solana.PrivateKey
 }
 
-// Config holds connection parameters for devnet.
+// Config holds connection parameters for devnet. Exactly one of
+// PayerKeyfile or PayerKeyBase58 must be set.
+//
+// PayerKeyfile should point to a solana-keygen-generated JSON file (e.g.
+// the output of `solana-keygen new --outfile devnet-test.json`), which is
+// the format produced by standard Solana CLI tooling. This is the
+// recommended option for local development.
+//
+// PayerKeyBase58 expects the full 64-byte keypair (32-byte private key +
+// 32-byte public key) base58-encoded — NOT a wallet address. A Solana
+// wallet address/public key is also a 32-byte base58 string and is easy
+// to mistake for this, but it is not the same value and will fail to
+// parse with a "expected 64, got 32" error. Prefer PayerKeyfile unless
+// you specifically need to inject the key as a string (e.g. from a
+// secrets manager in CI).
 type Config struct {
-	RPCEndpoint    string // e.g. rpc.DevNet_RPC from solana-go, or your own devnet RPC URL
-	PayerKeyBase58 string // base58-encoded private key for the account paying tx fees
+	RPCEndpoint    string
+	PayerKeyfile   string
+	PayerKeyBase58 string
 }
 
-// NewClient connects to the given Solana RPC endpoint.
+// NewClient connects to the given Solana RPC endpoint, loading the payer
+// keypair from either a keygen file or a base58 string depending on
+// which Config field is set.
 func NewClient(cfg Config) (*Client, error) {
-	payerKey, err := solana.PrivateKeyFromBase58(cfg.PayerKeyBase58)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse payer private key: %w", err)
+	var payerKey solana.PrivateKey
+	var err error
+
+	switch {
+	case cfg.PayerKeyfile != "" && cfg.PayerKeyBase58 != "":
+		return nil, fmt.Errorf("specify only one of PayerKeyfile or PayerKeyBase58, not both")
+	case cfg.PayerKeyfile != "":
+		payerKey, err = solana.PrivateKeyFromSolanaKeygenFile(cfg.PayerKeyfile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load payer key from keygen file %q: %w", cfg.PayerKeyfile, err)
+		}
+	case cfg.PayerKeyBase58 != "":
+		payerKey, err = solana.PrivateKeyFromBase58(cfg.PayerKeyBase58)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse payer private key from base58 (note: this must be the full 64-byte keypair, not just a wallet address/public key): %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("one of PayerKeyfile or PayerKeyBase58 must be set")
 	}
 
 	rpcClient := rpc.New(cfg.RPCEndpoint)
