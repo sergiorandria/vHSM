@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <string>
 #include <vector>
-#include <optional>
 
 typedef std::uint8_t u8;
 typedef std::uint16_t u16;
@@ -268,31 +267,9 @@ struct NotificationEvent {
 };
 } // namespace vhsm::crypto
 
-struct version {
-    u8 major_version;
+struct version { 
+    u8 major_version; 
     u8  minor_version;
-};
-
-// SignatureRecord represents a signature operation to be persisted and anchored.
-struct SignatureRecord {
-    std::string record_id;          // UUID v4, primary key
-    int64_t     created_at;         // epoch milliseconds
-    int         slot_id;
-    std::string token_label;
-    std::string key_id;
-    std::string key_fingerprint;
-    std::string mechanism;          // e.g., "CKM_ECDSA_SHA256"
-    std::string digest_algorithm;   // e.g., "SHA-256"
-    std::string payload_digest;     // hex string
-    std::string signature_b64;      // base64 URL-safe signature
-    int         payload_size;       // original payload size in bytes
-    std::string session_handle;
-    std::optional<std::string> user_label;
-    std::optional<std::string> app_context;
-    // Ledger fields (filled later by ledger worker)
-    std::optional<std::string> ledger_tx_id;
-    std::optional<int64_t>     ledger_block_num;
-    std::string                ledger_status; // "PENDING", "COMMITTED", "FAILED", "DISABLED"
 };
 
 #endif // VHSM_CORE_TYPES_H

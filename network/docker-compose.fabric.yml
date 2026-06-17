@@ -1,0 +1,60 @@
+version: '2'
+
+networks:
+  byfn:
+
+services:
+  orderer.example.com:
+    extends:
+      file: base/docker-compose-base.yml
+      service: orderer.example.com
+    networks:
+      - byfn
+
+  peer0.jury.example.com:
+    extends:
+      file: base/docker-compose-base.yml
+      service: peer0.org1.example.com
+    networks:
+      - byfn
+    environment:
+      - CORE_PEER_LOCALMSPID=JuryMSP
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/msp/users/Admin@jury.example.com/msp
+      - CORE_PEER_ADDRESS=peer0.jury.example.com:7051
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.jury.example.com:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.jury.example.com:7051
+    ports:
+      - 7051:7051
+      - 7053:7053
+
+  peer0.universite.example.com:
+    extends:
+      file: base/docker-compose-base.yml
+      service: peer0.org2.example.com
+    networks:
+      - byfn
+    environment:
+      - CORE_PEER_LOCALMSPID=UniversiteMSP
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/msp/users/Admin@universite.example.com/msp
+      - CORE_PEER_ADDRESS=peer0.universite.example.com:7051
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.universite.example.com:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.universite.example.com:7051
+    ports:
+      - 8051:7051
+      - 8053:7053
+
+  peer0.vhsmorg.example.com:
+    extends:
+      file: base/docker-compose-base.yml
+      service: peer0.org3.example.com
+    networks:
+      - byfn
+    environment:
+      - CORE_PEER_LOCALMSPID=VHSMOrgMSP
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/msp/users/Admin@vhsmorg.example.com/msp
+      - CORE_PEER_ADDRESS=peer0.vhsmorg.example.com:7051
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.vhsmorg.example.com:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.vhsmorg.example.com:7051
+    ports:
+      - 9051:7051
+      - 9053:7053
