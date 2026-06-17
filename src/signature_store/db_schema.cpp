@@ -165,7 +165,7 @@ bool DbSchema::table_exists(const std::string& table_name) {
         return false;
     }
 
-    auto count = rs.get<int64_t>(rs.rows_[0], 0);
+    auto count = rs.get<i64>(rs.rows_[0], 0);
     return count.value_or(0) > 0;
 }
 
@@ -180,7 +180,10 @@ std::string DbSchema::get_meta(const std::string& key) {
     auto rs = conn_.query(
         "SELECT value FROM db_meta WHERE key=?;",
         { key });
-    if (rs.empty() || rs.rows_.empty()) return "";
+    if (rs.empty() || rs.rows_.empty()) {
+        return "";
+    }
+    
     auto val = rs.get<std::string>(rs.rows_[0], 0);
     return val.value_or("");
 }
