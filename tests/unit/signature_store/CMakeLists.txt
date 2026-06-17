@@ -14,6 +14,8 @@ add_executable(vhsm_signature_store_test
     sqlite_connection_tests.cpp
     sqlite_transaction_tests.cpp
 )
+    signature_repository_test.cpp
+    signature_repository_test.cpp
 
 target_include_directories(vhsm_signature_store_test
     PRIVATE
