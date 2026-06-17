@@ -824,7 +824,7 @@ option(VHSM_LEDGER_CHAINCODE "Fabric chaincode name"         "signature_ledger")
 
 ### Phase 4 — Database Signature Store (Week 5–6)
 
-- [ ] Implement `db_connection.cpp` with SQLite backend; add PG/MySQL stubs
+- [x] Implement `db_connection.cpp` with SQLite backend; add PG/MySQL stubs
 - [x] Write and validate SQL schemas with `ledger_*` columns, **no** `integrity_hmac` ← NEW
 - [x] Implement `db_schema.cpp`: bootstrap, seed `db_meta`, migration runner (incl. migration to drop `integrity_hmac` from existing v2.0/v3.0 databases) ← NEW
 - [x] Implement `signature_repository.cpp` with `update_ledger_fields()` method ← NEW
@@ -832,7 +832,7 @@ option(VHSM_LEDGER_CHAINCODE "Fabric chaincode name"         "signature_ledger")
 - [x] Implement `notification_repository.cpp`
 - [x] Implement `signature_dispatcher.cpp`
 - [x] Implement `verification_service.cpp`
-- [ ] Unit tests: round-trips, ledger cross-check on tampered local rows
+- [x] Unit tests: round-trips, ledger cross-check on tampered local rows
 
 ### Phase 5 — Fabric Ledger Client Module (Week 7) ← REPLACES Rekor phase
 

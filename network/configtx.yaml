@@ -1,0 +1,179 @@
+---
+Organizations:
+
+    - &JuryMSP
+        Name: JuryMSP
+        ID: JuryMSP
+        MSPDir: crypto-config/peerOrganizations/jury.example.com/msp
+        Policies:
+            Readers:
+                Type: Signature
+                Rule: "OR('JuryMSP.admin', 'JuryMSP.peer', 'JuryMSP.client')"
+            Writers:
+                Type: Signature
+                Rule: "OR('JuryMSP.admin', 'JuryMSP.peer', 'JuryMSP.client')"
+            Admins:
+                Type: Signature
+                Rule: "OR('JuryMSP.admin')"
+            Endorsement:
+                Type: Signature
+                Rule: "OR('JuryMSP.peer')"
+
+    - &UniversiteMSP
+        Name: UniversiteMSP
+        ID: UniversiteMSP
+        MSPDir: crypto-config/peerOrganizations/universite.example.com/msp
+        Policies:
+            Readers:
+                Type: Signature
+                Rule: "OR('UniversiteMSP.admin', 'UniversiteMSP.peer', 'UniversiteMSP.client')"
+            Writers:
+                Type: Signature
+                Rule: "OR('UniversiteMSP.admin', 'UniversiteMSP.peer', 'UniversiteMSP.client')"
+            Admins:
+                Type: Signature
+                Rule: "OR('UniversiteMSP.admin')"
+            Endorsement:
+                Type: Signature
+                Rule: "OR('UniversiteMSP.peer')"
+
+    - &VHSMOrgMSP
+        Name: VHSMOrgMSP
+        ID: VHSMOrgMSP
+        MSPDir: crypto-config/peerOrganizations/vhsmorg.example.com/msp
+        Policies:
+            Readers:
+                Type: Signature
+                Rule: "OR('VHSMOrgMSP.admin', 'VHSMOrgMSP.peer', 'VHSMOrgMSP.client')"
+            Writers:
+                Type: Signature
+                Rule: "OR('VHSMOrgMSP.admin', 'VHSMOrgMSP.peer', 'VHSMOrgMSP.client')"
+            Admins:
+                Type: Signature
+                Rule: "OR('VHSMOrgMSP.admin')"
+            Endorsement:
+                Type: Signature
+                Rule: "OR('VHSMOrgMSP.peer')"
+
+    OrdererOrg:
+        Name: OrdererMSP
+        ID: OrdererMSP
+        MSPDir: crypto-config/ordererOrganizations/example.com/msp
+        Policies:
+            Readers:
+                Type: Signature
+                Rule: "OR('OrdererMSP.admin', 'OrdererMSP.client')"
+            Writers:
+                Type: Signature
+                Rule: "OR('OrdererMSP.admin', 'OrdererMSP.client')"
+            Admins:
+                Type: Signature
+                Rule: "OR('OrdererMSP.admin')"
+
+Capabilities:
+    Global: &Capabilities
+        Channel: &ChannelCapabilities
+            V2_5: true
+        Orderer: &OrdererCapabilities
+            V2_5: true
+        Peer: &PeerCapabilities
+            V2_5: true
+            V2_0: true
+            V1_4: true
+            V1_3: true
+            V1_2: true
+            V1_1: true
+
+Application: &ApplicationDefaults
+    Organizations:
+    Policies:
+        Readers:
+            Type: ImplicitMeta
+            Rule: "ANY Readers"
+        Writers:
+            Type: ImplicitMeta
+            Rule: "ANY Writers"
+        Admins:
+            Type: ImplicitMeta
+            Rule: "MAJORITY Admins"
+    Capabilities:
+        <<: *ChannelCapabilities
+
+Orderer: &OrdererDefaults
+    OrdererType: solo
+    Addresses:
+        - orderer.example.com:7050
+    BatchTimeout: 2s
+    BatchSize:
+        MaxMessageCount: 10
+        AbsoluteMaxBytes: 99 MB
+        PreferredMaxBytes: 512 KB
+    Kafka:
+        Brokers:
+            - 127.0.0.1:9092
+    Organizations:
+    Policies:
+        Readers:
+            Type: ImplicitMeta
+            Rule: "ANY Readers"
+        Writers:
+            Type: ImplicitMeta
+            Rule: "ANY Writers"
+        Admins:
+            Type: ImplicitMeta
+            Rule: "MAJORITY Admins"
+        BlockValidation:
+            Type: ImplicitMeta
+            Rule: "ANY Readers"
+
+Channel: &ChannelDefaults
+    Policies:
+        Readers:
+            Type: ImplicitMeta
+            Rule: "ANY Readers"
+        Writers:
+            Type: ImplicitMeta
+            Rule: "ANY Writers"
+        Admins:
+            Type: ImplicitMeta
+            Rule: "MAJORITY Admins"
+    Capabilities:
+        <<: *ChannelCapabilities
+
+Application: &ApplicationDefaults
+    Organizations:
+    Policies:
+        Readers:
+            Type: ImplicitMeta
+            Rule: "ANY Readers"
+        Writers:
+            Type: ImplicitMeta
+            Rule: "ANY Writers"
+        Admins:
+            Type: ImplicitMeta
+            Rule: "MAJORITY Admins"
+    Capabilities:
+        <<: *ChannelCapabilities
+
+Profiles:
+
+    TwoOrgsChannel:
+        Consortium: SampleConsortium
+        Application:
+            <<: *ApplicationDefaults
+            Organizations:
+                - *JuryMSP
+                - *UniversiteMSP
+                - *VHSMOrgMSP
+    OrdererGenesis:
+        Orderer:
+            <<: *OrdererDefaults
+            Organizations:
+                - *OrdererOrg
+        Consortium: SampleConsortium
+        Application:
+            <<: *ApplicationDefaults
+            Organizations:
+                - *JuryMSP
+                - *UniversiteMSP
+                - *VHSMOrgMSP
