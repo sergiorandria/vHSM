@@ -18,14 +18,10 @@
 
 #include <memory>
 #include <string>
-#include <vector>
 
 namespace vhsm::signature_store {
     namespace db {
-        // ─────────────────────────────────────────────────────────────────────────────
         // Factory function — the only symbol clients need to call
-        // ─────────────────────────────────────────────────────────────────────────────
-
         std::unique_ptr<IDbConnection> make_sqlite_connection(const std::string& path) {
             return std::make_unique<SqliteConnection>(path);
         }
