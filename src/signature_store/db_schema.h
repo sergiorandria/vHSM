@@ -12,13 +12,14 @@ namespace db {
 // Schema version
 // Bumped whenever a migration adds or changes a table.
 // Migration N upgrades from version N-1 to version N.
-inline constexpr int kCurrentSchemaVersion = 3;
+inline constexpr int kCurrentSchemaVersion = 4;
 
 // v1 — initial schema (signature_records, signature_verifications,
 //       notification_subscribers, notification_log, db_meta)
 // v2 — Rekor columns on signature_records and signature_verifications,
 //       new key_rekor_registry table
 // v3 — Added rekor_integrated_time and rekor_inclusion_proof columns to signature_records
+// v4 — Replace Rekor columns with ledger columns, drop integrity_hmac from signature_records
 
 
 // Table name constants
@@ -119,6 +120,7 @@ private:
     // Will be removed in future update.
     void migrate_v1_to_v2();  // Adds Rekor columns + key_rekor_registry
     void migrate_v2_to_v3();  // Adds rekor_integrated_time and rekor_inclusion_proof columns
+    void migrate_v3_to_v4();  // Replace Rekor columns with ledger columns, drop integrity_hmac
 };
 
 }  // namespace db

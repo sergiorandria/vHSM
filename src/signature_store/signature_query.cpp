@@ -1,17 +1,16 @@
 #include "signature_query.h"
+#include "../keystore/token.h"
 
 #include "../core/error.h"
-#include "../core/utils.h"
-
-#include <chrono>
-#include <sstream>
 #include <vector>
 
 namespace vhsm::signature_store {
 namespace db {
 
-SignatureQuery::SignatureQuery(IDbConnection& conn)
-    : conn_(conn), signature_repository_(conn) {}
+using namespace keystore;
+
+SignatureQuery::SignatureQuery(IDbConnection& conn, Token& token)
+    : conn_(conn), signature_repository_(conn, token) {}
 
 std::optional<std::vector<std::optional<std::string>>> SignatureQuery::get_signature_by_id(const std::string& signature_id) const {
     return signature_repository_.get_by_id(signature_id);

@@ -34,7 +34,7 @@ public:
      * @brief Constructs a virtual slot with a unique identifier.
      * @param slot_id The numerical ID assigned to this slot interface (e.g., 0, 1, 2...).
      */
-    explicit Slot(uint64_t slot_id);
+    explicit Slot(u64 slot_id);
 
     /**
      * @brief Default destructor. Cleans up slot resources.
@@ -47,9 +47,9 @@ public:
 
     /**
      * @brief Retrieves the unique slot identification number.
-     * @return uint64_t The slot identifier.
+     * @return u64 The slot identifier.
      */
-    uint64_t get_id() const { return slot_id_; }
+    u64 get_id() const { return slot_id_; }
 
     /**
      * @brief Checks whether a virtual cryptographic token is currently inserted in this slot.
@@ -88,9 +88,9 @@ public:
 
     /**
      * @brief Computes and returns standard PKCS#11 capability flags for this slot.
-     * @return uint64_t Bitmask containing CKF_REMOVABLE_DEVICE, CKF_HW_SLOT, and CKF_TOKEN_PRESENT.
+     * @return u64 Bitmask containing CKF_REMOVABLE_DEVICE, CKF_HW_SLOT, and CKF_TOKEN_PRESENT.
      */
-    uint64_t get_flags() const;
+    u64 get_flags() const;
 
     /** 
      * @brief Define the firmware version. Should be newer than the current version 
@@ -99,7 +99,7 @@ public:
     void define_firmware_version(const struct version&);
 
 private:
-    uint64_t slot_id_;
+    u64 slot_id_;
     std::shared_ptr<Token> token_;
     
     std::string description_;

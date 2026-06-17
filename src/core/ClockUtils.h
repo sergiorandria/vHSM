@@ -4,6 +4,7 @@
 #include <stdexcept>
 
 #include "hsm_clock.h"
+#include  "types.h"
 
 namespace vhsm {
 
@@ -15,7 +16,7 @@ struct ClockUtils {
     // (as used by SQLite, JavaScript Date, and most REST APIs).
     // Valid for dates between roughly year 292 million BCE and 292 million CE.
     [[nodiscard]]
-    static int64_t to_epoch_ms(HsmTimePoint tp) noexcept {
+    static i64 to_epoch_ms(HsmTimePoint tp) noexcept {
         return std::chrono::duration_cast<std::chrono::milliseconds>(tp.time_since_epoch()).count();
         // HsmTimePoint's period IS milliseconds, so .count() is already ms, 
         // but it is safer to cast to milliseconds.
@@ -23,7 +24,7 @@ struct ClockUtils {
 
     /// Reconstruct a HsmTimePoint from a stored epoch-millisecond value.
     [[nodiscard]]
-    static HsmTimePoint from_epoch_ms(int64_t ms) noexcept {
+    static HsmTimePoint from_epoch_ms(i64 ms) noexcept {
         return HsmTimePoint(std::chrono::milliseconds(ms));
     }
 
@@ -37,13 +38,13 @@ struct ClockUtils {
     // some toolchains as of 2025.
     [[nodiscard]]
     static std::string to_iso8601(HsmTimePoint tp) {
-        const int64_t total_ms  = to_epoch_ms(tp);
-        const int64_t seconds   = total_ms / 1000;
-        const int64_t ms_part   = total_ms % 1000;
+        const i64 total_ms  = to_epoch_ms(tp);
+        const i64 seconds   = total_ms / 1000;
+        const i64 ms_part   = total_ms % 1000;
 
         // Normalise: negative modulo result means we're before Unix epoch.
-        const int64_t ms_norm   = (ms_part >= 0) ? ms_part : ms_part + 1000;
-        const int64_t sec_norm  = (ms_part >= 0) ? seconds : seconds - 1;
+        const i64 ms_norm   = (ms_part >= 0) ? ms_part : ms_part + 1000;
+        const i64 sec_norm  = (ms_part >= 0) ? seconds : seconds - 1;
 
         const std::time_t t = static_cast<std::time_t>(sec_norm);
         std::tm utc_tm{};
@@ -111,7 +112,7 @@ struct ClockUtils {
 #endif
         if (t == static_cast<std::time_t>(-1)) return std::nullopt;
 
-        const int64_t epoch_ms = static_cast<int64_t>(t) * 1000 + ms;
+        const i64 epoch_ms = static_cast<i64>(t) * 1000 + ms;
         return from_epoch_ms(epoch_ms);
     }
 };

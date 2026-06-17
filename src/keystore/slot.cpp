@@ -6,7 +6,7 @@
 
 namespace vhsm::keystore {
 
-Slot::Slot(uint64_t slot_id)
+Slot::Slot(u64 slot_id)
     : slot_id_(slot_id),
       token_(nullptr),
       description_("Virtual HSM Slot " + std::to_string(slot_id)),
@@ -34,8 +34,8 @@ std::shared_ptr<Token> Slot::get_token() const {
     return token_;
 }
 
-uint64_t Slot::get_flags() const {
-    uint64_t flags = 0;
+u64 Slot::get_flags() const {
+    u64 flags = 0;
     flags |= CKF_REMOVABLE_DEVICE;
     flags |= CKF_HW_SLOT;
 
