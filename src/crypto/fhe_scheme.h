@@ -20,6 +20,7 @@
 #include "gentry_polynomial.h"
 #include "gentry_ideal_lattice.h"
 #include "matrix_utils.h"
+#include "../core/types.h"
 
 #include <vector>
 #include <random>
@@ -115,7 +116,7 @@ struct SecretKey {
 //  SchemeE1  –  §3  (Initial Construction)
 class SchemeE1 {
 public:
-    explicit SchemeE1(FHEParams params, uint64_t seed = 42);
+    explicit SchemeE1(FHEParams params, u64 seed = 42);
 
     // §3.1 KeyGen
     /**
@@ -206,7 +207,7 @@ protected:
 //  SchemeE2  –  §4  (Tweaked scheme, lower decryption depth)
 class SchemeE2 : public SchemeE1 {
 public:
-    explicit SchemeE2(FHEParams params, uint64_t seed = 42)
+    explicit SchemeE2(FHEParams params, u64 seed = 42)
         : SchemeE1(std::move(params), seed) {}
 
     /**
@@ -223,7 +224,7 @@ public:
 //  SchemeE3  –  §5  (Squashed decryption; bootstrappable)
 class SchemeE3 : public SchemeE2 {
 public:
-    explicit SchemeE3(FHEParams params, uint64_t seed = 42)
+    explicit SchemeE3(FHEParams params, u64 seed = 42)
         : SchemeE2(std::move(params), seed) {}
 
     // §5.2 KeyGen (extended with τ, M)

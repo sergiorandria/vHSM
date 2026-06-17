@@ -25,8 +25,8 @@ public:
 
 private:
     std::vector<u8> key, V;
-    uint64_t reseed_counter;
-    const uint64_t RESEED_INTERVAL = 100000; 
+    u64 reseed_counter;
+    const u64 RESEED_INTERVAL = 100000; 
 
     // These methods should be callable without 
     // instanciation.

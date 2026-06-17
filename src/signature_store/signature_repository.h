@@ -1,24 +1,14 @@
 #ifndef VHSM_SIGSTORE_SIGNATURE_REPOSITORY_H
 #define VHSM_SIGSTORE_SIGNATURE_REPOSITORY_H
 
-#define VHSM_REKOR_MODULE
-#define REKOR_MODULE_VERSION 2
-
 #include <string>
 #include <optional>
 #include <vector>
 
 #include "../core/types.h"
 #include "db_connection.h"
-#include "row_integrity.h"
 #include "../keystore/token.h"
-
-#ifdef VHSM_REKOR_MODULE
-#define VHSM_REKOR_ENABLED
-
-#include "../rekor/rekor_client.h"
-
-#endif // VHSM_REKOR_MODULE
+#include "../ledger/ledger_entry.h"
 
 namespace vhsm::signature_store {
 namespace db {
@@ -44,9 +34,9 @@ public:
         const std::optional<std::string>& user_label,
         const std::optional<std::string>& app_context);
 
-    // Update the Rekor fields for a given signature record and recompute the integrity HMAC.
+    // Update the ledger fields for a given signature record.
     // Returns true on success.
-    bool update_rekor_fields(const std::string& signature_id, const vhsm::rekor::RekorEntry& entry);
+    bool update_ledger_fields(const std::string& signature_id, const vhsm::ledger::LedgerEntry& entry);
 
     // Retrieve a signature record by its ID.
     // Returns nullopt if not found.
@@ -55,7 +45,6 @@ public:
 private:
     IDbConnection& conn_;
     vhsm::keystore::Token& token_;
-    RowIntegrity row_integrity_;
 };
 
 }  // namespace db

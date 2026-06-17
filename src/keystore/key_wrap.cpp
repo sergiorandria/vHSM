@@ -30,7 +30,7 @@ namespace vhsm::keystore {
 
         mlock(result.data(), result.size());
 
-        uint64_t A = AIV;
+        u64 A = AIV;
         std::memcpy(result.data() + 8, plaintext_key.data(), plaintext_key.size());
 
         uint8_t block[16];
@@ -42,10 +42,10 @@ namespace vhsm::keystore {
                 // Call isolated AES-ECB block cipher processing module
                 crypto::AESECB::encrypt_block(internal_kek.data(), block, block);
 
-                uint64_t t = (n * j) + i;
+                u64 t = (n * j) + i;
                 std::memcpy(&A, block, 8);
                 
-                uint64_t t_be = __builtin_bswap64(t);
+                u64 t_be = __builtin_bswap64(t);
                 A ^= t_be;
 
                 std::memcpy(result.data() + (i * 8), block + 8, 8);
@@ -68,15 +68,15 @@ namespace vhsm::keystore {
         
         mlock(result.data(), result.size());
 
-        uint64_t A;
+        u64 A;
         std::memcpy(&A, ciphertext_key.data(), 8);
         std::memcpy(result.data(), ciphertext_key.data() + 8, result.size());
 
         uint8_t block[16];
         for (ssize_t j = 5; j >= 0; --j) {
             for (ssize_t i = n; i >= 1; --i) {
-                uint64_t t = (n * j) + i;
-                uint64_t t_be = __builtin_bswap64(t);
+                u64 t = (n * j) + i;
+                u64 t_be = __builtin_bswap64(t);
                 
                 A ^= t_be;
 

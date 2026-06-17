@@ -29,14 +29,7 @@ CREATE TABLE IF NOT EXISTS db_meta (
 
 std::string DbSchema::sql_create_signature_records() const {
     // Column ordering is canonical — do not reorder.
-    // HMAC covers: id, created_at, slot_id, token_label, key_id,
-    //              key_fingerprint, mechanism, payload_digest, signature_b64,
-    //              session_handle, user_label, app_context,
-    //              rekor_entry_uuid, rekor_log_index, rekor_integrated_time, rekor_inclusion_proof, rekor_set_b64, rekor_status
-    //
-    // integrity_hmac is excluded from its own computation (chicken-and-egg).
-    // Note: PLAN_REKOR drops integrity_hmac per the user's explicit decision
-    //       — Rekor provides the external tamper-evidence layer.
+    // No integrity_hmac column — ledger provides tamper evidence.
     return R"SQL(
 CREATE TABLE IF NOT EXISTS signature_records (
     id                TEXT    NOT NULL PRIMARY KEY,
@@ -51,13 +44,13 @@ CREATE TABLE IF NOT EXISTS signature_records (
     session_handle    TEXT    NOT NULL,
     user_label        TEXT,
     app_context       TEXT,
-    rekor_entry_uuid  TEXT,
-    rekor_log_index   INTEGER,
-    rekor_integrated_time TEXT,
-    rekor_inclusion_proof TEXT,
-    rekor_set_b64     TEXT,
-    rekor_status      TEXT    NOT NULL DEFAULT 'PENDING'
-        CHECK(rekor_status IN ('PENDING','COMMITTED','FAILED','DISABLED'))
+    ledger_tx_id      TEXT,
+    ledger_block_num  INTEGER,
+    ledger_tx_time    TEXT,
+    ledger_tx_proof   TEXT,
+    ledger_tx_set_b64 TEXT,
+    ledger_status     TEXT    NOT NULL DEFAULT 'PENDING'
+        CHECK(ledger_status IN ('PENDING','COMMITTED','FAILED'))
 );
 )SQL";
 }
@@ -143,11 +136,11 @@ CREATE INDEX IF NOT EXISTS idx_sig_token_label
 CREATE INDEX IF NOT EXISTS idx_sig_payload
     ON signature_records(payload_digest);
 
-CREATE INDEX IF NOT EXISTS idx_sig_rekor_uuid
-    ON signature_records(rekor_entry_uuid);
+CREATE INDEX IF NOT EXISTS idx_sig_ledger_tx_id
+    ON signature_records(ledger_tx_id);
 
-CREATE INDEX IF NOT EXISTS idx_sig_rekor_status
-    ON signature_records(rekor_status);
+CREATE INDEX IF NOT EXISTS idx_sig_ledger_status
+    ON signature_records(ledger_status);
 
 CREATE INDEX IF NOT EXISTS idx_krr_fingerprint
     ON key_rekor_registry(key_fingerprint);
@@ -305,8 +298,13 @@ int DbSchema::migrate() {
         ++current;
     }
 
+    if (current == 3) {
+        migrate_v3_to_v4();
+        ++current;
+    }
+
     // Add future migrations here:
-    // if (current == 3) { migrate_v3_to_v4(); ++current; }
+    // if (current == 4) { migrate_v4_to_v5(); ++current; }
 
     return from_version;
 }
@@ -372,6 +370,92 @@ void DbSchema::migrate_v2_to_v3() {
 
         // Bump schema version.
         tx.exec("UPDATE db_meta SET value='3' WHERE key='schema_version';");
+    });
+}
+
+// Migration v3 → v4
+//
+// What changed in v4:
+//   - signature_records replaces Rekor columns with ledger columns:
+//       ledger_tx_id (TEXT)        -> from rekor_entry_uuid
+//       ledger_block_num (INTEGER) -> from rekor_log_index
+//       ledger_tx_time (TEXT)      -> from rekor_integrated_time
+//       ledger_tx_proof (TEXT)     -> from rekor_inclusion_proof
+//       ledger_tx_set_b64 (TEXT)   -> from rekor_set_b64
+//       ledger_status (TEXT)       -> from rekor_status (with updated CHECK constraint)
+//   - Drops the integrity_hmac column (ledger provides tamper evidence)
+//
+// We implement this by creating a new table, copying data, then renaming.
+
+void DbSchema::migrate_v3_to_v4() {
+    conn_.with_transaction([this](IDbTransaction& tx) {
+        // 1. Create new table with the new schema.
+        tx.exec(R"SQL(
+            CREATE TABLE signature_records_new (
+                id                TEXT    NOT NULL PRIMARY KEY,
+                created_at        INTEGER NOT NULL,
+                slot_id           INTEGER NOT NULL,
+                token_label       TEXT    NOT NULL,
+                key_id            TEXT    NOT NULL,
+                key_fingerprint   TEXT    NOT NULL,
+                mechanism         TEXT    NOT NULL,
+                payload_digest    TEXT    NOT NULL,
+                signature_b64     TEXT    NOT NULL,
+                session_handle    TEXT    NOT NULL,
+                user_label        TEXT,
+                app_context       TEXT,
+                ledger_tx_id      TEXT,
+                ledger_block_num  INTEGER,
+                ledger_tx_time    TEXT,
+                ledger_tx_proof   TEXT,
+                ledger_tx_set_b64 TEXT,
+                ledger_status     TEXT    NOT NULL DEFAULT 'PENDING'
+                    CHECK(ledger_status IN ('PENDING','COMMITTED','FAILED'))
+            );
+        )SQL");
+
+        // 2. Copy data from the old table to the new table.
+        // We map the old columns to the new columns.
+        tx.exec(R"SQL(
+            INSERT INTO signature_records_new (
+                id, created_at, slot_id, token_label, key_id, key_fingerprint,
+                mechanism, payload_digest, signature_b64, session_handle,
+                user_label, app_context,
+                ledger_tx_id, ledger_block_num, ledger_tx_time, ledger_tx_proof,
+                ledger_tx_set_b64, ledger_status
+            )
+            SELECT
+                id, created_at, slot_id, token_label, key_id, key_fingerprint,
+                mechanism, payload_digest, signature_b64, session_handle,
+                user_label, app_context,
+                rekor_entry_uuid, rekor_log_index, rekor_integrated_time, rekor_inclusion_proof,
+                rekor_set_b64, rekor_status
+            FROM signature_records;
+        )SQL");
+
+        // 3. Drop the old table.
+        tx.exec("DROP TABLE signature_records;");
+
+        // 4. Rename the new table to the original name.
+        tx.exec("ALTER TABLE signature_records_new RENAME TO signature_records;");
+
+        // 5. Recreate the indexes on the new table (they were dropped when we dropped the old table).
+        // We'll execute the index creation statements.
+        std::string idx_sql = sql_create_indexes();
+        std::istringstream idx_stream(idx_sql);
+        std::string stmt;
+        while (std::getline(idx_stream, stmt, ';')) {
+            // Trim whitespace.
+            auto first = stmt.find_first_not_of(" \t\r\n");
+            if (first == std::string::npos) continue;
+            stmt = stmt.substr(first);
+            if (!stmt.empty()) {
+                tx.exec(stmt + ";");
+            }
+        }
+
+        // 6. Bump schema version.
+        tx.exec("UPDATE db_meta SET value='4' WHERE key='schema_version';");
     });
 }
 

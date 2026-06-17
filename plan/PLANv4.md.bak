@@ -824,14 +824,15 @@ option(VHSM_LEDGER_CHAINCODE "Fabric chaincode name"         "signature_ledger")
 
 ### Phase 4 — Database Signature Store (Week 5–6)
 
-- [ ] Implement `db_connection.cpp` with SQLite backend; add PG/MySQL stubs
-- [x] Write and validate SQL schemas with `ledger_*` columns, **no** `integrity_hmac` ← NEW
-- [x] Implement `db_schema.cpp`: bootstrap, seed `db_meta`, migration runner (incl. migration to drop `integrity_hmac` from existing v2.0/v3.0 databases) ← NEW
-- [x] Implement `signature_repository.cpp` with `update_ledger_fields()` method ← NEW
-- [x] Implement `ledger_retry_queue.cpp` — scan `PENDING` rows on startup ← NEW
-- [x] Implement `notification_repository.cpp`
-- [x] Implement `signature_dispatcher.cpp`
-- [x] Implement `verification_service.cpp`
+- [x] Implement `db_connection.cpp` with SQLite backend; add PG/MySQL stubs
+- [ ] Write and validate SQL schemas with `ledger_*` columns, **no** `integrity_hmac` ← NEW
+- [ ] Implement `db_schema.cpp`: bootstrap, seed `db_meta`, migration runner (incl. migration to drop
+      `integrity_hmac` from existing v2.0/v3.0 databases) ← NEW
+- [ ] Implement `signature_repository.cpp` with `update_ledger_fields()` method ← NEW
+- [ ] Implement `ledger_retry_queue.cpp` — scan `PENDING` rows on startup ← NEW
+- [ ] Implement `notification_repository.cpp`
+- [ ] Implement `signature_dispatcher.cpp`
+- [ ] Implement `verification_service.cpp`
 - [ ] Unit tests: round-trips, ledger cross-check on tampered local rows
 
 ### Phase 5 — Fabric Ledger Client Module (Week 7) ← REPLACES Rekor phase
@@ -843,7 +844,7 @@ option(VHSM_LEDGER_CHAINCODE "Fabric chaincode name"         "signature_ledger")
 - [ ] Write `configtx.yaml` defining the channel and endorsement policy (e.g.
       `AND('JuryMSP.peer','UniversiteMSP.peer')`)
 - [ ] Implement and deploy `chaincode/signature_ledger` (Go): `RecordSignature`, `GetRecord`
-- [x] Implement `ledger/ledger_entry.h` — `LedgerEntry` struct
+- [ ] Implement `ledger/ledger_entry.h` — `LedgerEntry` struct
 - [ ] Implement `ledger/ledger_client.cpp` — `submit_record()`, `get_record()` via Fabric Gateway SDK
 - [ ] Implement `ledger/ledger_worker.cpp` — background thread, queue drain, retry backoff
 - [ ] Wire `LedgerWorker::start()` into `C_Initialize` hook (even if PKCS#11 not built yet)

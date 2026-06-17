@@ -22,8 +22,7 @@ public:
         IDbConnection& conn,
         vhsm::keystore::Token& token,
         vhsm::notification::NotificationBus& notification_bus,
-        vhsm::audit::AuditLog& audit_log,
-        vhsm::rekor::RekorClient& rekor_client);
+        vhsm::audit::AuditLog& audit_log);
 
     // Dispatch a signature operation result.
     // This method builds a SignatureRecord from the SignResult and context,
@@ -48,15 +47,6 @@ private:
     SignatureRepository signature_repository_;
     vhsm::notification::NotificationBus& notification_bus_;
     vhsm::audit::AuditLog& audit_log_;
-    vhsm::rekor::RekorClient& rekor_client_;
-
-    // Builds a Rekor payload from the sign result and context.
-    vhsm::rekor::HashedRekordPayload build_rekor_payload(
-        const vhsm::crypto::SignResult& sign_result,
-        const std::string& key_id,
-        const std::string& key_fingerprint,
-        const std::string& token_label,
-        int slot_id) const;
 };
 
 }  // namespace db

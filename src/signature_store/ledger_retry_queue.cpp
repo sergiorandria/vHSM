@@ -1,91 +1,58 @@
-#include "signature_repository.h"
-
-#include "../core/error.h"
-#include "../core/utils.h"
+#include "ledger_retry_queue.h"
 #include "../ledger/ledger_entry.h"
 
+#include "../core/error.h"
 
 #include <vector>
 
 namespace vhsm::signature_store {
 namespace db {
 
-SignatureRepository::SignatureRepository(IDbConnection& conn, vhsm::keystore::Token& token)
-    : conn_(conn), token_(token) {}
+LedgerRetryQueue::LedgerRetryQueue(IDbConnection& conn) : conn_(conn) {}
 
-std::optional<std::string> SignatureRepository::insert(
-    int64_t created_at,
-    int slot_id,
-    const std::string& token_label,
-    const std::string& key_id,
-    const std::string& key_fingerprint,
-    const std::string& mechanism,
-    const std::string& digest_algorithm,
-    const std::string& payload_digest,
-    int payload_size,
-    const std::string& signature_b64,
-    const std::string& session_handle,
-    const std::optional<std::string>& user_label,
-    const std::optional<std::string>& app_context) {
-    // Generate a UUID for the signature ID
-    std::string id = vhsm::utils::uuid_v4();
+std::vector<std::string> LedgerRetryQueue::scan_pending_rows() {
+    std::vector<std::string> pending_ids;
 
-    // Prepare column values as strings for the columns (excluding integrity_hmac which is removed)
-    // We use empty string for NULL text columns and "0" for NULL integer column.
-    std::vector<std::string> column_values;
-    column_values.reserve(17); // 17 columns: id to ledger_status
-
-    column_values.push_back(id); // id
-    column_values.push_back(std::to_string(created_at)); // created_at
-    column_values.push_back(std::to_string(slot_id)); // slot_id
-    column_values.push_back(token_label); // token_label
-    column_values.push_back(key_id); // key_id
-    column_values.push_back(key_fingerprint); // key_fingerprint
-    column_values.push_back(mechanism); // mechanism
-    column_values.push_back(digest_algorithm); // digest_algorithm
-    column_values.push_back(payload_digest); // payload_digest
-    column_values.push_back(signature_b64); // signature_b64
-    column_values.push_back(session_handle); // session_handle
-    column_values.push_back(user_label.value_or("")); // user_label: empty string if nullopt
-    column_values.push_back(app_context.value_or("")); // app_context: empty string if nullopt
-    column_values.push_back(""); // ledger_tx_id: NULL -> empty string
-    column_values.push_back("0"); // ledger_block_num: NULL -> "0"
-    column_values.push_back(""); // ledger_tx_time: NULL -> empty string
-    column_values.push_back(""); // ledger_tx_proof: NULL -> empty string
-    column_values.push_back(""); // ledger_tx_set_b64: NULL -> empty string
-    column_values.push_back("PENDING"); // ledger_status
-
-    // Now we insert the row (no integrity_hmac column)
     const std::string sql = R"SQL(
-        INSERT INTO signature_records (
-            id, created_at, slot_id, token_label, key_id, key_fingerprint,
-            mechanism, payload_digest, signature_b64, session_handle,
-            user_label, app_context,
-            ledger_tx_id, ledger_block_num, ledger_tx_time, ledger_tx_proof,
-            ledger_tx_set_b64, ledger_status
-        ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        );
+        SELECT id FROM signature_records
+        WHERE ledger_status = 'PENDING';
     )SQL";
 
     try {
-        conn_.exec(sql, column_values);
+        auto rs = conn_.query(sql);
+        for (const auto& row : rs.rows_) {
+            auto id_opt = row.get_string(0);
+            if (id_opt) {
+                pending_ids.push_back(*id_opt);
+            }
+        }
     } catch (const DbError& e) {
-        // Log the error
-        return std::nullopt;
+        // In a real implementation, we might want to log this
+        // For now, return empty vector on error
     }
 
-    return id;
+    return pending_ids;
 }
 
-bool SignatureRepository::update_ledger_fields(const std::string& signature_id,
-                                               const vhsm::ledger::LedgerEntry& entry) {
-    // Prepare the column values for the ledger columns.
-    // We will update the ledger_* columns.
+bool LedgerRetryQueue::update_ledger_status(const std::string& signature_id, const std::string& status) {
+    const std::string sql = R"SQL(
+        UPDATE signature_records
+        SET ledger_status = ?
+        WHERE id = ?;
+    )SQL";
 
+    try {
+        conn_.exec(sql, {status, signature_id});
+        return true;
+    } catch (const DbError& e) {
+        return false;
+    }
+}
+
+bool LedgerRetryQueue::update_ledger_fields(const std::string& signature_id, const ledger::LedgerEntry& entry) {
     // First, retrieve the current row to get the non-ledger columns.
-    auto current_row = get_by_id(signature_id);
-    if (!current_row) {
+    auto current_row_opt = get_signature_row_by_id(signature_id);
+    if (!current_row_opt) {
         return false;
     }
 
@@ -122,7 +89,7 @@ bool SignatureRepository::update_ledger_fields(const std::string& signature_id,
 
     // Copy the first 12 columns (id through app_context) from current_row.
     for (size_t i = 0; i < 12; ++i) {
-        new_column_values.push_back(to_storage_string(current_row.value()[i]));
+        new_column_values.push_back(to_storage_string(current_row_opt.value()[i]));
     }
 
     // Now the ledger columns: we will set them from the entry.
@@ -173,14 +140,14 @@ bool SignatureRepository::update_ledger_fields(const std::string& signature_id,
 
     try {
         conn_.exec(sql, bind_params);
+        return true;
     } catch (const DbError& e) {
         return false;
     }
-
-    return true;
 }
 
-std::optional<std::vector<std::optional<std::string>>> SignatureRepository::get_by_id(const std::string& signature_id) const {
+// Helper function to get a signature row by ID
+std::optional<std::vector<std::optional<std::string>>> LedgerRetryQueue::get_signature_row_by_id(const std::string& signature_id) {
     const std::string sql = R"SQL(
         SELECT id, created_at, slot_id, token_label, key_id, key_fingerprint,
                mechanism, payload_digest, signature_b64, session_handle,

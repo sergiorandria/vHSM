@@ -19,7 +19,7 @@ namespace db {
 
 class SignatureQuery {
 public:
-    explicit SignatureQuery(IDbConnection& conn);
+    explicit SignatureQuery(IDbConnection& conn, keystore::Token&);
 
     // Retrieve a signature record by its ID.
     // Returns nullopt if not found.

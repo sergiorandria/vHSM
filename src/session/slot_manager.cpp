@@ -10,7 +10,7 @@ SlotManager& SlotManager::get_instance() {
     return instance;
 }
 
-bool SlotManager::register_slot(uint64_t slot_id) {
+bool SlotManager::register_slot(u64 slot_id) {
     std::lock_guard<std::mutex> lock(manager_mutex_);
     
     // On vérifie si le slot existe déjà dans notre map
@@ -23,7 +23,7 @@ bool SlotManager::register_slot(uint64_t slot_id) {
     return true;
 }
 
-std::shared_ptr<Slot> SlotManager::get_slot(uint64_t slot_id) const {
+std::shared_ptr<Slot> SlotManager::get_slot(u64 slot_id) const {
     std::lock_guard<std::mutex> lock(manager_mutex_);
     
     auto it = slots_.find(slot_id);
@@ -34,10 +34,10 @@ std::shared_ptr<Slot> SlotManager::get_slot(uint64_t slot_id) const {
     return nullptr; 
 }
 
-std::vector<uint64_t> SlotManager::get_slot_id_list() const {
+std::vector<u64> SlotManager::get_slot_id_list() const {
     std::lock_guard<std::mutex> lock(manager_mutex_);
     
-    std::vector<uint64_t> id_list;
+    std::vector<u64> id_list;
     id_list.reserve(slots_.size());
     
     for (const auto& [slot_id, _] : slots_) {

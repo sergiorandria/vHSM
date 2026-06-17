@@ -10,7 +10,6 @@
 #include "../notification/notification_bus.h"
 #include "../notification/notification_event.h"
 #include "../audit/audit_log.h"
-#include "../rekor/rekor_client.h"
 
 namespace vhsm::signature_store {
 namespace db {
@@ -19,14 +18,16 @@ SignatureDispatcher::SignatureDispatcher(
     IDbConnection& conn,
     vhsm::keystore::Token& token,
     vhsm::notification::NotificationBus& notification_bus,
-    vhsm::audit::AuditLog& audit_log,
-    vhsm::rekor::RekorClient& rekor_client)
+    vhsm::audit::AuditLog& audit_log)
+   
     : conn_(conn),
       token_(token),
       signature_repository_(conn, token),
       notification_bus_(notification_bus),
-      audit_log_(audit_log),
-      rekor_client_(rekor_client) {}
+      audit_log_(audit_log)
+      // rekor_client_(rekor_client) // Removed for Phase 4
+{
+}
 
 void SignatureDispatcher::dispatch(
     const vhsm::crypto::SignResult& sign_result,
@@ -99,59 +100,16 @@ void SignatureDispatcher::dispatch(
     detail_ss << R"({"signature_id":") << signature_id << R"(",)"
               << R"("key_fingerprint":") << key_fingerprint << R"(",)"
               << R"("payload_digest":") << payload_digest << R"(",)"
-              << R"("rekor_entry_uuid":"") // will be filled later by Rekor worker
+              // No ledger info yet
+              << R"("ledger_tx_id":"")"
               << R"(",)"
-              << R"("rekor_log_index":0)";
+              << R"("ledger_block_num":0)";
     sign_event.detail_json = detail_ss.str();
     sign_event.hsm_instance = ""; // TODO: fetch from db_meta
     notification_bus_.publish(sign_event);
 
-    // Asynchronously submit to Rekor
-    // Build the Rekor payload
-    vhsm::rekor::HashedRekordPayload payload = build_rekor_payload(sign_result, key_id, key_fingerprint, token_label, slot_id);
-    // We assume the RekorClient has an async method or we use a RekorWorker.
-    // Since we don't have the RekorWorker here, we will call the RekorClient's async method if available.
-    // For simplicity, we will submit synchronously? But the plan says async.
-    // We'll assume the RekorClient has a method create_entry_async that returns immediately and uses a background thread.
-    // If not, we will call the synchronous method and hope it's fast? Not ideal.
-    // We'll look at the RekorClient interface we defined earlier in the header.
-    // We don't have the actual RekorClient implementation, so we will assume it has:
-    //   std::optional<RekorEntry> create_entry(const HashedRekordPayload& payload);
-    // and we will call it and then update the DB with the result.
-    // But that would be synchronous. We'll do it asynchronously by spawning a thread? Not good.
-    // Given the time, we will do it synchronously and note that in a real implementation it should be async.
-    auto rekor_entry_opt = rekor_client_.create_entry(payload);
-    if (rekor_entry_opt) {
-        // Update the DB with the Rekor entry and recompute integrity HMAC
-        signature_repository_.update_rekor_fields(signature_id, *rekor_entry_opt);
-        // TODO: Update the notification event with the Rekor info? We could publish an updated event.
-    } else {
-        // Rekor submission failed. We should publish a REKOR_COMMIT_FAILED notification?
-        // But we don't want to block the dispatcher. We'll just note the failure and maybe rely on a retry queue.
-        // We'll publish a REKOR_COMMIT_FAILED notification now? The plan says the Rekor worker handles retries.
-        // We'll do nothing here and let the Rekor worker handle it.
-        // For now, we'll just ignore.
-    }
-}
-
-vhsm::rekor::HashedRekordPayload SignatureDispatcher::build_rekor_payload(
-    const vhsm::crypto::SignResult& sign_result,
-    const std::string& key_id,
-    const std::string& key_fingerprint,
-    const std::string& token_label,
-    int slot_id) const {
-    vhsm::rekor::HashedRekordPayload payload;
-    payload.data.hash.algorithm = "sha256";
-    payload.data.hash.value = sign_result.payload_digest; // already hex
-    payload.signature.content = vhsm::utils::base64_encode(
-        std::span<const std::byte>(
-            reinterpret_cast<const std::byte*>(sign_result.signature.data()),
-            sign_result.signature.size()));
-    // We need the public key in SPKI format. We don't have it here.
-    // We assume we can get it from the key_id or key_fingerprint? Not possible.
-    // We'll leave it empty for now and note that we need to fetch the public key from the keystore.
-    payload.publicKey.content = ""; // TODO: fetch public key from keystore using key_id
-    return payload;
+    // Asynchronously submit to ledger will be handled in Phase 5 by the ledger worker.
+    // For Phase 4, we just leave the ledger fields empty and they will be updated later.
 }
 
 }  // namespace db
