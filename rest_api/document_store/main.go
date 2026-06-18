@@ -58,16 +58,16 @@ type HSMService struct {
 func NewHSMService(modulePath, tokenLabel, pin, keyLabel string) (*HSMService, error) {
 	p := pkcs11.New(modulePath)
 	if p == nil {
-		return nil, fmt.Errorf("impossible de charger le module PKCS#11 : %s", modulePath)
+		return nil, fmt.Errorf("failed to load PKCS#11 module: %s", modulePath)
 	}
 	if err := p.Initialize(); err != nil {
-		return nil, fmt.Errorf("initialisation PKCS#11 échouée : %w", err)
+		return nil, fmt.Errorf("PKCS#11 initialization failed: %w", err)
 	}
 
 	slots, err := p.GetSlotList(true)
 	if err != nil {
 		p.Finalize()
-		return nil, fmt.Errorf("GetSlotList échoué : %w", err)
+		return nil, fmt.Errorf("GetSlotList failed: %w", err)
 	}
 
 	for _, slot := range slots {
@@ -86,7 +86,7 @@ func NewHSMService(modulePath, tokenLabel, pin, keyLabel string) (*HSMService, e
 	}
 
 	p.Finalize()
-	return nil, fmt.Errorf("aucun slot trouvé avec le token %q", tokenLabel)
+	return nil, fmt.Errorf("no slot found with token %q", tokenLabel)
 }
 
 // Close finalizes the PKCS#11 module. Call once during application shutdown.
@@ -106,12 +106,12 @@ func (h *HSMService) Encrypt(plaintext []byte) (iv []byte, ciphertext []byte, er
 
 	session, err := h.ctx.OpenSession(h.slot, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
 	if err != nil {
-		return nil, nil, fmt.Errorf("ouverture de session échouée : %w", err)
+		return nil, nil, fmt.Errorf("session open failed: %w", err)
 	}
 	defer h.ctx.CloseSession(session)
 
 	if err := h.ctx.Login(session, pkcs11.CKU_USER, h.pin); err != nil {
-		return nil, nil, fmt.Errorf("login échoué : %w", err)
+		return nil, nil, fmt.Errorf("login failed: %w", err)
 	}
 	defer h.ctx.Logout(session)
 
@@ -123,24 +123,24 @@ func (h *HSMService) Encrypt(plaintext []byte) (iv []byte, ciphertext []byte, er
 		pkcs11.NewAttribute(pkcs11.CKA_LABEL, h.label),
 	}
 	if err := h.ctx.FindObjectsInit(session, template); err != nil {
-		return nil, nil, fmt.Errorf("FindObjectsInit échoué : %w", err)
+		return nil, nil, fmt.Errorf("FindObjectsInit failed: %w", err)
 	}
 	objs, _, err := h.ctx.FindObjects(session, 1)
 	if ferr := h.ctx.FindObjectsFinal(session); ferr != nil {
 		log.Printf("FindObjectsFinal: %v", ferr)
 	}
 	if err != nil {
-		return nil, nil, fmt.Errorf("FindObjects échoué : %w", err)
+		return nil, nil, fmt.Errorf("FindObjects failed: %w", err)
 	}
 	if len(objs) == 0 {
-		return nil, nil, fmt.Errorf("clé secrète avec label %q introuvable", h.label)
+		return nil, nil, fmt.Errorf("secret key with label %q not found", h.label)
 	}
 
 	// Generate a fresh, unique IV for this operation. NEVER reuse an IV
 	// with the same key.
 	iv = make([]byte, gcmIVSize)
 	if _, err := rand.Read(iv); err != nil {
-		return nil, nil, fmt.Errorf("génération de l'IV échouée : %w", err)
+		return nil, nil, fmt.Errorf("IV generation failed: %w", err)
 	}
 
 	gcmParams := pkcs11.NewGCMParams(iv, nil, gcmTagBits)
@@ -148,12 +148,12 @@ func (h *HSMService) Encrypt(plaintext []byte) (iv []byte, ciphertext []byte, er
 
 	mech := []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_AES_GCM, gcmParams)}
 	if err := h.ctx.EncryptInit(session, mech, objs[0]); err != nil {
-		return nil, nil, fmt.Errorf("EncryptInit échoué : %w", err)
+		return nil, nil, fmt.Errorf("EncryptInit failed: %w", err)
 	}
 
 	ciphertext, err = h.ctx.Encrypt(session, plaintext)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Encrypt échoué : %w", err)
+		return nil, nil, fmt.Errorf("Encrypt failed: %w", err)
 	}
 
 	// Some HSMs ignore the provided IV and generate their own; read back the
@@ -173,7 +173,7 @@ var thesisIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,128}$`)
 
 func validateThesisID(id string) error {
 	if !thesisIDPattern.MatchString(id) {
-		return errors.New("thesisId invalide : caractères alphanumériques, '-' et '_' uniquement, 128 caractères max")
+		return errors.New("invalid thesisId: only alphanumeric characters, '-' and '_' allowed, max 128 chars")
 	}
 	return nil
 }
@@ -185,7 +185,7 @@ func validateThesisID(id string) error {
 func mustGetenv(key string) string {
 	v := os.Getenv(key)
 	if v == "" {
-		log.Fatalf("variable d'environnement requise manquante : %s", key)
+		log.Fatalf("required environment variable missing: %s", key)
 	}
 	return v
 }
@@ -197,7 +197,7 @@ func main() {
 	hsmLabel := os.Getenv("HSM_LABEL")
 	hsmTokenLabel := os.Getenv("HSM_TOKEN_LABEL")
 	if hsmTokenLabel == "" {
-		hsmTokenLabel = "MonToken"
+		hsmTokenLabel = "MaCleThesis"
 	}
 	hsmModulePath := os.Getenv("HSM_MODULE_PATH")
 	if hsmModulePath == "" {
@@ -210,12 +210,12 @@ func main() {
 
 	minioService, err := minio_utils.NewMinioService("minio:9000", minioUser, minioPass)
 	if err != nil {
-		log.Fatalf("connexion MinIO échouée : %v", err)
+		log.Fatalf("failed to connect to MinIO: %v", err)
 	}
 
 	hsmService, err := NewHSMService(hsmModulePath, hsmTokenLabel, hsmPin, hsmLabel)
 	if err != nil {
-		log.Fatalf("initialisation HSM échouée : %v", err)
+		log.Fatalf("HSM initialization failed: %v", err)
 	}
 	defer hsmService.Close()
 
@@ -235,14 +235,14 @@ func main() {
 
 		file, header, err := c.Request.FormFile("document")
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Aucun fichier fourni"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "No file provided"})
 			return
 		}
 		defer file.Close()
 
 		plaintext, err := io.ReadAll(file)
 		if err != nil {
-			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "Fichier illisible ou trop volumineux : " + err.Error()})
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "Unreadable or too large file: " + err.Error()})
 			return
 		}
 
@@ -254,8 +254,8 @@ func main() {
 
 		iv, ciphertext, err := hsmService.Encrypt(plaintext)
 		if err != nil {
-			log.Printf("erreur de chiffrement : %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Échec du chiffrement"})
+			log.Printf("encryption error: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Encryption failed"})
 			return
 		}
 
@@ -268,8 +268,8 @@ func main() {
 
 		err = minioService.UploadThesis(ctx, bucketName, header.Filename, bytes.NewReader(payload), int64(len(payload)), thesisID)
 		if err != nil {
-			log.Printf("erreur d'upload MinIO : %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Échec de l'envoi vers le stockage"})
+			log.Printf("MinIO upload error: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload to storage"})
 			return
 		}
 
@@ -290,7 +290,7 @@ func main() {
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("le serveur HTTP s'est arrêté de façon inattendue : %v", err)
+			log.Fatalf("HTTP server stopped unexpectedly: %v", err)
 		}
 	}()
 
@@ -298,10 +298,10 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("arrêt du serveur en cours...")
+	log.Println("server shutting down...")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Printf("arrêt forcé du serveur : %v", err)
+		log.Printf("server forced shutdown: %v", err)
 	}
 }
