@@ -80,6 +80,34 @@ func signHash(hashHex string) (string, error) {
 	return hex.EncodeToString(signature), nil
 }
 
+// Adding CORS middleware
+func cors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		w.Header().Set(
+			"Access-Control-Allow-Origin",
+			"http://localhost:5173",
+		)
+
+		w.Header().Set(
+			"Access-Control-Allow-Methods",
+			"POST, OPTIONS",
+		)
+
+		w.Header().Set(
+			"Access-Control-Allow-Headers",
+			"Content-Type",
+		)
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func handleSubmission(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -157,7 +185,7 @@ func main() {
 
 	addr := ":8080"
 	log.Printf("jury-backend listening on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, cors(mux)); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
 }
