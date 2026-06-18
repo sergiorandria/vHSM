@@ -1,4 +1,4 @@
-package main
+package minioserver
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"os/exec"
 )
 
-func main() {
+func RunServer() {
 	// 1. Set environment variables for authentication
 	os.Setenv("MINIO_ROOT_USER", "minioadmin")
 	os.Setenv("MINIO_ROOT_PASSWORD", "minioadmin")

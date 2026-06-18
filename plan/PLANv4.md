@@ -838,9 +838,9 @@ option(VHSM_LEDGER_CHAINCODE "Fabric chaincode name"         "signature_ledger")
 
 *Can overlap with Phase 4 if team splits. Requires the local Fabric test network up.*
 
-- [ ] Stand up `network/docker-compose.fabric.yml` — orderer + peers for each org (e.g. Jury,
+- [x] Stand up `network/docker-compose.fabric.yml` — orderer + peers for each org (e.g. Jury,
       Université, vHSM operator)
-- [ ] Write `configtx.yaml` defining the channel and endorsement policy (e.g.
+- [x] Write `configtx.yaml` defining the channel and endorsement policy (e.g.
       `AND('JuryMSP.peer','UniversiteMSP.peer')`)
 - [ ] Implement and deploy `chaincode/signature_ledger` (Go): `RecordSignature`, `GetRecord`
 - [x] Implement `ledger/ledger_entry.h` — `LedgerEntry` struct
