@@ -1,0 +1,8 @@
+{
+    "thesisId" : "T123",
+    "grade" : 16.5,
+    "metadata" : {
+        "thesisTitle" : "Distributed Ledger Integrity Verification",
+        "DefenseDate" : "2026-06-16"
+    }
+}
