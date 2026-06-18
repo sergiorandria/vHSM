@@ -1,6 +1,8 @@
-#include "fabric/identity/wallet.h"
+#include "../../../include/fabric/identity/wallet.h"
 #include <unordered_map>
 #include <mutex>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 namespace fabric {
 namespace identity {
@@ -17,8 +19,8 @@ InMemoryWallet::~InMemoryWallet() = default;
 
 bool InMemoryWallet::put(const std::string& label, const Identity& identity) {
     std::lock_guard<std::mutex> lock(pimpl_->mutex_);
-    pimpl_->identities_[label] = identity;
-    return true;
+    auto result = pimpl_->identities_.emplace(label, identity);
+    return result.second;
 }
 
 std::unique_ptr<Identity> InMemoryWallet::get(const std::string& label) {
@@ -63,11 +65,7 @@ public:
 FileSystemWallet::FileSystemWallet(const std::string& directoryPath)
     : pimpl_(std::make_unique<Impl>()), directoryPath_(directoryPath) {
     // Ensure directory exists
-    #ifdef _WIN32
-    _mkdir(directoryPath_.c_str());
-    #else
     mkdir(directoryPath_.c_str(), 0755);
-    #endif
 }
 
 FileSystemWallet::~FileSystemWallet() = default;

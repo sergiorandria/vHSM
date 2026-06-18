@@ -26,16 +26,16 @@ flowchart LR
 
 ## 3. Dependencies
 
-| Purpose | Library |
-|---|---|
-| Peer/orderer/gateway RPCs, event streaming | grpc++ / protobuf |
-| Fabric CA REST calls | any HTTP client behind `HttpClient` interface (e.g. libcurl, cpp-httplib) |
-| Crypto, X.509, CSR, signing | OpenSSL |
-| JSON (CA payloads) | nlohmann/json |
-| Connection profiles | yaml-cpp |
-| Build | CMake (3.20+) |
-| Package management | vcpkg or Conan |
-| Testing | GoogleTest |
+| Purpose                                    | Library                                                                   |
+| --------------------------------------------| ---------------------------------------------------------------------------|
+| Peer/orderer/gateway RPCs, event streaming | grpc++ / protobuf                                                         |
+| Fabric CA REST calls                       | any HTTP client behind `HttpClient` interface (e.g. libcurl, cpp-httplib) |
+| Crypto, X.509, CSR, signing                | OpenSSL                                                                   |
+| JSON (CA payloads)                         | nlohmann/json                                                             |
+| Connection profiles                        | yaml-cpp                                                                  |
+| Build                                      | CMake (3.20+)                                                             |
+| Package management                         | vcpkg or Conan                                                            |
+| Testing                                    | GoogleTest                                                                |
 
 ## 4. Directory Layout
 
@@ -60,21 +60,23 @@ fabric-cpp-sdk/
 
 ## 5. Tasks by Phase
 
+
+
 ### Phase 0 — Project Setup & Tooling
-- [ ] Initialize CMake project (C++17/20) with the directory layout above
-- [ ] Add vcpkg/Conan manifest pinning grpc, protobuf, openssl, nlohmann-json, yaml-cpp, gtest
-- [ ] Vendor `hyperledger/fabric-protos` (git submodule or pinned snapshot) — peer, common, msp, gateway, orderer `.proto` files
-- [ ] Wire up CMake protobuf/grpc codegen (`protoc` + `grpc_cpp_plugin`) producing stubs into `generated/`
-- [ ] Set up CI (Linux/macOS, Debug/Release build matrix)
-- [ ] Smoke test: trivial grpc++ client/server build to confirm toolchain end-to-end
+- [x] Initialize CMake project (C++17/20) with the directory layout above
+- [x] Add vcpkg/Conan manifest pinning grpc, protobuf, openssl, nlohmann-json, yaml-cpp, gtest
+- [x] Vendor `hyperledger/fabric-protos` (git submodule or pinned snapshot) — peer, common, msp, gateway, orderer `.proto` files
+- [x] Wire up CMake protobuf/grpc codegen (`protoc` + `grpc_cpp_plugin`) producing stubs into `generated/`
+- [x] Set up CI (Linux/macOS, Debug/Release build matrix)
+- [x] Smoke test: trivial grpc++ client/server build to confirm toolchain end-to-end
 
 ### Phase 1 — Crypto & Identity Layer
-- [ ] OpenSSL wrapper: EC keypair generation (P-256, Fabric's default curve)
-- [ ] CSR (PKCS#10) generation for enrollment
-- [ ] X.509 certificate parsing/validation helpers
-- [ ] `Identity` type: `{ mspId, certificate (PEM), privateKey (PEM) }`
-- [ ] ECDSA signing helper over arbitrary bytes (used later for proposal/transaction signing)
-- [ ] Wallet interface + `InMemoryWallet` + `FileSystemWallet` implementations
+- [x] OpenSSL wrapper: EC keypair generation (P-256, Fabric's default curve)
+- [x] CSR (PKCS#10) generation for enrollment
+- [x] X.509 certificate parsing/validation helpers
+- [x] `Identity` type: `{ mspId, certificate (PEM), privateKey (PEM) }`
+- [x] ECDSA signing helper over arbitrary bytes (used later for proposal/transaction signing)
+- [x] Wallet interface + `InMemoryWallet` + `FileSystemWallet` implementations
 - [ ] Unit tests: keygen, CSR, sign/verify round-trip
 
 ### Phase 2 — Fabric CA Client (REST)
