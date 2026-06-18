@@ -23,7 +23,17 @@ services:
 
     command: server /data --console-address ":9001"  # Start MinIO and expose the console on port 9001
 
-
+  minio-init:
+    image: minio/mc:latest
+    container_name: minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until /usr/bin/mc alias set myminio http://minio:9000 '${MINIO_ROOT_USER}' '${MINIO_ROOT_PASSWORD}'; do echo 'En attente de MinIO...'; sleep 1; done;
+      /usr/bin/mc mb --ignore-existing myminio/thesis;
+      echo 'Bucket thesis créé avec succès !';
+      "
   api-vhsm:
     build: .
     container_name: api-vhsm
@@ -33,6 +43,8 @@ services:
       - minio         # Ensure MinIO is started before the API
     volumes:
       - ./softhsm_tokens:/var/lib/softhsm/tokens # Mount host SoftHSM token directory into container
+    env_file:
+      - .env           # Load environment variables from .env file
 
 volumes:
   minio_data:
