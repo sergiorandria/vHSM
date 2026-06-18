@@ -1,85 +1,104 @@
-# Project: HSM-Secured Document Store
+# vHSM Document Store API
 
-This project provides a secure API service that encrypts documents using a hardware-backed security module (SoftHSM2) and stores them in MinIO (S3-compatible storage).
+A secure Go-based REST API that performs **on-the-fly AES-GCM 256-bit encryption** using a Virtual Hardware Security Module (**SoftHSM2**) via the PKCS#11 interface, before storing the encrypted payloads into a **MinIO (S3-compatible)** object storage system.
 
-## Prerequisites
-
-* **Docker & Docker Compose** installed.
-* **Go 1.26+** (if building locally).
-* A `.env` file at the root of the project (see below).
-
-## Setup & Initialization
-
-### 1. Configure Environment Variables
-
-Create a `.env` file in the project root to store your secrets. **Do not commit this file to Git.**
+## Architecture & Project Structure
 
 ```text
-MINIO_ROOT_USER=your_username
-MINIO_ROOT_PASSWORD=your_secure_password
-HSM_PIN=your_pin (ex: 1234)
-HSM_LABEL=your_key_label (ex: thesisLabel)
-
+.
+├── data/                 # Local directory (optional context)
+├── docker-compose.yml    # Orchestrates MinIO, MinIO Initialization, and the Go API
+├── Dockerfile            # Multi-stage build (Builder with Golang SDK -> Runtime with Debian-slim)
+├── entrypoint.sh         # Shell script automating SoftHSM token/key initialization
+├── go.mod                # Go module file
+├── go.sum                # Go checksum file
+├── main.go               # REST API entry point (Gin Gonic framework & PKCS#11 engine)
+├── minio_utils/
+│   └── minio_client.go   # S3 storage interaction helper functions
+├── README.md             # This documentation file
+└── softhsm_tokens/       # Persistent host folder mounting your cryptographic keys
 ```
 
-### 2. Prepare HSM Storage
+- **Symmetric Encryption**: Handled completely inside the SoftHSM engine (`CKM_AES_GCM`). Plaintext keys never leak into the application memory layer.
+- **Initialization Pipeline**: The `entrypoint.sh` script checks if a token exists inside the Docker container at startup. If missing, it creates the token, provisions a 256-bit AES key, and updates the local state seamlessly.
 
-SoftHSM requires a persistent directory on the host machine to store its tokens. Create it and set appropriate permissions:
+---
+
+## Getting Started
+
+### 1. Prerequisites
+Make sure you have the following installed on your machine:
+- [Docker](https://docker.com)
+- [Docker Compose](https://docker.com)
+- `curl` (for local endpoint testing)
+
+### 2. Configure Environment Variables
+Create a `.env` file in the root directory next to your `docker-compose.yml`:
+
+```env
+# MinIO Configuration
+MINIO_ROOT_USER=admin
+MINIO_ROOT_PASSWORD=supersecretpassword
+MINIO_BUCKET=thesis
+
+# SoftHSM / PKCS#11 Configuration
+HSM_PIN=1234
+HSM_TOKEN_LABEL=MaCleThesis
+HSM_LABEL=my-aes-key
+HSM_MODULE_PATH=/usr/lib/softhsm/libsofthsm2.so
+```
+
+### 3. Spin up the Stack
+Run Docker Compose to build the application image and boot all required services (MinIO, MinIO-init engine, and the API server):
 
 ```bash
-mkdir -p ./softhsm_tokens
-chmod 777 ./softhsm_tokens
-
+docker compose up -d --build
 ```
 
-### 3. Build and Launch
+---
 
-Build the Docker images and start the services in detached mode:
+## 📡 API Endpoints & Usage
 
-```bash
-docker compose up --build -d
+### Encrypt and Upload a Document
 
-```
+- **URL**: `/api/v1/encrypt`
+- **Method**: `POST`
+- **Content-Type**: `multipart/form-data`
 
-### 4. Initialize the HSM Token
+#### Request Parameters:
 
-The HSM token must be initialized once before it can store keys. Run this command inside the running API container:
+| Parameter | Type | Description |
+| :--- | :--- | :--- |
+| `thesisId` | `string` | Alphanumeric identifier, max 128 chars (allows `-` and `_`). |
+| `document` | `file` | The raw document binary to encrypt. |
 
-```bash
-docker exec -it api-vhsm softhsm2-util --init-token --slot 0 --label "ThesisLabel" --pin 1234 --so-pin 1234
-
-```
-
-*Note: Replace `--slot 0` with the appropriate slot index if your environment configuration differs.*
-
-## API Usage
-
-### Encrypt and Store a Document
-
-Send a `POST` request to the `/api/v1/encrypt` endpoint. The API expects a multipart form request.
-
-**Example using `curl`:**
-
+#### Example Request:
 ```bash
 curl -X POST http://localhost:8080/api/v1/encrypt \
-  -F "thesisId=THESIS-001" \
-  -F "document=@path/to/your/file.pdf"
-
+  -F "thesisId=THESE-2026-001" \
+  -F "document=@go.mod"
 ```
 
-The API will return a JSON response containing:
+#### Expected Responses:
+- **`200 OK` / `201 Created`**: The file was successfully encrypted by the HSM and written to MinIO.
+- **`400 Bad Request`**: Malformed parameters or invalid naming formats.
+- **`500 Internal Server Error`**: HSM binding crash or storage connection breakdown.
 
-* **status**: Operation result.
-* **ledger**: An object containing the `thesisId`, a SHA-256 `fileHash` (for audit purposes), and a timestamp.
+---
 
-## Maintenance & Troubleshooting
+## 🛠️ Diagnostics & Useful Commands
 
-* **Check logs:** `docker compose logs -f api-vhsm`
-* **List HSM objects:** ```bash
-docker exec -it api-vhsm pkcs11-tool --module /usr/lib/softhsm/libsofthsm2.so --login --pin 1234 --list-objects
+### Check logs for HSM state or MinIO connectivity:
+```bash
+docker logs -f api-vhsm
 ```
 
+### Manually interact with the persistent HSM inside the container:
+```bash
+docker exec -it api-vhsm pkcs11-tool --module /usr/lib/softhsm/libsofthsm2.so --list-objects --login --pin 1234
 ```
 
-
-* **Cleanup:** To stop and remove the containers, run `docker compose down`. To delete data (including HSM tokens), remove the `softhsm_tokens` folder and the `minio_data` volume.
+### Tear down containers and reset storage volumes:
+```bash
+docker compose down --volumes
+```
