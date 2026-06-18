@@ -1,20 +1,82 @@
-import { sendJSON } from "./api/studentApi";
-import { Student } from "./models/Student";
+import { submit } from "./api/submissions";
+import type { SubmissionRequest } from "./models/SubmissionRequest";
+import type { SubmissionResponse } from "./models/SubmissionResponse";
 
-const form = document.querySelector(
-    "#studentForm"
-) as HTMLFormElement;
+document.addEventListener("DOMContentLoaded", () => {
 
-form.addEventListener("submit", async (e) => {
-    e.preventDefault();
+    const form = document.getElementById(
+        "studentForm"
+    ) as HTMLFormElement | null;
 
-    const studentThesisInfo: Student = {
-        name: (document.getElementById("name") as HTMLInputElement).value,
-        thesisTitle: (document.getElementById("email") as HTMLInputElement).value,
-        grade: Number(
-            (document.getElementById("grade") as HTMLInputElement).value
-        )
-    };
+    if (!form) {
+        console.error("studentForm not found");
+        return;
+    }
 
-    await sendJSON(studentThesisInfo);
+    form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        try {
+
+            const thesisId =
+                (document.getElementById(
+                    "thesisId"
+                ) as HTMLInputElement).value.trim();
+
+            const grade =
+                Number(
+                    (document.getElementById(
+                        "grade"
+                    ) as HTMLInputElement).value
+                );
+
+            const thesisTitle =
+                (document.getElementById(
+                    "thesisTitle"
+                ) as HTMLInputElement).value.trim();
+
+            const defenseDate =
+                (document.getElementById(
+                    "defenseDate"
+                ) as HTMLInputElement).value;
+
+            const payload: SubmissionRequest = {
+                thesisId,
+                grade,
+
+                metadata: {
+                    thesisTitle,
+                    defenseDate
+                }
+            };
+
+            const result: SubmissionResponse =
+                await submit(payload);
+
+            console.log(result);
+
+            alert(
+                [
+                    "Submission successful",
+                    "",
+                    `Thesis ID: ${result.thesisId}`,
+                    `Hash: ${result.docHash}`,
+                    `Received At: ${result.receivedAt}`
+                ].join("\n")
+            );
+
+            form.reset();
+
+        } catch (err) {
+
+            console.error(err);
+
+            alert(
+                err instanceof Error
+                    ? err.message
+                    : "Submission failed"
+            );
+        }
+    });
+
 });

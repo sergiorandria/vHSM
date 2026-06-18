@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Student Form</title>
+    <title>Thesis Submission</title>
 
     <style>
         * {
@@ -20,11 +20,11 @@
         }
 
         form {
+            width: 450px;
             background: white;
             padding: 2rem;
             border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-            width: 350px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
 
             display: flex;
             flex-direction: column;
@@ -33,21 +33,12 @@
 
         h2 {
             text-align: center;
-            color: #333;
-            margin-bottom: 1rem;
         }
 
         input {
             padding: 0.8rem;
-            border: 1px solid #d0d7de;
+            border: 1px solid #ccc;
             border-radius: 8px;
-            font-size: 1rem;
-            transition: border-color 0.2s;
-        }
-
-        input:focus {
-            outline: none;
-            border-color: #2563eb;
         }
 
         button {
@@ -56,9 +47,7 @@
             border-radius: 8px;
             background: #2563eb;
             color: white;
-            font-size: 1rem;
             cursor: pointer;
-            transition: background 0.2s;
         }
 
         button:hover {
@@ -69,16 +58,46 @@
 <body>
 
 <form id="studentForm">
-    <h2>Student Form</h2>
 
-    <input id="name" type="text" placeholder="Name" required />
-    <input id="email" type="email" placeholder="Email" required />
-    <input id="grade" type="number" placeholder="Grade" required />
+    <h2>Thesis Submission</h2>
 
-    <button type="submit">Submit</button>
+    <input
+        id="thesisId"
+        type="text"
+        placeholder="Thesis ID"
+        required
+    />
+
+    <input
+        id="grade"
+        type="number"
+        min="0"
+        max="20"
+        step="0.01"
+        placeholder="Grade"
+        required
+    />
+
+    <input
+        id="thesisTitle"
+        type="text"
+        placeholder="Thesis Title"
+        required
+    />
+
+    <input
+        id="defenseDate"
+        type="date"
+        required
+    />
+
+    <button type="submit">
+        Submit
+    </button>
+
 </form>
 
-<script src="app.js"></script>
+<script type="module" src="/src/main.ts"></script>
 
 </body>
 </html>

@@ -135,7 +135,7 @@ std::string CSR::generate(
 
     // Add SANs if provided
     if (!sans.empty()) {
-        X509_EXTENSIONS* ext = nullptr;
+        STACK_OF(X509_EXTENSION)* ext = nullptr;
         X509V3_CTX ctx;
         X509V3_set_ctx_nodb(&ctx);
         X509V3_set_ctx(&ctx, nullptr, nullptr, req, nullptr, 0);
@@ -148,22 +148,22 @@ std::string CSR::generate(
 
         X509_EXTENSION* extItem = X509V3_EXT_conf_nid(nullptr, &ctx, OBJ_txt2nid("subjectAltName"), sanList.c_str());
         if (extItem) {
-            ext = X509_EXTENSIONS_new();
+            ext = sk_X509_EXTENSION_new_null();
             if (ext && sk_X509_EXTENSION_push(ext, extItem) != 1) {
-                X509_EXTENSIONS_free(ext);
+                sk_X509_EXTENSION_free(ext);
                 ext = nullptr;
             }
             X509_EXTENSION_free(extItem);
         }
 
         if (ext && X509_REQ_add_extensions(req, ext) != 1) {
-            X509_EXTENSIONS_free(ext);
+            sk_X509_EXTENSION_free(ext);
             X509_REQ_free(req);
             EVP_PKEY_free(pkey);
             throw std::runtime_error("Failed to add SAN extension");
         }
 
-        if (ext) X509_EXTENSIONS_free(ext);
+        if (ext) sk_X509_EXTENSION_free(ext);
     }
 
     // Sign the CSR

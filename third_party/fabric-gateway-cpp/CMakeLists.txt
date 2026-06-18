@@ -12,6 +12,9 @@ find_package(CURL REQUIRED)
 # Find OpenSSL
 find_package(OpenSSL REQUIRED)
 
+# Find nlohmann_json
+find_package(nlohmann_json 3.2.0 REQUIRED)
+
 # Include directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${OPENSSL_INCLUDE_DIR})
@@ -26,13 +29,15 @@ set(SOURCES
     src/fabric/crypto/csr.cpp
     src/fabric/crypto/x509.cpp
     src/fabric/identity/wallet.cpp
+    src/fabric/ca/httpclient.cpp
+    src/fabric/ca/ca_client.cpp
 )
 
 # Create library
 add_library(fabric-gateway-cpp STATIC ${SOURCES})
 
 # Link libraries
-target_link_libraries(fabric-gateway-cpp PRIVATE CURL::libcurl OpenSSL::Crypto)
+target_link_libraries(fabric-gateway-cpp PRIVATE CURL::libcurl OpenSSL::Crypto nlohmann_json::nlohmann_json)
 
 # Install headers
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ DESTINATION include/fabric-gateway-cpp FILES_MATCHING PATTERN "*.h")

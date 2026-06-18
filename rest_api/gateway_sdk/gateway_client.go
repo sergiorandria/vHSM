@@ -9,21 +9,19 @@ import (
 	"google.golang.org/grpc"
 )
 
-
-
 /**
  * @brief Exposes the internal Contract instance to allow executing explicit EvaluateTransaction or custom queries in test contexts.
  *
  * @return A pointer to the underlying fabric client.Contract.
  */
 func (gc *GatewayClient) GetContract() *client.Contract {
-    return gc.contract
+	return gc.contract
 }
 
 /**
  * @brief Struct encapsulating the Hyperledger Fabric Gateway SDK connections and handles.
  *
- * This structure decouples the low-level gRPC connection and identity management 
+ * This structure decouples the low-level gRPC connection and identity management
  * from the execution layer, allowing generic transaction routing to any contract.
  */
 type GatewayClient struct {
@@ -34,7 +32,7 @@ type GatewayClient struct {
 /**
  * @brief Initializes a new independent instance of GatewayClient with an explicit Identity and Signer.
  *
- * Establishes a secure bridge between the gRPC networking layer, the selected channel, 
+ * Establishes a secure bridge between the gRPC networking layer, the selected channel,
  * and the specific chaincode deployment using pre-configured timeout policies.
  *
  * @param grpcConn Active gRPC client connection interface pointing to the Gateway Peer.
@@ -50,7 +48,7 @@ func NewGatewayClient(grpcConn grpc.ClientConnInterface, channelName string, cha
 	// Connect to the Gateway SDK using the injected Identity and Signing configuration
 	gw, err := client.Connect(
 		id,
-		client.WithSign(sign), 
+		client.WithSign(sign),
 		client.WithClientConnection(grpcConn),
 		client.WithEvaluateTimeout(5*time.Second),
 		client.WithEndorseTimeout(15*time.Second),
