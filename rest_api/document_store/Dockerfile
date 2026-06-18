@@ -2,10 +2,8 @@
 FROM golang:1.26-bookworm AS builder
 
 # Install system dependencies required for compilation
-# libsofthsm2-dev is needed for PKCS#11 headers; gcc for CGO linking
 RUN apt-get update && apt-get install -y \
     libsofthsm2-dev \
-    opensc \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
@@ -18,16 +16,18 @@ RUN go mod download
 # Copy the source code
 COPY . .
 
-# Compile the binary
-# CGO_ENABLED=1 is mandatory for PKCS#11/HSM support
+# Compile the binary with CGO enabled
 RUN CGO_ENABLED=1 GOOS=linux go build -o main .
 
-# Create a lightweight runtime image
+
+# Stage 2: Create a lightweight runtime image
 FROM debian:bookworm-slim
 
-# Install only the runtime libraries required for SoftHSM2
+# Install the runtime libraries AND tools needed for initialization
 RUN apt-get update && apt-get install -y \
     libsofthsm2 \
+    softhsm2 \
+    opensc \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -35,8 +35,12 @@ WORKDIR /app
 # Copy the compiled binary from the builder stage
 COPY --from=builder /app/main .
 
+# Copy the initialization script from the host into the final image
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Expose the API port
 EXPOSE 8080
 
-# Launch the application
-CMD ["./main"]
+# Set the script as the container's entrypoint
+ENTRYPOINT ["/bin/sh", "/entrypoint.sh"]
