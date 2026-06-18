@@ -1,6 +1,6 @@
 #include <iostream>
-#include "include/fabric/ca/ca_client.h"
-#include "include/fabric/ca/httpclient.h"
+#include "../include/fabric/ca/ca_client.h"
+#include "../include/fabric/ca/httpclient.h"
 
 int main() {
     std::cout << "Testing CA Client instantiation..." << std::endl;
