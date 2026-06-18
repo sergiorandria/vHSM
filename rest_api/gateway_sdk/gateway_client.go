@@ -9,6 +9,17 @@ import (
 	"google.golang.org/grpc"
 )
 
+
+
+/**
+ * @brief Exposes the internal Contract instance to allow executing explicit EvaluateTransaction or custom queries in test contexts.
+ *
+ * @return A pointer to the underlying fabric client.Contract.
+ */
+func (gc *GatewayClient) GetContract() *client.Contract {
+    return gc.contract
+}
+
 /**
  * @brief Struct encapsulating the Hyperledger Fabric Gateway SDK connections and handles.
  *
