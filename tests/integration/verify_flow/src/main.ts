@@ -3,10 +3,7 @@ import type { SubmissionRequest } from "./models/SubmissionRequest";
 import type { SubmissionResponse } from "./models/SubmissionResponse";
 
 document.addEventListener("DOMContentLoaded", () => {
-
-    const form = document.getElementById(
-        "studentForm"
-    ) as HTMLFormElement | null;
+    const form = document.getElementById("studentForm") as HTMLFormElement | null;
 
     if (!form) {
         console.error("studentForm not found");
@@ -17,66 +14,44 @@ document.addEventListener("DOMContentLoaded", () => {
         e.preventDefault();
 
         try {
+            // Extraction AU MOMENT du clic sur Submit
+            const rawThesisId = (document.getElementById("ThesisId") as HTMLInputElement).value.trim();
+            
+            console.log("Valeur brute saisie dans le formulaire :", rawThesisId);
 
-            const thesisId =
-                (document.getElementById(
-                    "thesisId"
-                ) as HTMLInputElement).value.trim();
+            // Validation locale stricte avant l'envoi
+            const thesisIdPattern = /^[a-zA-Z0-9_-]{1,128}$/;
+            if (!thesisIdPattern.test(rawThesisId)) {
+                alert("Erreur locale : L'ID de la thèse est invalide. Lettres, chiffres, '-' et '_' uniquement.");
+                return;
+            }
 
-            const grade =
-                Number(
-                    (document.getElementById(
-                        "grade"
-                    ) as HTMLInputElement).value
-                );
-
-            const thesisTitle =
-                (document.getElementById(
-                    "thesisTitle"
-                ) as HTMLInputElement).value.trim();
-
-            const defenseDate =
-                (document.getElementById(
-                    "defenseDate"
-                ) as HTMLInputElement).value;
+            const fileInput = document.getElementById("Document") as HTMLInputElement;
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert("Erreur : Veuillez sélectionner un document.");
+                return;
+            }
+            const fileToUpload = fileInput.files[0];
 
             const payload: SubmissionRequest = {
-                thesisId,
-                grade,
-
-                metadata: {
-                    thesisTitle,
-                    defenseDate
+                ThesisId: rawThesisId,
+                Grade: parseFloat((document.getElementById("Grade") as HTMLInputElement).value),
+                Document: fileToUpload,
+                Metadata: {
+                    title: (document.getElementById("Title") as HTMLInputElement).value,
+                    date: (document.getElementById("Date") as HTMLInputElement).value
                 }
             };
 
-            const result: SubmissionResponse =
-                await submit(payload);
+            const result: SubmissionResponse = await submit(payload);
+            console.log("Succès serveur :", result);
 
-            console.log(result);
-
-            alert(
-                [
-                    "Submission successful",
-                    "",
-                    `Thesis ID: ${result.thesisId}`,
-                    `Hash: ${result.docHash}`,
-                    `Received At: ${result.receivedAt}`
-                ].join("\n")
-            );
-
+            alert("Submission successful !");
             form.reset();
 
         } catch (err) {
-
-            console.error(err);
-
-            alert(
-                err instanceof Error
-                    ? err.message
-                    : "Submission failed"
-            );
+            console.error("Erreur attrapée :", err);
+            alert(err instanceof Error ? err.message : "Submission failed");
         }
     });
-
 });
