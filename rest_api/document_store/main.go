@@ -23,6 +23,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/miekg/pkcs11"
+
+	"github.com/gin-contrib/cors"
 )
 
 // ---------------------------------------------------------------------------
@@ -220,20 +222,31 @@ func main() {
 	defer hsmService.Close()
 
 	r := gin.Default()
+
+	config := cors.DefaultConfig()
+	config.AllowOrigins = []string{"http://localhost:5173"} // Domaines autorisés
+	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
+	config.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"}
+	config.AllowCredentials = true // Autorise l'envoi de cookies ou d'en-têtes d'authentification
+	config.MaxAge = 12 * time.Hour // Durée de mise en cache des requêtes OPTIONS (preflight)
+
+	r.Use(cors.New(config))
 	// Limit the request body size to prevent a large upload from exhausting
 	// server memory.
 	r.MaxMultipartMemory = maxBodyBytes
 
-	r.POST("/api/v1/encrypt", func(c *gin.Context) {
+	r.POST("/api/v1/submissions", func(c *gin.Context) {
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBodyBytes)
 
-		thesisID := c.PostForm("thesisId")
-		if err := validateThesisID(thesisID); err != nil {
+		thesis_id := c.PostForm("ThesisId")
+		grade := c.PostForm("Grade")
+		metadata := c.PostForm("Metadata")
+		if err := validateThesisID(thesis_id); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
-		file, header, err := c.Request.FormFile("document")
+		file, header, err := c.Request.FormFile("Document")
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "No file provided"})
 			return
@@ -266,7 +279,7 @@ func main() {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 		defer cancel()
 
-		err = minioService.UploadThesis(ctx, bucketName, header.Filename, bytes.NewReader(payload), int64(len(payload)), thesisID)
+		err = minioService.UploadThesis(ctx, bucketName, header.Filename, bytes.NewReader(payload), int64(len(payload)), thesis_id)
 		if err != nil {
 			log.Printf("MinIO upload error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload to storage"})
@@ -276,9 +289,11 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{
 			"status": "Success",
 			"ledger": map[string]interface{}{
-				"thesisId":      thesisID,
+				"thesisId":      thesis_id,
+				"grade":         grade,
 				"plaintextHash": hex.EncodeToString(plaintextHash[:]),
 				"time":          time.Now().Unix(),
+				"metadata":      metadata,
 			},
 		})
 	})
