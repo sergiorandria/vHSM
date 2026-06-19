@@ -18,6 +18,8 @@ objectstore.backend = file
 log.level = INFO
 EOF
 
+export SOFTHSM2_CONF=/etc/softhsm/softhsm2.conf
+
 # 2) Initialize the token only if it does not already exist
 if ! softhsm2-util --show-slots | grep -q "${HSM_TOKEN_LABEL}"; then
     echo "Initializing token ${HSM_TOKEN_LABEL}..."
