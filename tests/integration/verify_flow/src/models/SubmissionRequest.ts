@@ -1,5 +1,6 @@
 export interface SubmissionRequest {
-    thesisId: string;
-    grade: number;
-    metadata: Record<string, unknown>;
+    ThesisId: string;
+    Grade: number;
+    Document: File;
+    Metadata: Record<string, unknown>;
 }
