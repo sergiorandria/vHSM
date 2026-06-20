@@ -60,7 +60,7 @@ func main() {
 	// PRÉ-REQUIS OPTIONNEL : Remplir le registre si ce n'est pas déjà fait
 	// =======================================================================
 	fmt.Println("\n[Étape Préparatoire] Initialisation du registre avec InitLedger...")
-	_, _ = gatewayClient.GetContract().SubmitTransaction("InitLedger") 
+	_, _ = gatewayClient.GetContract().SubmitTransaction("InitLedger")
 	// On ignore volontairement l'erreur ici car si les données existent déjà, Fabric renverra une erreur.
 
 	// =======================================================================

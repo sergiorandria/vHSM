@@ -16,8 +16,14 @@ export async function submit(
     });
 
     if (!response.ok) {
-        const errorMessage = await response.text();
-        throw new Error(errorMessage);
+        let errorMessage = await response.text();
+        try {
+            const jsonErr = JSON.parse(errorMessage);
+            if (jsonErr.error) errorMessage = jsonErr.error;
+        } catch (e) {
+            // response not JSON; keep raw text
+        }
+        throw new Error(`HTTP ${response.status}: ${errorMessage}`);
     }
 
     const result: SubmissionResponse = await response.json();
