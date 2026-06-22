@@ -1,8 +1,9 @@
-package main
+/*package main
 
 import (
 	"fmt"
 	"regexp"
+	"electronic_signature/internal/models"
 )
 
 const (
@@ -16,7 +17,7 @@ var thesisIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 // ValidateSubmission checks structural and business-rule constraints on a
 // parsed submission before it is hashed and signed. Returns a descriptive
 // error on the first failed check.
-func ValidateSubmission(req SubmissionRequest) error {
+func ValidateSubmission(req models.SubmissionRequest) error {
 	if !thesisIDPattern.MatchString(req.ThesisID) {
 		return fmt.Errorf("thesisId must be 1-64 chars, alphanumeric/dash/underscore only")
 	}
@@ -47,3 +48,4 @@ func ValidateSubmission(req SubmissionRequest) error {
 
 	return nil
 }
+*/
