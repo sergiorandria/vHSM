@@ -498,8 +498,8 @@ for ((c=1; c<=NUM_CHANNELS; c++)); do
     CH_NAME_VAR="CH${c}_NAME"
     CH_ORGS_VAR="CH${c}_ORGS"
     
-    echo "-> Génération de la transaction du canal : ${!CH_NAME_VAR}..."
-    configtxgen -profile Profile_${!CH_NAME_VAR} -outputCreateChannelTx ${ARTIFACTS_DIR}/${!CH_NAME_VAR}.tx -channelID ${!CH_NAME_VAR}
+    echo "-> Génération de la transaction du canal : ${CH_NAME_VAR}..."
+    configtxgen -profile Profile_${!CH_NAME_VAR} -outputCreateChannelTx ${ARTIFACTS_DIR}/${!CH_NAME_VAR}.tx -channelID ${CH_NAME_VAR}
     
     for org_idx in ${!CH_ORGS_VAR}; do
         NAME_VAR="ORG${org_idx}_NAME"

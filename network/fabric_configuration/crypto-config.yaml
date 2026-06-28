@@ -1,0 +1,14 @@
+OrdererOrgs:
+  - Name: Orderer
+    Domain: university.com
+    Specs:
+      - Hostname: orderer
+PeerOrgs:
+  - Name: misa
+    Domain: misa.university.com
+    EnableNodeOUs: true
+    Specs:
+      - Hostname: peer0
+      - Hostname: cc-peer0
+    Users:
+      Count: 1

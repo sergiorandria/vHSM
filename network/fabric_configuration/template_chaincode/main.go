@@ -13,13 +13,13 @@ func main() {
 	address := os.Getenv("CHAINCODE_SERVER_ADDRESS")
 
 	if ccID == "" || address == "" {
-		log.Fatal("❌ CORE_CHAINCODE_ID_NAME et CHAINCODE_SERVER_ADDRESS sont requis")
+		log.Fatal("CORE_CHAINCODE_ID_NAME or CHAINCODE_SERVER_ADDRESS env is not set")
 	}
 
 	// On enregistre ThesisContract (défini dans chaincode.go)
 	chaincode, err := contractapi.NewChaincode(&ThesisContract{})
 	if err != nil {
-		log.Fatalf("❌ Erreur création chaincode : %v", err)
+		log.Fatalf("Error creating new chaincode with the thesis contract : %v", err)
 	}
 
 	server := &shim.ChaincodeServer{
@@ -27,14 +27,14 @@ func main() {
 		Address: address,
 		CC:      chaincode,
 		TLSProps: shim.TLSProperties{
-			Disabled: true, // passez à false si TLS activé dans connection.json
+			Disabled: true,
 		},
 	}
 
-	log.Printf("🚀 ThesisContract CCaaS démarré sur %s", address)
-	log.Printf("   Package ID : %s", ccID)
-
 	if err := server.Start(); err != nil {
-		log.Fatalf("❌ Erreur démarrage serveur : %v", err)
+		log.Fatalf("Cannot start the server : %v", err)
 	}
+
+	log.Printf("ThesisContract CCaaS started at %s", address)
+	log.Printf("Package ID : %s", ccID)
 }
