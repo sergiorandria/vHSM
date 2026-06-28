@@ -86,6 +86,7 @@ func (gc *GatewayClient) Close() error {
  * @return An error if proposal generation, peer endorsement, or orderer submission fails, otherwise nil.
  */
 func (gc *GatewayClient) ExecuteTransaction(chaincodeFuncName string, args ...string) error {
+
 	// 1. Dynamically prepare the transaction proposal using the provided variadic arguments
 	proposal, err := gc.contract.NewProposal(
 		chaincodeFuncName,
