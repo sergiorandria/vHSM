@@ -4,7 +4,6 @@ Executer le script ``fabricConfigurationv2.bash`` et suivre les instruction
 **Limitation**:
 Dans cette version:
 - **ne supporte pas encors le vHSM**
-- L'integration du chaincode n'est pas encors pris en compte(query, gateway, ...)
 
 
 **REMARQUE**:
@@ -62,3 +61,4 @@ verification de la taille du canal
 ```bash
 cmd : docker exec cli.org1.example.com peer channel getinfo -c canaltest
 ```
+
