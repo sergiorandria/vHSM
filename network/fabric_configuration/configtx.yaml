@@ -1,0 +1,89 @@
+
+Organizations:
+    - &OrdererOrg
+        Name: OrdererOrg
+        ID: OrdererMSP
+        MSPDir: crypto-config/ordererOrganizations/university.com/msp
+        Policies:
+            Readers: {Type: Signature, Rule: "OR('OrdererMSP.member')"}
+            Writers: {Type: Signature, Rule: "OR('OrdererMSP.member')"}
+            Admins:  {Type: Signature, Rule: "OR('OrdererMSP.admin')"}
+    - &misa
+        Name: misa
+        ID: misaMSP
+        MSPDir: crypto-config/peerOrganizations/misa.university.com/msp
+        Policies:
+            Readers: {Type: Signature, Rule: "OR('misaMSP.admin', 'misaMSP.peer', 'misaMSP.client')"}
+            Writers: {Type: Signature, Rule: "OR('misaMSP.admin', 'misaMSP.client')"}
+            Admins:  {Type: Signature, Rule: "OR('misaMSP.admin')"}
+        AnchorPeers:
+            - Host: peer0.misa.university.com
+              Port: 7051
+
+Capabilities:
+    Channel: &ChannelCapabilities
+        V2_0: true
+    Orderer: &OrdererCapabilities
+        V2_0: true
+    Application: &ApplicationCapabilities
+        V2_0: true
+
+Channel: &ChannelDefaults
+    Policies:
+        Readers: {Type: ImplicitMeta, Rule: "ANY Readers"}
+        Writers: {Type: ImplicitMeta, Rule: "ANY Writers"}
+        Admins:  {Type: ImplicitMeta, Rule: "MAJORITY Admins"}
+
+Application: &ApplicationDefaults
+    Organizations:
+    Policies:
+        LifecycleEndorsement: {Type: ImplicitMeta, Rule: "MAJORITY Endorsements"}
+        Endorsement:          {Type: ImplicitMeta, Rule: "MAJORITY Endorsements"}
+        Readers:              {Type: ImplicitMeta, Rule: "ANY Readers"}
+        Writers:              {Type: ImplicitMeta, Rule: "ANY Writers"}
+        Admins:               {Type: ImplicitMeta, Rule: "MAJORITY Admins"}
+    Capabilities:
+        <<: *ApplicationCapabilities
+
+Orderer: &OrdererDefaults
+    OrdererType: etcdraft
+    Addresses:
+        - orderer.university.com:7050
+    BatchTimeout: 2s
+    BatchSize:
+        MaxMessageCount: 100
+        AbsoluteMaxBytes: 99 MB
+        PreferredMaxBytes: 512 KB
+    Organizations:
+    Policies:
+        Readers:         {Type: ImplicitMeta, Rule: "ANY Readers"}
+        Writers:         {Type: ImplicitMeta, Rule: "ANY Writers"}
+        Admins:          {Type: ImplicitMeta, Rule: "MAJORITY Admins"}
+        BlockValidation: {Type: ImplicitMeta, Rule: "ANY Writers"}
+
+Profiles:
+    MultiOrgsOrdererGenesis:
+        <<: *ChannelDefaults
+        Capabilities: *ChannelCapabilities
+        Orderer:
+            <<: *OrdererDefaults
+            EtcdRaft:
+                Consenters:
+                    - Host: orderer.university.com
+                      Port: 7050
+                      ClientTLSCert: crypto-config/ordererOrganizations/university.com/orderers/orderer.university.com/tls/server.crt
+                      ServerTLSCert: crypto-config/ordererOrganizations/university.com/orderers/orderer.university.com/tls/server.crt
+            Organizations: [*OrdererOrg]
+            Capabilities: *OrdererCapabilities
+        Consortiums:
+            SampleConsortium:
+                Organizations:
+                    - *misa
+    Profile_:
+        Consortium: SampleConsortium
+        <<: *ChannelDefaults
+        Capabilities: *ChannelCapabilities
+        Application:
+            <<: *ApplicationDefaults
+            Organizations:
+            Capabilities: *ApplicationCapabilities
