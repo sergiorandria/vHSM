@@ -62,3 +62,4 @@ verification de la taille du canal
 ```bash
 cmd : docker exec cli.org1.example.com peer channel getinfo -c canaltest
 ```
+
