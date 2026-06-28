@@ -88,7 +88,10 @@ func (gc *GatewayClient) Close() error {
 func (gc *GatewayClient) ExecuteTransaction(chaincodeFuncName string, args ...string) error {
 
 	// 1. Dynamically prepare the transaction proposal using the provided variadic arguments
-	proposal, err := gc.contract.NewProposal(
+	/**
+	 * @remark 'contract'
+	 */
+	proposal, err := gc.GetContract().NewProposal(
 		chaincodeFuncName,
 		client.WithArguments(args...),
 	)
