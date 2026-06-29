@@ -88,5 +88,4 @@ std::optional<LedgerEntry> LedgerClient::get_record(const std::string& record_id
         return std::nullopt;
     }
 }
-
 } // namespace vhsm::ledger
