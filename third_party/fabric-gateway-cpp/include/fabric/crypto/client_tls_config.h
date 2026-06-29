@@ -12,7 +12,7 @@ struct ClienTLSConfig {
     bool enabled; 
     std::byte* certFiles; // A list of comma separated PEM-encoded trusted certificate bytes
     KeyCertFiles client; 
-    x509::X509Pool<>* tlsCertPool;
+    x509::X509CertificatePool<>* tlsCertPool;
 };
 } // namespace fabric::crypto
 
