@@ -35,10 +35,10 @@ services:
       - ./crypto-config/peerOrganizations/misa.university.com/peers/peer0.misa.university.com/msp:/etc/hyperledger/fabric/msp:ro
       - ./crypto-config/peerOrganizations/misa.university.com/peers/peer0.misa.university.com/tls:/etc/hyperledger/fabric/tls:ro
       - ./crypto-config/ordererOrganizations/university.com/orderers/orderer.university.com/tls:/etc/hyperledger/orderer/tls:ro
-      - ./channel-artifacts:/var/hyperledger/orderer/channel-artifacts:ro
-      - ./peer-data/peer0.misa.university.com:/var/hyperledger/ledger
+      - ./channel-artifacts:/var/hyperledger/orderer/channel-artifacts
+      - ./peer-data/peer0.misa.university.com:/var/hyperledger/production
     ports:
-      - "7051:7051"
+      - "7052:7051"
     networks:
       - fabric
     depends_on:
@@ -73,8 +73,6 @@ services:
     depends_on:
       - orderer.university.com
       - peer0.misa.university.com
-    extra_hosts:
-      - "orderer.university.com:172.18.0.4"
 
   orderer.university.com:
     image: hyperledger/fabric-orderer:2.5
@@ -86,11 +84,17 @@ services:
       ORDERER_GENERAL_LOCALMSPID: OrdererMSP
       ORDERER_GENERAL_LOCALMSPDIR: /var/hyperledger/orderer/msp
       ORDERER_GENERAL_TLS_ENABLED: true
+      ORDERER_ADMIN_LISTENADDRESS: 0.0.0.0:7053
+      ORDERER_ADMIN_TLS_ENABLED: true
+      ORDERER_ADMIN_TLS_PRIVATEKEY: /var/hyperledger/orderer/tls/server.key
+      ORDERER_ADMIN_TLS_CERTIFICATE: /var/hyperledger/orderer/tls/server.crt
+      ORDERER_ADMIN_TLS_ROOTCAS: '[/var/hyperledger/orderer/tls/ca.crt]'
+      ORDERER_ADMIN_TLS_CLIENTAUTHREQUIRED: true
+      ORDERER_ADMIN_TLS_CLIENTROOTCAS: '[/var/hyperledger/orderer/tls/ca.crt]'
       ORDERER_GENERAL_TLS_PRIVATEKEY: /var/hyperledger/orderer/tls/server.key
       ORDERER_GENERAL_TLS_CERTIFICATE: /var/hyperledger/orderer/tls/server.crt
       ORDERER_GENERAL_TLS_ROOTCAS: '[/var/hyperledger/orderer/tls/ca.crt]'
-      ORDERER_GENERAL_BOOTSTRAPMETHOD: file
-      ORDERER_GENERAL_BOOTSTRAPFILE: /var/hyperledger/orderer/channel-artifacts/genesis.block
+      ORDERER_GENERAL_BOOTSTRAPMETHOD: none
       ORDERER_CHANNELPARTICIPATION_ENABLED: true
     volumes:
       - ./crypto-config/ordererOrganizations/university.com/orderers/orderer.university.com/msp:/var/hyperledger/orderer/msp:ro
@@ -99,8 +103,21 @@ services:
       - orderer.university.com:/var/hyperledger/production/orderer
     ports:
       - "7050:7050"
+      - "7053:7053"
     networks:
       - fabric
+
+  cc-peer0.misa.university.com:
+    image: thesis-ccaas:1.0
+    container_name: cc-peer0.misa.university.com
+    environment:
+      CORE_CHAINCODE_ID_NAME: thesis_1.0:b6f5fd8d25daefd388f14e51d2d14870f4b8ce733900a07b388f01a0352696f3
+      CHAINCODE_SERVER_ADDRESS: 0.0.0.0:9999
+      CHAINCODE_TLS_DISABLED: "true"
+    networks:
+      - fabric
+    expose:
+      - "9999"
 
 volumes:
   peer0.misa.university.com:

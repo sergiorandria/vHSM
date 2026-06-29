@@ -8,14 +8,16 @@ Organizations:
             Readers: {Type: Signature, Rule: "OR('OrdererMSP.member')"}
             Writers: {Type: Signature, Rule: "OR('OrdererMSP.member')"}
             Admins:  {Type: Signature, Rule: "OR('OrdererMSP.admin')"}
+            
     - &misa
         Name: misa
         ID: misaMSP
         MSPDir: crypto-config/peerOrganizations/misa.university.com/msp
         Policies:
-            Readers: {Type: Signature, Rule: "OR('misaMSP.admin', 'misaMSP.peer', 'misaMSP.client')"}
-            Writers: {Type: Signature, Rule: "OR('misaMSP.admin', 'misaMSP.client')"}
-            Admins:  {Type: Signature, Rule: "OR('misaMSP.admin')"}
+            Readers:     {Type: Signature, Rule: "OR('misaMSP.admin', 'misaMSP.peer', 'misaMSP.client')"}
+            Writers:     {Type: Signature, Rule: "OR('misaMSP.admin', 'misaMSP.client')"}
+            Admins:      {Type: Signature, Rule: "OR('misaMSP.admin')"}
+            Endorsement: {Type: Signature, Rule: "OR('misaMSP.peer')"}
         AnchorPeers:
             - Host: peer0.misa.university.com
               Port: 7051
@@ -37,8 +39,8 @@ Channel: &ChannelDefaults
 Application: &ApplicationDefaults
     Organizations:
     Policies:
-        LifecycleEndorsement: {Type: ImplicitMeta, Rule: "MAJORITY Endorsements"}
-        Endorsement:          {Type: ImplicitMeta, Rule: "MAJORITY Endorsements"}
+        LifecycleEndorsement: {Type: ImplicitMeta, Rule: "MAJORITY Endorsement"}
+        Endorsement:          {Type: ImplicitMeta, Rule: "MAJORITY Endorsement"}
         Readers:              {Type: ImplicitMeta, Rule: "ANY Readers"}
         Writers:              {Type: ImplicitMeta, Rule: "ANY Writers"}
         Admins:               {Type: ImplicitMeta, Rule: "MAJORITY Admins"}
@@ -80,9 +82,18 @@ Profiles:
                 Organizations:
                     - *misa
     Profile_canaltest:
-        Consortium: SampleConsortium
         <<: *ChannelDefaults
         Capabilities: *ChannelCapabilities
+        Orderer:
+            <<: *OrdererDefaults
+            EtcdRaft:
+                Consenters:
+                    - Host: orderer.university.com
+                      Port: 7050
+                      ClientTLSCert: crypto-config/ordererOrganizations/university.com/orderers/orderer.university.com/tls/server.crt
+                      ServerTLSCert: crypto-config/ordererOrganizations/university.com/orderers/orderer.university.com/tls/server.crt
+            Organizations: [*OrdererOrg]
+            Capabilities: *OrdererCapabilities
         Application:
             <<: *ApplicationDefaults
             Organizations:

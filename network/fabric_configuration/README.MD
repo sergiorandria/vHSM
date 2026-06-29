@@ -1,5 +1,22 @@
 # Création d'un Ledger Node (Blockchain Privée) avec Hyperledger Fabric
 
+
+Before doing anything stupid! Run this: 
+```bash
+# Stop and remove everything                                                                                                              
+docker-compose down -v
+
+# Remove all generated files
+rm -rf crypto-config channel-artifacts network.env configtx.yaml docker-compose.yaml crypto-config.yaml
+
+# Remove any leftover containers
+docker rm -f $(docker ps -aq --filter "name=university") 2>/dev/null
+
+# Remove peer/orderer data volumes
+docker volume prune -f
+```
+
+
 Ce dépôt contient des scripts automatisés pour déployer un réseau Hyperledger Fabric complet (ledger node/blockchain privée) incluant :
 - Génération de la configuration réseau (organisations, peers, orderer, canaux)
 - Déploiement des conteneurs Docker (peer, orderer, CLI, chaincode servers)

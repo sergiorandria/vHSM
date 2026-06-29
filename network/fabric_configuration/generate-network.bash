@@ -205,6 +205,7 @@ for ((i=1;i<=NUM_ORGS;i++)); do
   NAME_VAR="ORG${i}_NAME"
   DOMAIN_VAR="ORG${i}_DOMAIN"
   PEERS_VAR="ORG${i}_PEERS"
+  MSP_VAR="ORG${i}_MSP"
 
   for ((p=0;p<${!PEERS_VAR};p++)); do
     PEER_HOST_VAR="ORG${i}_PEER${p}_HOST"
@@ -224,7 +225,7 @@ for ((i=1;i<=NUM_ORGS;i++)); do
       CORE_PEER_LISTENADDRESS: 0.0.0.0:${!PEER_PORT_VAR}
       CORE_PEER_CHAINCODEADDRESS: ${!PEER_HOST_VAR}:7052
       CORE_PEER_CHAINCODELISTENADDRESS: 0.0.0.0:7052
-      CORE_PEER_LOCALMSPID: ${!NAME_VAR}MSP
+      CORE_PEER_LOCALMSPID: ${!MSP_VAR}
       CORE_PEER_MSPCONFIGPATH: /etc/hyperledger/fabric/msp
       CORE_PEER_TLS_ENABLED: true
       CORE_PEER_TLS_CERT_FILE: /etc/hyperledger/fabric/tls/server.crt
@@ -232,7 +233,7 @@ for ((i=1;i<=NUM_ORGS;i++)); do
       CORE_PEER_TLS_ROOTCERT_FILE: /etc/hyperledger/fabric/tls/ca.crt
       ORDERER_CA: /etc/hyperledger/orderer/tls/ca.crt
       FABRIC_CFG_PATH: /etc/hyperledger/fabric
-      CORE_PEER_GOSSIP_BOOTSTRAP: ${!PEER_HOST_VAR}:7051
+      CORE_PEER_GOSSIP_BOOTSTRAP: peer0.${!DOMAIN_VAR}:${!PEER_PORT_VAR}
       CORE_PEER_GOSSIP_EXTERNALENDPOINT: ${!PEER_HOST_VAR}:${!PEER_PORT_VAR}
       CORE_PEER_GOSSIP_USELEADERELECTION: "true"
       CORE_PEER_GOSSIP_ORGLEADER: "false"
@@ -242,8 +243,8 @@ for ((i=1;i<=NUM_ORGS;i++)); do
       - ${CRYPTO_CONFIG_DIR}/peerOrganizations/${!DOMAIN_VAR}/peers/peer${p}.${!DOMAIN_VAR}/msp:/etc/hyperledger/fabric/msp:ro
       - ${CRYPTO_CONFIG_DIR}/peerOrganizations/${!DOMAIN_VAR}/peers/peer${p}.${!DOMAIN_VAR}/tls:/etc/hyperledger/fabric/tls:ro
       - ${CRYPTO_CONFIG_DIR}/ordererOrganizations/${ORDERER_DOMAIN}/orderers/orderer.${ORDERER_DOMAIN}/tls:/etc/hyperledger/orderer/tls:ro
-      - ${CHANNEL_ARTIFACTS_DIR}:/var/hyperledger/orderer/channel-artifacts:ro
-      - ${PEER_DATA_ROOT}/peer${p}.${!DOMAIN_VAR}:/var/hyperledger/ledger
+      - ${CHANNEL_ARTIFACTS_DIR}:/var/hyperledger/orderer/channel-artifacts
+      - ${PEER_DATA_ROOT}/peer${p}.${!DOMAIN_VAR}:/var/hyperledger/production
     ports:
       - "${!PEER_EXTERNAL_PORT_VAR}:${!PEER_PORT_VAR}"
     networks:
@@ -312,11 +313,17 @@ cat <<EOF >> $DOCKER_FILE
       ORDERER_GENERAL_LOCALMSPID: OrdererMSP
       ORDERER_GENERAL_LOCALMSPDIR: /var/hyperledger/orderer/msp
       ORDERER_GENERAL_TLS_ENABLED: true
+      ORDERER_ADMIN_LISTENADDRESS: 0.0.0.0:7053
+      ORDERER_ADMIN_TLS_ENABLED: true
+      ORDERER_ADMIN_TLS_PRIVATEKEY: /var/hyperledger/orderer/tls/server.key
+      ORDERER_ADMIN_TLS_CERTIFICATE: /var/hyperledger/orderer/tls/server.crt
+      ORDERER_ADMIN_TLS_ROOTCAS: '[/var/hyperledger/orderer/tls/ca.crt]'
+      ORDERER_ADMIN_TLS_CLIENTAUTHREQUIRED: true
+      ORDERER_ADMIN_TLS_CLIENTROOTCAS: '[/var/hyperledger/orderer/tls/ca.crt]'
       ORDERER_GENERAL_TLS_PRIVATEKEY: /var/hyperledger/orderer/tls/server.key
       ORDERER_GENERAL_TLS_CERTIFICATE: /var/hyperledger/orderer/tls/server.crt
       ORDERER_GENERAL_TLS_ROOTCAS: '[/var/hyperledger/orderer/tls/ca.crt]'
-      ORDERER_GENERAL_BOOTSTRAPMETHOD: file
-      ORDERER_GENERAL_BOOTSTRAPFILE: /var/hyperledger/orderer/channel-artifacts/genesis.block
+      ORDERER_GENERAL_BOOTSTRAPMETHOD: none
       ORDERER_CHANNELPARTICIPATION_ENABLED: true
     volumes:
       - ${CRYPTO_CONFIG_DIR}/ordererOrganizations/${ORDERER_DOMAIN}/orderers/orderer.${ORDERER_DOMAIN}/msp:/var/hyperledger/orderer/msp:ro
@@ -325,6 +332,7 @@ cat <<EOF >> $DOCKER_FILE
       - orderer.${ORDERER_DOMAIN}:/var/hyperledger/production/orderer
     ports:
       - "7050:7050"
+      - "7053:7053"
     networks:
       - fabric
 
@@ -364,6 +372,7 @@ Organizations:
             Readers: {Type: Signature, Rule: "OR('OrdererMSP.member')"}
             Writers: {Type: Signature, Rule: "OR('OrdererMSP.member')"}
             Admins:  {Type: Signature, Rule: "OR('OrdererMSP.admin')"}
+            
 EOF
 
 for ((i=1; i<=NUM_ORGS; i++)); do
@@ -371,15 +380,16 @@ for ((i=1; i<=NUM_ORGS; i++)); do
     MSP_VAR="ORG${i}_MSP"
     DOMAIN_VAR="ORG${i}_DOMAIN"
 
-    cat << EOF >> $CONFIG_FILE
+cat << EOF >> $CONFIG_FILE
     - &${!NAME_VAR}
         Name: ${!NAME_VAR}
         ID: ${!MSP_VAR}
         MSPDir: crypto-config/peerOrganizations/${!DOMAIN_VAR}/msp
         Policies:
-            Readers: {Type: Signature, Rule: "OR('${!MSP_VAR}.admin', '${!MSP_VAR}.peer', '${!MSP_VAR}.client')"}
-            Writers: {Type: Signature, Rule: "OR('${!MSP_VAR}.admin', '${!MSP_VAR}.client')"}
-            Admins:  {Type: Signature, Rule: "OR('${!MSP_VAR}.admin')"}
+            Readers:     {Type: Signature, Rule: "OR('${!MSP_VAR}.admin', '${!MSP_VAR}.peer', '${!MSP_VAR}.client')"}
+            Writers:     {Type: Signature, Rule: "OR('${!MSP_VAR}.admin', '${!MSP_VAR}.client')"}
+            Admins:      {Type: Signature, Rule: "OR('${!MSP_VAR}.admin')"}
+            Endorsement: {Type: Signature, Rule: "OR('${!MSP_VAR}.peer')"}
         AnchorPeers:
             - Host: peer0.${!DOMAIN_VAR}
               Port: 7051
@@ -405,8 +415,8 @@ Channel: &ChannelDefaults
 Application: &ApplicationDefaults
     Organizations:
     Policies:
-        LifecycleEndorsement: {Type: ImplicitMeta, Rule: "MAJORITY Endorsements"}
-        Endorsement:          {Type: ImplicitMeta, Rule: "MAJORITY Endorsements"}
+        LifecycleEndorsement: {Type: ImplicitMeta, Rule: "MAJORITY Endorsement"}
+        Endorsement:          {Type: ImplicitMeta, Rule: "MAJORITY Endorsement"}
         Readers:              {Type: ImplicitMeta, Rule: "ANY Readers"}
         Writers:              {Type: ImplicitMeta, Rule: "ANY Writers"}
         Admins:               {Type: ImplicitMeta, Rule: "MAJORITY Admins"}
@@ -458,9 +468,18 @@ for ((c=1; c<=NUM_CHANNELS; c++)); do
     CH_ORGS_VAR="CH${c}_ORGS"
     
     echo "    Profile_${!CH_NAME_VAR}:" >> $CONFIG_FILE
-    echo "        Consortium: SampleConsortium" >> $CONFIG_FILE
     echo "        <<: *ChannelDefaults" >> $CONFIG_FILE
     echo "        Capabilities: *ChannelCapabilities" >> $CONFIG_FILE
+    echo "        Orderer:" >> $CONFIG_FILE
+    echo "            <<: *OrdererDefaults" >> $CONFIG_FILE
+    echo "            EtcdRaft:" >> $CONFIG_FILE
+    echo "                Consenters:" >> $CONFIG_FILE
+    echo "                    - Host: orderer.${ORDERER_DOMAIN}" >> $CONFIG_FILE
+    echo "                      Port: 7050" >> $CONFIG_FILE
+    echo "                      ClientTLSCert: crypto-config/ordererOrganizations/${ORDERER_DOMAIN}/orderers/orderer.${ORDERER_DOMAIN}/tls/server.crt" >> $CONFIG_FILE
+    echo "                      ServerTLSCert: crypto-config/ordererOrganizations/${ORDERER_DOMAIN}/orderers/orderer.${ORDERER_DOMAIN}/tls/server.crt" >> $CONFIG_FILE
+    echo "            Organizations: [*OrdererOrg]" >> $CONFIG_FILE
+    echo "            Capabilities: *OrdererCapabilities" >> $CONFIG_FILE
     echo "        Application:" >> $CONFIG_FILE
     echo "            <<: *ApplicationDefaults" >> $CONFIG_FILE
     echo "            Organizations:" >> $CONFIG_FILE
@@ -481,38 +500,55 @@ echo "==> Préparation de la compilation..."
 export FABRIC_CFG_PATH=${PWD}
 mkdir -p $ARTIFACTS_DIR
 
-# Sécurité finale d'accès au fichier TLS avant exécution
-REQUIRED_CERT="crypto-config/ordererOrganizations/${ORDERER_DOMAIN}/orderers/orderer.${ORDERER_DOMAIN}/tls/server.crt"
-if [ ! -f "$REQUIRED_CERT" ]; then
-    echo "❌ Erreur critique : Le certificat TLS '$REQUIRED_CERT' est manquant."
+if [ ! -d "crypto-config" ]; then
+    echo "❌ Erreur critique : le dossier 'crypto-config/' est manquant. Vérifiez que cryptogen s'est exécuté correctement."
     exit 1
 fi
 
 echo "==> Compilation des fichiers binaires..."
 
-# 1. Génération du Bloc de Genèse (System Channel)
-configtxgen -profile MultiOrgsOrdererGenesis -channelID sys-channel -outputBlock ${ARTIFACTS_DIR}/genesis.block
-
-# 2. Génération des transactions de canaux applicatifs et ancres
+# Génération des blocs de genèse des canaux applicatifs (Fabric 2.5 / channel participation)
+# Note: en Fabric 2.5 avec bootstrapmethod=none, il n'y a plus de system channel.
+# Chaque canal est rejoint via 'osnadmin channel join --channelID <id> --config-block <block>'
+# après le démarrage de l'orderer. Le bloc de genèse est généré ici pour chaque canal.
 for ((c=1; c<=NUM_CHANNELS; c++)); do
     CH_NAME_VAR="CH${c}_NAME"
     CH_ORGS_VAR="CH${c}_ORGS"
-    
-    echo "-> Génération de la transaction du canal : ${CH_NAME_VAR}..."
-    configtxgen -profile Profile_${!CH_NAME_VAR} -outputCreateChannelTx ${ARTIFACTS_DIR}/${!CH_NAME_VAR}.tx -channelID ${CH_NAME_VAR}
-    
+
+    echo "-> Génération du bloc de genèse du canal : ${!CH_NAME_VAR}..."
+    configtxgen -profile Profile_${!CH_NAME_VAR} \
+        -outputBlock ${ARTIFACTS_DIR}/${!CH_NAME_VAR}_genesis.block \
+        -channelID ${!CH_NAME_VAR}
+
+    echo "   ✓ Bloc de genèse : ${ARTIFACTS_DIR}/${!CH_NAME_VAR}_genesis.block"
+    echo ""
+    echo "   ℹ️  Pour rejoindre ce canal après 'docker-compose up -d', exécutez :"
+    echo "      osnadmin channel join --channelID ${!CH_NAME_VAR} \\"
+    echo "        --config-block ${ARTIFACTS_DIR}/${!CH_NAME_VAR}_genesis.block \\"
+    echo "        -o localhost:7053 --ca-file <orderer-tls-ca> \\"
+    echo "        --client-cert <admin-tls-cert> --client-key <admin-tls-key>"
+    echo ""
+    echo "   ℹ️  Pour mettre à jour les Anchor Peers en Fabric 2.5 (via config update) :"
     for org_idx in ${!CH_ORGS_VAR}; do
         NAME_VAR="ORG${org_idx}_NAME"
         MSP_VAR="ORG${org_idx}_MSP"
-        echo "    └─> Anchor Peer pour ${!NAME_VAR} (${!MSP_VAR})"
-        
-        # FIX : Utilisation du nom d'organisation (${!NAME_VAR}) pour -asOrg au lieu du MSP
-        configtxgen -profile Profile_${!CH_NAME_VAR} -outputAnchorPeersUpdate ${ARTIFACTS_DIR}/${!CH_NAME_VAR}_${!MSP_VAR}anchors.tx -channelID ${!CH_NAME_VAR} -asOrg ${!NAME_VAR}
+        DOMAIN_VAR="ORG${org_idx}_DOMAIN"
+        echo "      # ${!NAME_VAR} : peer channel fetch config, puis jq pour injecter l'anchor peer,"
+        echo "      # puis peer channel update --orderer ... (voir docs Fabric 2.5)"
     done
 done
 
 echo ""
 echo "✅ Tout est généré avec succès dans le dossier '${ARTIFACTS_DIR}' !"
-
-echo "ℹ️  Pour packager les chaincodes définis pour chaque canal, lancez ensuite : ./package-chaincode.sh"
-echo "   (nécessite que 'docker-compose up -d' ait déjà démarré les conteneurs CLI)"
+echo ""
+echo "Prochaines étapes (Fabric 2.5 — channel participation API) :"
+echo "  1. docker-compose up -d"
+echo "  2. Pour chaque canal, rejoindre l'orderer :"
+echo "       osnadmin channel join --channelID <canal> \\"
+echo "         --config-block ${ARTIFACTS_DIR}/<canal>_genesis.block \\"
+echo "         -o localhost:7053 --ca-file <orderer-tls-ca> \\"
+echo "         --client-cert <admin-tls-cert> --client-key <admin-tls-key>"
+echo "  3. Pour chaque peer, rejoindre le canal :"
+echo "       peer channel join -b ${ARTIFACTS_DIR}/<canal>_genesis.block"
+echo "  4. Déployer les chaincodes :"
+echo "       ./chaincode-config.sh"
