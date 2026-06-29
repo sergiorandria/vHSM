@@ -3,10 +3,10 @@
 
 #include <algorithm>
 #include <cassert>
-#define __UNSAFE
-
 #include <memory>
 #include <mutex>
+#include <stdexcept>
+
 #include "x509.h"
 
 namespace fabric::crypto::x509 {
@@ -16,24 +16,41 @@ class X509CertificatePool {
 public: 
     static X509CertificatePool<PoolItem>* Instance();
 
+    void createX509CertificatePool(std::vector<PoolItem> items); 
+
 private: 
     // Private constructor to avoid 
     // duplicates instance
     X509CertificatePool<PoolItem>();
 
-    static std::unique_ptr<X509CertificatePool<PoolItem>> x509Instance;
-    static std::mutex x509PoolMutex; 
-    static std::once_flag x509ConstructorFlag;
+    std::vector<PoolItem> x509CertificateElements; 
+
+    static std::unique_ptr<X509CertificatePool<PoolItem>> x509CertInstance;
+    static std::mutex x509CertPoolMutex; 
+    static std::once_flag x509CertConstructorFlag;
 }; 
 
-template <class PoolItem> 
-__UNSAFE X509CertificatePool<PoolItem>* X509CertificatePool<PoolItem>::Instance() { 
-    std::call_once(x509ConstructorFlag, [=]()->void {
-        x509Instance.reset({new X509CertificatePool<PoolItem>()});
+template <class PoolItem>
+X509CertificatePool<PoolItem>* X509CertificatePool<PoolItem>::Instance() { 
+    std::call_once(x509CertConstructorFlag, [=]()->void {
+        x509CertInstance.reset({new X509CertificatePool<PoolItem>()});
     });
 
-    assert(x509Instance.get() != nullptr); 
-    return x509Instance.get();
+    // Ensure x509CertInstance integrity 
+    // before returning
+    assert(x509CertInstance.get() != nullptr); 
+    return x509CertInstance.get();
+}
+
+template <class PoolItem> 
+void X509CertificatePool<PoolItem>::createX509CertificatePool(std::vector<PoolItem> items) { 
+    for(auto item: items) {
+        if (!item.isValid()) {
+            throw std::runtime_error("Invalid X509 certificate");
+        }
+
+        this->x509CertificateElements.push_back(item);
+    }
 }
 } // namespace fabric::crypto::x509
 

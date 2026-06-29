@@ -10,8 +10,8 @@ public:
     void buildTLSConfig();     
 
 private: 
+    // TLS configuration backend
     TLSConfigBuilder builder;
 };
 } // fabric::crypto
-
 #endif // FABRIC_CRYPTO_TLS_CONFIG

@@ -22,19 +22,39 @@ func main() {
 		log.Fatalf("Error creating new chaincode with the thesis contract : %v", err)
 	}
 
-	server := &shim.ChaincodeServer{
-		CCID:    ccID,
-		Address: address,
-		CC:      chaincode,
-		TLSProps: shim.TLSProperties{
-			Disabled: true,
-		},
+	tlsDisabled := os.Getenv("CHAINCODE_TLS_DISABLED") == "true"
+
+	tlsProps := shim.TLSProperties{Disabled: tlsDisabled}
+
+	if !tlsDisabled {
+		cert, err := os.ReadFile(os.Getenv("CHAINCODE_TLS_CERT"))
+		if err != nil {
+			log.Fatalf("Cannot read TLS cert: %v", err)
+		}
+		key, err := os.ReadFile(os.Getenv("CHAINCODE_TLS_KEY"))
+		if err != nil {
+			log.Fatalf("Cannot read TLS key: %v", err)
+		}
+		ca, err := os.ReadFile(os.Getenv("CHAINCODE_TLS_CA"))
+		if err != nil {
+			log.Fatalf("Cannot read TLS CA: %v", err)
+		}
+		tlsProps.Key = key
+		tlsProps.Cert = cert
+		tlsProps.ClientCACerts = ca
 	}
 
-	if err := server.Start(); err != nil {
-		log.Fatalf("Cannot start the server : %v", err)
+	server := &shim.ChaincodeServer{
+		CCID:     ccID,
+		Address:  address,
+		CC:       chaincode,
+		TLSProps: tlsProps,
 	}
 
 	log.Printf("ThesisContract CCaaS started at %s", address)
 	log.Printf("Package ID : %s", ccID)
+
+	if err := server.Start(); err != nil {
+		log.Fatalf("Cannot start the server : %v", err)
+	}
 }

@@ -1,3 +1,6 @@
+#!/bin/bash
+set -e
+
 ENV_FILE="network.env"
 DOCKER_FILE="docker-compose.yaml"
 CHAINCODE_SERVER_PORT=9999
@@ -58,7 +61,7 @@ for i, line in enumerate(lines):
     if skip:
         # On arrête de sauter dès qu'on retombe sur une nouvelle entrée de service
         # (indentation 2 espaces suivie de texte et ":") ou sur "volumes:"
-        if re.match(r"^  \S.*:\s*$", line) or line.strip() == "volumes:":
+        if re.match(r"^  \S.*:\s*$", line) or line == "volumes:\n":
             skip = False
         else:
             continue
@@ -81,7 +84,7 @@ with open(block_path) as f:
 out = []
 inserted = False
 for line in lines:
-    if not inserted and line.strip() == "volumes:":
+    if not inserted and line == "volumes:\n":
         out.append(block)
         inserted = True
     out.append(line)
@@ -135,7 +138,7 @@ for ((c=1; c<=NUM_CHANNELS; c++)); do
     CC_VERSION=${CC_VERSION:-"1.0"}
 
     while true; do
-        read -p "    Chemin hôte du code source Go du chaincode (ex: ./template-chainecode): " CC_SRC_PATH
+        read -p "    Chemin hôte du code source Go du chaincode (ex: ./template_chainecode): " CC_SRC_PATH
         if [ -d "$CC_SRC_PATH" ]; then
             break
         else
@@ -155,7 +158,7 @@ for ((c=1; c<=NUM_CHANNELS; c++)); do
     DOCKERFILE_PATH="${CHANNEL_CC_DIR}/Dockerfile"
     if [ ! -f "$DOCKERFILE_PATH" ]; then
         cat << DOCKER_EOF > "$DOCKERFILE_PATH"
-FROM golang:1.26.4-bookworm AS builder
+FROM golang:1.26-bookworm AS builder
 WORKDIR /chaincode
 COPY src/ .
 RUN go mod tidy && go build -o /chaincode-bin .
@@ -189,7 +192,7 @@ DOCKER_EOF
 
         CLI_CONTAINER="cli.${ORG_DOMAIN}"
         if [ -z "$(docker ps -q -f name=^/${CLI_CONTAINER}$)" ]; then
-            echo "    ⚠️  '${CLI_CONTAINER}' n'est pas démarré. Lancez 'docker-compose up -d'. Ignorée."
+            echo "    ⚠️  '${CLI_CONTAINER}' n'est pas démarré. Lancez 'docker compose up -d'. Ignorée."
             continue
         fi
 
@@ -210,8 +213,19 @@ DOCKER_EOF
                 continue
             fi
 
+            # --- Ask TLS preference ---
+            while true; do
+                read -p "    Activer le TLS pour ce chaincode CCaaS ? (o/n) [o]: " DO_TLS
+                DO_TLS=${DO_TLS:-o}
+                case "$DO_TLS" in
+                    [oOyY]) TLS_ENABLED="true"; break ;;
+                    [nN])   TLS_ENABLED="false"; break ;;
+                    *) echo "Réponse invalide, entrez 'o' ou 'n'." ;;
+                esac
+            done
             # --- connection.json / metadata.json / package .tar.gz ---
-            cat << CONN_EOF > "${PEER_CC_DIR}/connection.json"
+if [ "$TLS_ENABLED" == "true" ]; then
+                cat << CONN_EOF > "${PEER_CC_DIR}/connection.json"
 {
   "address": "${CC_HOST}:${CHAINCODE_SERVER_PORT}",
   "dial_timeout": "10s",
@@ -220,6 +234,16 @@ DOCKER_EOF
   "root_cert": "$(awk 'NF {sub(/\r/, ""); printf "%s\\n", $0}' "${CC_TLS_DIR}/ca.crt")"
 }
 CONN_EOF
+            else
+                cat << CONN_EOF > "${PEER_CC_DIR}/connection.json"
+{
+  "address": "${CC_HOST}:${CHAINCODE_SERVER_PORT}",
+  "dial_timeout": "10s",
+  "tls_required": false,
+  "client_auth_required": false
+}
+CONN_EOF
+            fi
 
             cat << META_EOF > "${PEER_CC_DIR}/metadata.json"
 {
@@ -234,15 +258,51 @@ META_EOF
                 tar -czf "${CC_LABEL}.tar.gz" metadata.json code.tar.gz
             )
             echo "    ✓ Package CCaaS généré : ${PEER_CC_DIR}/${CC_LABEL}.tar.gz"
+# --- Install FIRST to get the package ID ---
+echo "    -> Installation sur '${PEER_HOST}' via '${CLI_CONTAINER}'..."
 
-            # --- Injection + démarrage automatique du conteneur serveur chaincode ---
-            SERVICE_BLOCK_FILE=$(mktemp)
-            cat << SERVICE_EOF > "$SERVICE_BLOCK_FILE"
+PEER_PORT_VAR="ORG${org_idx}_PEER${p}_PORT"
+PEER_PORT="${!PEER_PORT_VAR:-7051}"
+
+set +e
+docker cp "${PEER_CC_DIR}/${CC_LABEL}.tar.gz" \
+    "${CLI_CONTAINER}:/var/hyperledger/orderer/channel-artifacts/${CC_LABEL}_${PEER_HOST}.tar.gz"
+
+INSTALL_OUTPUT=$(docker exec -e CORE_PEER_ADDRESS="${PEER_HOST}:${PEER_PORT}" "${CLI_CONTAINER}" \
+    peer lifecycle chaincode install \
+    "/var/hyperledger/orderer/channel-artifacts/${CC_LABEL}_${PEER_HOST}.tar.gz" 2>&1)
+INSTALL_STATUS=$?
+set -e
+
+echo "$INSTALL_OUTPUT"
+
+if [ $INSTALL_STATUS -ne 0 ]; then
+    echo "    ❌ L'installation a échoué sur '${PEER_HOST}'."
+    continue
+fi
+echo "    ✓ Chaincode '${CC_LABEL}' installé sur '${PEER_HOST}'."
+
+# --- Extract package ID from install output ---
+CC_PACKAGE_ID=$(echo "$INSTALL_OUTPUT" | grep -oP 'Chaincode code package identifier: \K\S+')
+if [ -z "$CC_PACKAGE_ID" ]; then
+    # Fallback: query it
+    CC_PACKAGE_ID=$(docker exec -e CORE_PEER_ADDRESS="${PEER_HOST}:${PEER_PORT}" "${CLI_CONTAINER}" \
+        peer lifecycle chaincode queryinstalled 2>&1 \
+        | grep "${CC_LABEL}" | grep -oP 'Package ID: \K[^,]+')
+fi
+echo "    ✓ Package ID : ${CC_PACKAGE_ID}"
+
+# --- Now inject and start the container WITH the package ID ---
+SERVICE_BLOCK_FILE=$(mktemp)
+if [ "$TLS_ENABLED" == "true" ]; then
+    cat << SERVICE_EOF > "$SERVICE_BLOCK_FILE"
   ${CC_HOST}:
     image: ${CC_IMAGE}
     container_name: ${CC_CONTAINER_NAME}
     environment:
+      CORE_CHAINCODE_ID_NAME: ${CC_PACKAGE_ID}
       CHAINCODE_SERVER_ADDRESS: 0.0.0.0:${CHAINCODE_SERVER_PORT}
+      CHAINCODE_TLS_DISABLED: "false"
       CHAINCODE_TLS_CERT: /etc/hyperledger/chaincode/tls/server.crt
       CHAINCODE_TLS_KEY: /etc/hyperledger/chaincode/tls/server.key
       CHAINCODE_TLS_CA: /etc/hyperledger/chaincode/tls/ca.crt
@@ -254,65 +314,57 @@ META_EOF
       - "${CHAINCODE_SERVER_PORT}"
 
 SERVICE_EOF
+else
+    cat << SERVICE_EOF > "$SERVICE_BLOCK_FILE"
+  ${CC_HOST}:
+    image: ${CC_IMAGE}
+    container_name: ${CC_CONTAINER_NAME}
+    environment:
+      CORE_CHAINCODE_ID_NAME: ${CC_PACKAGE_ID}
+      CHAINCODE_SERVER_ADDRESS: 0.0.0.0:${CHAINCODE_SERVER_PORT}
+      CHAINCODE_TLS_DISABLED: "true"
+    networks:
+      - fabric
+    expose:
+      - "${CHAINCODE_SERVER_PORT}"
 
-            echo "    -> Injection du service '${CC_HOST}' dans ${DOCKER_FILE}..."
-            inject_compose_service "$SERVICE_BLOCK_FILE" "$CC_CONTAINER_NAME"
-            rm -f "$SERVICE_BLOCK_FILE"
+SERVICE_EOF
+fi
 
-            echo "    -> Démarrage du conteneur '${CC_CONTAINER_NAME}'..."
-            docker-compose up -d "${CC_HOST}"
+echo "    -> Injection du service '${CC_HOST}' dans ${DOCKER_FILE}..."
+inject_compose_service "$SERVICE_BLOCK_FILE" "$CC_CONTAINER_NAME"
+rm -f "$SERVICE_BLOCK_FILE"
 
-            # --- Healthcheck actif : attendre que le port TCP réponde ---
-            echo -n "    -> Attente que '${CC_HOST}:${CHAINCODE_SERVER_PORT}' soit prêt"
-            elapsed=0
-            ready=0
-            while [ $elapsed -lt $HEALTHCHECK_TIMEOUT ]; do
-                if docker exec "${CC_CONTAINER_NAME}" sh -c "exec 3<>/dev/tcp/127.0.0.1/${CHAINCODE_SERVER_PORT}" 2>/dev/null; then
-                    ready=1
-                    break
-                fi
-                echo -n "."
-                sleep $HEALTHCHECK_INTERVAL
-                elapsed=$((elapsed + HEALTHCHECK_INTERVAL))
-            done
-            echo ""
+echo "    -> Démarrage du conteneur '${CC_CONTAINER_NAME}'..."
+docker compose up -d "${CC_HOST}"
 
-            if [ $ready -ne 1 ]; then
-                echo "    ❌ Le serveur chaincode '${CC_HOST}' n'a pas répondu sur le port ${CHAINCODE_SERVER_PORT} après ${HEALTHCHECK_TIMEOUT}s."
-                echo "       Vérifiez 'docker logs ${CC_CONTAINER_NAME}'. Installation annulée pour ce peer."
-                continue
-            fi
-            echo "    ✓ Serveur chaincode '${CC_HOST}' prêt."
-
-            # --- Installation sur le peer correspondant ---
-            echo "    -> Installation sur '${PEER_HOST}' via '${CLI_CONTAINER}'..."
-
-            set +e
-            docker cp "${PEER_CC_DIR}/${CC_LABEL}.tar.gz" \
-                "${CLI_CONTAINER}:/var/hyperledger/orderer/channel-artifacts/${CC_LABEL}_${PEER_HOST}.tar.gz"
-
-            docker exec -e CORE_PEER_ADDRESS="${PEER_HOST}:7051" "${CLI_CONTAINER}" \
-                peer lifecycle chaincode install \
-                "/var/hyperledger/orderer/channel-artifacts/${CC_LABEL}_${PEER_HOST}.tar.gz"
-            INSTALL_STATUS=$?
-            set -e
-
-            if [ $INSTALL_STATUS -ne 0 ]; then
-                echo "    ❌ L'installation a échoué sur '${PEER_HOST}'."
-                continue
-            fi
-            echo "    ✓ Chaincode '${CC_LABEL}' installé sur '${PEER_HOST}'."
-        done
-    done
+# --- Healthcheck ---
+echo -n "    -> Waiting for '${CC_HOST}' to be ready"
+elapsed=0
+ready=0
+while [ $elapsed -lt $HEALTHCHECK_TIMEOUT ]; do
+    if docker logs "${CC_CONTAINER_NAME}" 2>&1 | grep -qiE "chaincode server start|listening on|started|serving|running|ready"; then
+        ready=1
+        break
+    fi
+    echo -n "."
+    sleep $HEALTHCHECK_INTERVAL
+    elapsed=$((elapsed + HEALTHCHECK_INTERVAL))
 done
+echo ""
+
+if [ $ready -ne 1 ]; then
+    echo "    ❌ Le serveur chaincode '${CC_HOST}' n'a pas répondu après ${HEALTHCHECK_TIMEOUT}s."
+    echo "       Vérifiez 'docker logs ${CC_CONTAINER_NAME}'."
+    continue
+fi
+echo "    ✓ Serveur chaincode '${CC_HOST}' prêt."
+
+done   # closes: for ((p=0; p<${!PEERS_VAR}; p++))
+    done       # closes: for org_idx in ${!CH_ORGS_VAR}
+done           # closes: for ((c=1; c<=NUM_CHANNELS; c++))
 
 echo ""
 echo "================================================================="
-echo "✅ Déploiement CCaaS entièrement automatisé terminé."
-echo "   Conteneurs serveur chaincode démarrés : cc-peer<N>.<domain>"
-echo "   Chaincodes installés sur les peers correspondants."
-echo ""
-echo "Étapes suivantes (cycle de vie Fabric standard) :"
-echo "   peer lifecycle chaincode approveformyorg ... (par chaque org)"
-echo "   peer lifecycle chaincode checkcommitreadiness ..."
-echo "   peer lifecycle chaincode commit ..."
+echo "   DÉPLOIEMENT TERMINÉ"
+echo "================================================================="
