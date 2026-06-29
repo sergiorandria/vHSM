@@ -15,6 +15,9 @@
 build/
 docker-compose.yml
 .vscode
+network/fabric_configuration/peer-data/peer0.misa.university.com/lifecycle/
+network/fabric_configuration/peer-data/peer0.misa.university.com/externalbuilder/
+network/fabric_configuration/peer-data/peer0.misa.university.com/ledgersData/chains/chains/canaltest/blockfile_000000
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs

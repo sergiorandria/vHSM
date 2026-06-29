@@ -1,4 +1,4 @@
-package models
+package internal
 
 type Metadata struct {
 	ThesisTitle string `json:"thesisTitle" form:"thesisTitle"`

@@ -13,9 +13,7 @@ import (
 	"time"
 
 	"electronic_signature/rest_api/gateway_sdk"
-	"electronic_signature/rest_api/internal/hsm"
-	"electronic_signature/rest_api/internal/notary"
-	"electronic_signature/rest_api/internal/storage"
+	"electronic_signature/rest_api/internal"
 	"electronic_signature/rest_api/utils"
 
 	"github.com/gin-gonic/gin"
@@ -29,6 +27,7 @@ func main() {
 	minioAccess := os.Getenv("MINIO_ACCESS_KEY")
 	minioSecret := os.Getenv("MINIO_SECRET_KEY")
 	minioBucket := os.Getenv("MINIO_BUCKET")
+
 	if minioBucket == "" {
 		minioBucket = "thesis"
 	}
@@ -38,37 +37,33 @@ func main() {
 	hsmPin := os.Getenv("HSM_PIN")
 	hsmKeyLabel := os.Getenv("HSM_LABEL")
 
-	// 1) Fabric Gateway
-	grpcConn, err := utils.NewGrpcConnection()
+	// Loads configuration file from
+	// /etc/vhsmd/default-fabric.conf
+	cfg, err := utils.LoadConfig()
 	if err != nil {
-		log.Fatalf("Fabric Conn error: %v", err)
-	}
-	defer grpcConn.Close()
-
-	id, err := utils.NewIdentity()
-	if err != nil {
-		log.Fatalf("failed to build identity: %v", err)
-	}
-	sign, err := utils.NewSign()
-	if err != nil {
-		log.Fatalf("failed to build signer: %v", err)
+		log.Fatalf("failed to load config: %v", err)
 	}
 
-	fabricClient, err := gateway_sdk.NewGatewayClient(grpcConn, utils.ChannelName, utils.ChaincodeName, id, sign)
+	grpcConn, err := utils.NewGrpcConnection(cfg)
+	id, err := utils.NewIdentity(cfg)
+	sign, err := utils.NewSign(cfg)
+
+	// cfg.ChannelName and cfg.ChaincodeName replace the old constants
+	fabricClient, err := gateway_sdk.NewGatewayClient(grpcConn, cfg.ChannelName, cfg.ChaincodeName, id, sign)
 	if err != nil {
 		log.Fatalf("failed to create gateway client: %v", err)
 	}
 	defer fabricClient.Close()
 
-	// 2) HSM
-	hsmSvc, err := hsm.NewHSMService(hsmModule, hsmToken, hsmPin, hsmKeyLabel)
+	// HSM
+	hsmSvc, err := internal.NewHSMService(hsmModule, hsmToken, hsmPin, hsmKeyLabel)
 	if err != nil {
 		log.Fatalf("failed to init HSM service: %v", err)
 	}
 	defer hsmSvc.Close()
 
-	// 3) MinIO
-	minioSvc, err := storage.NewMinioService(minioEndpoint, minioAccess, minioSecret)
+	// MinIO
+	minioSvc, err := internal.NewMinioService(minioEndpoint, minioAccess, minioSecret)
 	if err != nil {
 		log.Fatalf("failed to init MinIO service: %v", err)
 	}
@@ -76,14 +71,14 @@ func main() {
 	// Ensure bucket exists
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := storage.CreateBuckets(ctx, minioSvc.Client, []string{minioBucket}); err != nil {
+	if err := internal.CreateBuckets(ctx, minioSvc.Client, []string{minioBucket}); err != nil {
 		log.Fatalf("failed to ensure buckets: %v", err)
 	}
 
-	// 4) Notary
-	notarySvc := notary.NewNotaryService(fabricClient, hsmSvc)
+	// Notary
+	notarySvc := internal.NewNotaryService(fabricClient, hsmSvc)
 
-	// 5) HTTP server
+	// HTTP server
 	r := gin.Default()
 
 	r.MaxMultipartMemory = maxUploadSize
