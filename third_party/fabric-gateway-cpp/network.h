@@ -18,9 +18,10 @@ public:
 private:
     Gateway* gateway_;
     std::string channelName_;
+    
     // To avoid copying
-    Network(const Network&) = delete;
-    Network& operator=(const Network&) = delete;
+    //Network(const Network&) = delete;
+    //Network& operator=(const Network&) = delete;
 };
 
 } // namespace fabric

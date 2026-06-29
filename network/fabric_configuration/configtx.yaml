@@ -79,11 +79,12 @@ Profiles:
             SampleConsortium:
                 Organizations:
                     - *misa
-    Profile_:
+    Profile_canaltest:
         Consortium: SampleConsortium
         <<: *ChannelDefaults
         Capabilities: *ChannelCapabilities
         Application:
             <<: *ApplicationDefaults
             Organizations:
+                - *misa
             Capabilities: *ApplicationCapabilities
