@@ -17,17 +17,18 @@ const (
 )
 
 type HSMService struct {
-	ctx   *pkcs11.Ctx
-	slot  uint
-	pin   string
-	mu    sync.Mutex
-	label string
+	ctx       *pkcs11.Ctx
+	slot      uint
+	pin       string
+	mu        sync.Mutex
+	label     string
+	signLabel string
 }
 
 // NewHSMService initializes the PKCS#11 module and locates the slot that
 // contains the token with the requested token label. This initialization
 // should be performed only once during the process lifetime.
-func NewHSMService(modulePath, tokenLabel, pin, keyLabel string) (*HSMService, error) {
+func NewHSMService(modulePath, tokenLabel, pin, keyLabel string, signKeyLabel string) (*HSMService, error) {
 	p := pkcs11.New(modulePath)
 	if p == nil {
 		return nil, fmt.Errorf("failed to load PKCS#11 module: %s", modulePath)
@@ -49,10 +50,11 @@ func NewHSMService(modulePath, tokenLabel, pin, keyLabel string) (*HSMService, e
 		}
 		if strings.TrimSpace(tokenInfo.Label) == tokenLabel {
 			return &HSMService{
-				ctx:   p,
-				slot:  slot,
-				pin:   pin,
-				label: keyLabel,
+				ctx:       p,
+				slot:      slot,
+				pin:       pin,
+				label:     keyLabel,
+				signLabel: signKeyLabel,
 			}, nil
 		}
 	}
@@ -158,7 +160,7 @@ func (h *HSMService) Sign(data []byte) ([]byte, error) {
 	// 2. Trouver la clé privée (Attention : utiliser CKO_PRIVATE_KEY)
 	template := []*pkcs11.Attribute{
 		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PRIVATE_KEY),
-		pkcs11.NewAttribute(pkcs11.CKA_LABEL, h.label),
+		pkcs11.NewAttribute(pkcs11.CKA_LABEL, h.signLabel),
 	}
 	h.ctx.FindObjectsInit(session, template)
 	objs, _, _ := h.ctx.FindObjects(session, 1)

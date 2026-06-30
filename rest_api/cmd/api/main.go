@@ -36,6 +36,7 @@ func main() {
 	hsmToken := os.Getenv("HSM_TOKEN_LABEL")
 	hsmPin := os.Getenv("HSM_PIN")
 	hsmKeyLabel := os.Getenv("HSM_LABEL")
+	hsmSignKeyLabel := os.Getenv("HSM_SIGN_LABEL")
 
 	// Loads configuration file from
 	// /etc/vhsmd/default-fabric.conf
@@ -56,7 +57,7 @@ func main() {
 	defer fabricClient.Close()
 
 	// HSM
-	hsmSvc, err := internal.NewHSMService(hsmModule, hsmToken, hsmPin, hsmKeyLabel)
+	hsmSvc, err := internal.NewHSMService(hsmModule, hsmToken, hsmPin, hsmKeyLabel, hsmSignKeyLabel)
 	if err != nil {
 		log.Fatalf("failed to init HSM service: %v", err)
 	}
@@ -83,14 +84,37 @@ func main() {
 
 	r.MaxMultipartMemory = maxUploadSize
 
+	r.Use(func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "http://localhost:5173") // Should be changed according to the frontend address
+		c.Header("Access-Control-Allow-Methods", "POST, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+		c.Next()
+	})
+
 	r.POST("/api/v1/submissions", func(c *gin.Context) {
-		thesisID := c.PostForm("thesisId")
+		if err := c.Request.ParseMultipartForm(maxUploadSize); err != nil {
+			log.Printf("DEBUG: ParseMultipartForm error: %v", err)
+		}
+		log.Printf("DEBUG: PostForm values: %+v", c.Request.PostForm)
+		if c.Request.MultipartForm != nil {
+			log.Printf("DEBUG: MultipartForm.Value: %+v", c.Request.MultipartForm.Value)
+			log.Printf("DEBUG: MultipartForm.File: %+v", c.Request.MultipartForm.File)
+		}
+		log.Printf("DEBUG: Content-Type header: %s", c.GetHeader("Content-Type"))
+
+		thesisID := c.PostForm("ThesisId")
+		log.Printf("DEBUG: thesisID read as: %q", thesisID)
+
 		if thesisID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "thesisId required"})
 			return
 		}
 
-		fileHeader, err := c.FormFile("document")
+		fileHeader, err := c.FormFile("Document")
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "document file required"})
 			return
@@ -143,6 +167,7 @@ func main() {
 		// Utilisez :
 		sigBytes, err := hsmSvc.Sign(h[:]) // Signe le hash (ou le JSON de la preuve)
 		if err != nil {
+			log.Printf("HSM sign error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "signature failed"})
 			return
 		}

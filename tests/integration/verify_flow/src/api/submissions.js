@@ -3,7 +3,7 @@ export async function submit(payload) {
     const response = await fetch(API_URL, {
         method: "POST",
         headers: {
-            "Content-Type": "application/json"
+            "Content-Type":"multipart/form-data"
         },
         body: JSON.stringify(payload)
     });
