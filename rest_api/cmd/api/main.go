@@ -46,8 +46,19 @@ func main() {
 	}
 
 	grpcConn, err := utils.NewGrpcConnection(cfg)
+	if err != nil {
+		log.Fatalf("failed to create grpc connection: %v", err)
+	}
+
 	id, err := utils.NewIdentity(cfg)
+	if err != nil {
+		log.Fatalf("failed to create identity: %v", err)
+	}
+
 	sign, err := utils.NewSign(cfg)
+	if err != nil {
+		log.Fatalf("failed to create signer: %v", err)
+	}
 
 	// cfg.ChannelName and cfg.ChaincodeName replace the old constants
 	fabricClient, err := gateway_sdk.NewGatewayClient(grpcConn, cfg.ChannelName, cfg.ChaincodeName, id, sign)

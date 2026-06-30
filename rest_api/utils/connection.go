@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
-const defaultConfigPath = "/etc/electronic_signature/fabric.conf"
+const defaultConfigPath = "/etc/vhsmd/default-fabric.conf"
 
 type FabricConfig struct {
 	MspID           string
@@ -44,7 +44,7 @@ func LoadConfig() (*FabricConfig, error) {
 		return fallback
 	}
 
-	cryptoPath := get("CRYPTO_PATH", "/etc/electronic_signature/crypto")
+	cryptoPath := get("CRYPTO_PATH", "/etc/vhsmd/crypto")
 
 	cfg := &FabricConfig{
 		MspID:           get("MSP_ID", "Org1MSP"),
