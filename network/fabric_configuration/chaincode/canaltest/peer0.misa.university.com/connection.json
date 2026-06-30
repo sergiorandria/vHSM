@@ -1,0 +1,6 @@
+{
+  "address": "cc-peer0.misa.university.com:9999",
+  "dial_timeout": "10s",
+  "tls_required": false,
+  "client_auth_required": false
+}
