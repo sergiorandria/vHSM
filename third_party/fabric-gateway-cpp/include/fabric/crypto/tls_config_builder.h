@@ -3,10 +3,10 @@
 
 namespace fabric::crypto { 
 class TLSConfigBuilder { 
-
-
-
-
+public: 
+    // Should build tls config backend here
+    void buildTlsConfigBackend(void* data); // undefined 
+    
 };
 } // namespace fabric::crypto
 

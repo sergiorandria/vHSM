@@ -128,6 +128,7 @@ collect_config() {
     prompt_secret  HSM_SO_PIN      "Security Officer PIN" "$(rand_str 16)"
     prompt_secret  HSM_PIN         "User PIN"             "$(rand_str 16)"
     prompt_default HSM_KEY_LABEL   "AES key label"        "vhsm-aes-key"
+    prompt_default HSM_SIGN_KEY_LABEL "RSA signing key label" "vhsm-sign-key"
 
     # ── MinIO ─────────────────────────────────────────────────
     header "MinIO object storage"
@@ -242,6 +243,19 @@ EOF
             --label "$HSM_KEY_LABEL" \
             --sensitive
         success "AES-256 key '${HSM_KEY_LABEL}' generated in slot $HSM_SLOT."
+    fi
+        # ── Generate RSA-2048 signing keypair inside the token if absent ────
+    if pkcs11-tool --module "$SOFTHSM2_MODULE" \
+            --slot "$HSM_SLOT" --pin "$HSM_PIN" \
+            --list-objects 2>/dev/null | grep -q "$HSM_SIGN_KEY_LABEL"; then
+        warn "Key '${HSM_SIGN_KEY_LABEL}' already exists in token — skipping keypairgen."
+    else
+        pkcs11-tool --module "$SOFTHSM2_MODULE" \
+            --slot "$HSM_SLOT" --pin "$HSM_PIN" \
+            --keypairgen --key-type rsa:2048 \
+            --label "$HSM_SIGN_KEY_LABEL" \
+            --id 01
+        success "RSA-2048 signing keypair '${HSM_SIGN_KEY_LABEL}' generated in slot $HSM_SLOT."
     fi
 }
 
@@ -407,6 +421,7 @@ HSM_TOKEN_LABEL=${HSM_TOKEN_LABEL}
 HSM_SLOT=${HSM_SLOT}
 HSM_PIN=${HSM_PIN}
 HSM_LABEL=${HSM_KEY_LABEL}
+HSM_SIGN_LABEL=${HSM_SIGN_KEY_LABEL}
 
 # ── MinIO ────────────────────────────────────────────────────────────────────
 MINIO_ENDPOINT=127.0.0.1:${MINIO_PORT}
@@ -437,6 +452,7 @@ print_summary() {
     printf "  %-22s %s\n" "HSM module:"      "$SOFTHSM2_MODULE"
     printf "  %-22s %s\n" "HSM token:"       "$HSM_TOKEN_LABEL  (slot $HSM_SLOT)"
     printf "  %-22s %s\n" "HSM key:"         "$HSM_KEY_LABEL"
+    printf "  %-22s %s\n" "HSM sign key:"    "$HSM_SIGN_KEY_LABEL"
     printf "  %-22s %s\n" "MinIO API:"       "http://127.0.0.1:${MINIO_PORT}"
     printf "  %-22s %s\n" "MinIO console:"   "http://127.0.0.1:${MINIO_CONSOLE_PORT}"
     printf "  %-22s %s\n" "MinIO bucket:"    "$MINIO_BUCKET"

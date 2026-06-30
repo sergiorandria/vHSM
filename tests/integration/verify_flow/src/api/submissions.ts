@@ -14,7 +14,7 @@ export async function submit(
     formData.append("Grade", payload.Grade.toString());
     formData.append("Metadata", JSON.stringify(payload.Metadata));
     
-    // 2. Ajoutez le fichier binaire en TOUT DERNIER (Impératif pour le parser Go/Gin)
+    // I think this should be base64
     formData.append("Document", payload.Document);
 
     const response = await fetch(API_URL, {
