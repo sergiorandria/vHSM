@@ -37,20 +37,20 @@ public:
      * @param slot_id The unique numerical identifier for the new slot.
      * @return true if registration succeeded, false if the slot_id already exists.
      */
-    bool register_slot(uint64_t slot_id);
+    bool register_slot(u64 slot_id);
 
     /**
      * @brief Retrieves a specific slot by its unique identifier.
      * @param slot_id The identifier of the target slot.
      * @return std::shared_ptr<Slot> Pointer to the Slot instance, or nullptr if not found.
      */
-    std::shared_ptr<keystore::Slot> get_slot(uint64_t slot_id) const;
+    std::shared_ptr<keystore::Slot> get_slot(u64 slot_id) const;
 
     /**
      * @brief Compiles a list of all currently registered slot identifiers.
-     * @return std::vector<uint64_t> A list containing all valid slot IDs.
+     * @return std::vector<u64> A list containing all valid slot IDs.
      */
-    std::vector<uint64_t> get_slot_id_list() const;
+    std::vector<u64> get_slot_id_list() const;
 
     /**
      * @brief Clears all registered slots from memory. Chiefly used for resetting tests.
@@ -65,7 +65,7 @@ private:
     /**
      * @brief Internal registry mapping unique Slot IDs to their shared pointer instances.
      */
-    std::unordered_map<uint64_t, std::shared_ptr<keystore::Slot>> slots_;
+    std::unordered_map<u64, std::shared_ptr<keystore::Slot>> slots_;
 
     /**
      * @brief Mutex guarding the internal slots registry mapping from concurrent modifications.

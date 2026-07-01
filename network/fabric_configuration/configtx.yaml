@@ -81,7 +81,7 @@ Profiles:
             SampleConsortium:
                 Organizations:
                     - *misa
-    Profile_canaltest:
+    Profile_firstcanal:
         <<: *ChannelDefaults
         Capabilities: *ChannelCapabilities
         Orderer:

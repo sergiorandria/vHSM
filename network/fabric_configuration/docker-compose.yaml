@@ -38,7 +38,7 @@ services:
       - ./channel-artifacts:/var/hyperledger/orderer/channel-artifacts
       - ./peer-data/peer0.misa.university.com:/var/hyperledger/production
     ports:
-      - "7052:7051"
+      - "7051:7051"
     networks:
       - fabric
     depends_on:
@@ -108,10 +108,10 @@ services:
       - fabric
 
   cc-peer0.misa.university.com:
-    image: thesis-ccaas:1.0
+    image: thesis2-ccaas:1.0
     container_name: cc-peer0.misa.university.com
     environment:
-      CORE_CHAINCODE_ID_NAME: thesis_1.0:b6f5fd8d25daefd388f14e51d2d14870f4b8ce733900a07b388f01a0352696f3
+      CORE_CHAINCODE_ID_NAME: thesis2_1.0:c6d729702ad8398bcf74eb226687f57b6acc57e6177d7c760d425c2867a7eea5
       CHAINCODE_SERVER_ADDRESS: 0.0.0.0:9999
       CHAINCODE_TLS_DISABLED: "true"
     networks:
