@@ -13,16 +13,48 @@ type ThesisMetadata struct {
 	DefenseDate string `json:"DefenseDate"`
 }
 
-// ThesisPayload représente l'enregistrement complet d'une thèse dans le ledger.
-type ThesisPayload struct {
-	ThesisID string         `json:"thesisId"`
-	Grade    float64        `json:"grade"`
-	Metadata ThesisMetadata `json:"metadata"`
-}
-
 // ThesisContract regroupe les fonctions du smart contract (CRUD basique).
 type ThesisContract struct {
 	contractapi.Contract
+}
+
+type ThesisPayload struct {
+	ThesisID  string         `json:"thesisId"`
+	Grade     float64        `json:"grade"`
+	Metadata  ThesisMetadata `json:"metadata"`
+	Hash      string         `json:"hash,omitempty"`
+	Signature string         `json:"signature,omitempty"`
+}
+
+// NotarizeThesis attaches a document hash and HSM signature to an existing thesis record.
+func (c *ThesisContract) NotarizeThesis(
+	ctx contractapi.TransactionContextInterface,
+	thesisID string,
+	hash string,
+	signature string,
+) error {
+	thesisJSON, err := ctx.GetStub().GetState(thesisID)
+	if err != nil {
+		return fmt.Errorf("échec de lecture du ledger : %w", err)
+	}
+	if thesisJSON == nil {
+		return fmt.Errorf("aucune thèse trouvée avec l'ID '%s'", thesisID)
+	}
+
+	var thesis ThesisPayload
+	if err := json.Unmarshal(thesisJSON, &thesis); err != nil {
+		return fmt.Errorf("échec de désérialisation de la thèse : %w", err)
+	}
+
+	thesis.Hash = hash
+	thesis.Signature = signature
+
+	updatedJSON, err := json.Marshal(thesis)
+	if err != nil {
+		return fmt.Errorf("échec de sérialisation de la thèse : %w", err)
+	}
+
+	return ctx.GetStub().PutState(thesisID, updatedJSON)
 }
 
 // CreateThesis insère une nouvelle thèse dans le ledger.
