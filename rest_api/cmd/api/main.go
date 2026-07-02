@@ -111,15 +111,53 @@ func main() {
 		c.Next()
 	})
 
-	r.POST("/api/v1/submissions", func(c *gin.Context) {
-		thesisID := c.PostForm("ThesisId")
-		log.Printf("DEBUG: thesisID read as: %q", thesisID)
-		log.Printf("DEBUG: Content-Type header: %s", c.GetHeader("Content-Type"))
-
+	r.GET("/api/v1/theses/:thesisId", func(c *gin.Context) {
+		thesisID := c.Param("thesisId")
 		if thesisID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "thesisId required"})
 			return
 		}
+
+		result, err := notarySvc.GetThesis(thesisID)
+		if err != nil {
+			log.Printf("get thesis failed: %v", err)
+			c.JSON(http.StatusNotFound, gin.H{"error": "thesis not found"})
+			return
+		}
+
+		c.Data(http.StatusOK, "application/json", result)
+	})
+
+	r.GET("/api/v1/theses", func(c *gin.Context) {
+		result, err := notarySvc.GetAllTheses()
+		if err != nil {
+			log.Printf("get all theses failed: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query theses"})
+			return
+		}
+
+		c.Data(http.StatusOK, "application/json", result)
+	})
+
+	r.POST("/api/v1/submissions", func(c *gin.Context) {
+		thesisID := c.PostForm("ThesisId")
+		grade := c.PostForm("Grade")
+		title := c.PostForm("Title")
+		date := c.PostForm("Date")
+
+		if thesisID == "" || grade == "" || title == "" || date == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "thesisId, grade, title and date are required"})
+			return
+		}
+
+		// Create the ledger record first — fails fast on duplicate thesisID
+		if err := notarySvc.CreateThesis(thesisID, grade, title, date); err != nil {
+			log.Printf("create thesis failed: %v", err)
+			c.JSON(http.StatusConflict, gin.H{"error": "failed to create thesis on ledger"})
+			return
+		}
+
+		log.Printf("DEBUG: ThesisId:%s, Grade:%s, Title:%s, Date:%s\n", thesisID, grade, title, date)
 
 		fileHeader, err := c.FormFile("Document")
 		if err != nil {

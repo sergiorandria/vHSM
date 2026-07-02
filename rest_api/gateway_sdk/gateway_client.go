@@ -86,11 +86,6 @@ func (gc *GatewayClient) Close() error {
  * @return An error if proposal generation, peer endorsement, or orderer submission fails, otherwise nil.
  */
 func (gc *GatewayClient) ExecuteTransaction(chaincodeFuncName string, args ...string) error {
-
-	// 1. Dynamically prepare the transaction proposal using the provided variadic arguments
-	/**
-	 * @remark 'contract'
-	 */
 	proposal, err := gc.GetContract().NewProposal(
 		chaincodeFuncName,
 		client.WithArguments(args...),
@@ -99,17 +94,33 @@ func (gc *GatewayClient) ExecuteTransaction(chaincodeFuncName string, args ...st
 		return fmt.Errorf("failed to create ledger proposal for %s: %w", chaincodeFuncName, err)
 	}
 
-	// 2. Transmit proposal to endorsing Peers using pre-configured gRPC timeout context
-	endorsedProposal, err := proposal.Endorse()
+	transaction, err := proposal.Endorse()
 	if err != nil {
 		return fmt.Errorf("failed to endorse ledger proposal for %s: %w", chaincodeFuncName, err)
 	}
 
-	// 3. Submit endorsed transaction block to the Orderer service for definitive ledger commitment
-	_, err = endorsedProposal.Submit()
+	commit, err := transaction.Submit()
 	if err != nil {
 		return fmt.Errorf("failed to submit transaction %s to ledger: %w", chaincodeFuncName, err)
 	}
 
+	status, err := commit.Status()
+	if err != nil {
+		return fmt.Errorf("failed to obtain commit status for %s: %w", chaincodeFuncName, err)
+	}
+	if !status.Successful {
+		return fmt.Errorf("transaction %s committed with unsuccessful status: %v", chaincodeFuncName, status.Code)
+	}
+
 	return nil
+}
+
+// EvaluateTransaction executes a read-only query against the chaincode.
+// Unlike ExecuteTransaction, this does not submit to the orderer and is not committed to the ledger.
+func (gc *GatewayClient) EvaluateTransaction(chaincodeFuncName string, args ...string) ([]byte, error) {
+	result, err := gc.GetContract().EvaluateTransaction(chaincodeFuncName, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to evaluate transaction %s: %w", chaincodeFuncName, err)
+	}
+	return result, nil
 }
