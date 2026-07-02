@@ -37,10 +37,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 ThesisId: rawThesisId,
                 Grade: parseFloat((document.getElementById("Grade") as HTMLInputElement).value),
                 Document: fileToUpload,
-                Metadata: {
-                    title: (document.getElementById("Title") as HTMLInputElement).value,
-                    date: (document.getElementById("Date") as HTMLInputElement).value
-                }
+                Title: (document.getElementById("Title") as HTMLInputElement).value,
+                Date: (document.getElementById("Date") as HTMLInputElement).value
             };
 
             const result: SubmissionResponse = await submit(payload);

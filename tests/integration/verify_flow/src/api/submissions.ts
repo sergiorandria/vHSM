@@ -12,7 +12,8 @@ export async function submit(
     // 1. Ajoutez TOUS les champs textuels en premier
     formData.append("ThesisId", payload.ThesisId);
     formData.append("Grade", payload.Grade.toString());
-    formData.append("Metadata", JSON.stringify(payload.Metadata));
+    formData.append("Title", payload.Title);
+    formData.append("Date", payload.Date);
     
     // I think this should be base64
     formData.append("Document", payload.Document);

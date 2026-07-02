@@ -13,7 +13,20 @@ func NewNotaryService(client *gateway_sdk.GatewayClient, hsm *HSMService) *Notar
 	return &NotaryService{client: client, hsm: hsm}
 }
 
+// CreateThesis creates a new thesis record on the ledger.
+func (n *NotaryService) CreateThesis(thesisID string, grade string, title string, date string) error {
+	return n.client.ExecuteTransaction("CreateThesis", thesisID, grade, title, date)
+}
+
+// Notarize attaches a document hash and HSM signature to an existing thesis record.
 func (n *NotaryService) Notarize(thesisID string, hash string, signature string) error {
-	// Use of the gateway client to call chaincode
-	return n.client.ExecuteTransaction("CreateThesis", thesisID, hash, signature)
+	return n.client.ExecuteTransaction("NotarizeThesis", thesisID, hash, signature)
+}
+
+func (n *NotaryService) GetThesis(thesisID string) ([]byte, error) {
+	return n.client.EvaluateTransaction("ReadThesis", thesisID)
+}
+
+func (n *NotaryService) GetAllTheses() ([]byte, error) {
+	return n.client.EvaluateTransaction("GetAllTheses")
 }
