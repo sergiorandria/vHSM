@@ -15,5 +15,5 @@ func NewNotaryService(client *gateway_sdk.GatewayClient, hsm *HSMService) *Notar
 
 func (n *NotaryService) Notarize(thesisID string, hash string, signature string) error {
 	// Use of the gateway client to call chaincode
-	return n.client.ExecuteTransaction("NotarizeThesis", thesisID, hash, signature)
+	return n.client.ExecuteTransaction("CreateThesis", thesisID, hash, signature)
 }

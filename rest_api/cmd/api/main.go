@@ -96,9 +96,14 @@ func main() {
 	r.MaxMultipartMemory = maxUploadSize
 
 	r.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "http://localhost:5173") // Should be changed according to the frontend address
+		origin := c.GetHeader("Origin")
+		if origin != "" {
+			c.Header("Access-Control-Allow-Origin", origin)
+		}
+
 		c.Header("Access-Control-Allow-Methods", "POST, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		c.Header("Access-Control-Allow-Credentials", "true")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
@@ -107,18 +112,9 @@ func main() {
 	})
 
 	r.POST("/api/v1/submissions", func(c *gin.Context) {
-		if err := c.Request.ParseMultipartForm(maxUploadSize); err != nil {
-			log.Printf("DEBUG: ParseMultipartForm error: %v", err)
-		}
-		log.Printf("DEBUG: PostForm values: %+v", c.Request.PostForm)
-		if c.Request.MultipartForm != nil {
-			log.Printf("DEBUG: MultipartForm.Value: %+v", c.Request.MultipartForm.Value)
-			log.Printf("DEBUG: MultipartForm.File: %+v", c.Request.MultipartForm.File)
-		}
-		log.Printf("DEBUG: Content-Type header: %s", c.GetHeader("Content-Type"))
-
 		thesisID := c.PostForm("ThesisId")
 		log.Printf("DEBUG: thesisID read as: %q", thesisID)
+		log.Printf("DEBUG: Content-Type header: %s", c.GetHeader("Content-Type"))
 
 		if thesisID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "thesisId required"})
