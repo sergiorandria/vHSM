@@ -1,6 +1,6 @@
 Add these env variables to /etc/vhsm/vhsm.env
 
-# ── Fabric ───────────────────────────────────────────────────────────────────
+## Fabric
 CRYPTO_PATH=/etc/vhsmd/crypto
 MSP_ID=misaMSP
 CHANNEL_NAME=firstcanal
