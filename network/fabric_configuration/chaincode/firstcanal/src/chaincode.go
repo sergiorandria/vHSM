@@ -22,8 +22,8 @@ type ThesisPayload struct {
 	ThesisID  string         `json:"thesisId"`
 	Grade     float64        `json:"grade"`
 	Metadata  ThesisMetadata `json:"metadata"`
-	Hash      string         `json:"hash,omitempty"`
-	Signature string         `json:"signature,omitempty"`
+	Hash      string         `json:"hash"`      // Should be omitempty, just for development
+	Signature string         `json:"signature"` // Should be omitempty, just for development
 }
 
 // NotarizeThesis attaches a document hash and HSM signature to an existing thesis record.
