@@ -19,6 +19,15 @@ network/fabric_configuration/peer-data/peer0.misa.university.com/lifecycle/
 network/fabric_configuration/peer-data/peer0.misa.university.com/externalbuilder/
 network/fabric_configuration/peer-data/peer0.misa.university.com/ledgersData/chains/chains/canaltest/blockfile_000000
 network/fabric_configuration/peer-data/peer0.misa.university.com/ledgersData/chains/chains/firstcanal/blockfile_000000
+network/fabric_configuration/Conf_with_fabric-CA/chaincode/
+network/fabric_configuration/Conf_with_fabric-CA/channel-artifacts/
+network/fabric_configuration/Conf_with_fabric-CA/fabric-ca/
+network/fabric_configuration/Conf_with_fabric-CA/organizations/
+network/fabric_configuration/Conf_with_fabric-CA/peer-data/
+network/fabric_configuration/Conf_with_fabric-CA/configtx.yaml
+network/fabric_configuration/Conf_with_fabric-CA/docker-compose.yaml
+network/fabric_configuration/Conf_with_fabric-CA/network.env
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
