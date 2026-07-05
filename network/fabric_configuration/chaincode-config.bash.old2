@@ -206,9 +206,14 @@ DOCKER_EOF
             echo ""
             echo "    --- Peer '${PEER_HOST}' (org '${!NAME_VAR}') ---"
 
-            # --- Ask TLS preference FIRST — the TLS cert directory below is
-            #     only actually needed if TLS is enabled, so we don't want to
-            #     force its presence for people who plan to say 'n'. ---
+            CC_TLS_DIR="${CRYPTO_CONFIG_DIR}/peerOrganizations/${ORG_DOMAIN}/peers/${CC_HOST}/tls"
+            if [ ! -d "$CC_TLS_DIR" ]; then
+                echo "    ❌ Certificat TLS dédié introuvable : ${CC_TLS_DIR}"
+                echo "       Régénérez crypto-config/ avec la version à jour de generate-network.sh."
+                continue
+            fi
+
+            # --- Ask TLS preference ---
             while true; do
                 read -p "    Activer le TLS pour ce chaincode CCaaS ? (o/n) [o]: " DO_TLS
                 DO_TLS=${DO_TLS:-o}
@@ -218,22 +223,6 @@ DOCKER_EOF
                     *) echo "Réponse invalide, entrez 'o' ou 'n'." ;;
                 esac
             done
-
-            # NOTE: depuis la migration cryptogen -> Fabric-CA, le dossier
-            # racine des identités s'appelle ${ORG_ROOT_DIR} (ex: ./organizations),
-            # plus ${CRYPTO_CONFIG_DIR} (qui n'existe plus dans network.env).
-            # Par ailleurs enroll-network.sh n'enrôle que des identités
-            # "peer0", "peer1", ... (jamais "cc-peer0"), donc le certificat TLS
-            # à utiliser pour le serveur CCaaS est celui déjà émis pour le
-            # peer lui-même (${PEER_HOST}), pas un certificat "${CC_HOST}"
-            # dédié qui n'a jamais été généré.
-            CC_TLS_DIR="${ORG_ROOT_DIR}/peerOrganizations/${ORG_DOMAIN}/peers/${PEER_HOST}/tls"
-            if [ "$TLS_ENABLED" == "true" ] && [ ! -d "$CC_TLS_DIR" ]; then
-                echo "    ❌ Certificat TLS du peer introuvable : ${CC_TLS_DIR}"
-                echo "       Relancez ./enroll-network.sh pour (re)générer ${ORG_ROOT_DIR}/."
-                continue
-            fi
-
             # --- connection.json / metadata.json / package .tar.gz ---
 if [ "$TLS_ENABLED" == "true" ]; then
                 cat << CONN_EOF > "${PEER_CC_DIR}/connection.json"

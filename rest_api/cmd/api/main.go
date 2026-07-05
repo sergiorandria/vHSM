@@ -216,6 +216,7 @@ func main() {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "signature failed"})
 			return
 		}
+
 		sig := hex.EncodeToString(sigBytes)
 		if err := notarySvc.Notarize(thesisID, hashHex, sig); err != nil {
 			log.Printf("notarize failed: %v", err)
