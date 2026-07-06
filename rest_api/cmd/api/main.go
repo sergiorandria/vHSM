@@ -228,7 +228,6 @@ func main() {
 	}
 
 	// --- Protected routes ---
-
 	r.GET("/api/v1/theses/:thesisId", authRequired, requirePermission("ReadThesis"), func(c *gin.Context) {
 		thesisID := c.Param("thesisId")
 		if thesisID == "" {
@@ -305,6 +304,7 @@ func main() {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read uploaded file"})
 				return
 			}
+			
 			if int64(len(data)) > maxUploadSize {
 				c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "file too large"})
 				return
@@ -355,6 +355,7 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
+
 	addr := fmt.Sprintf(":%s", port)
 	log.Printf("starting api on %s", addr)
 	r.Run(addr)
