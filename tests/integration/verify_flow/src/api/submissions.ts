@@ -10,7 +10,7 @@ export async function submit(
     const formData = new FormData();
     
     // 1. Ajoutez TOUS les champs textuels en premier
-    formData.append("ThesisId", payload.ThesisId);
+    //formData.append("ThesisId", payload.ThesisId);
     formData.append("Grade", payload.Grade.toString());
     formData.append("Title", payload.Title);
     formData.append("Date", payload.Date);

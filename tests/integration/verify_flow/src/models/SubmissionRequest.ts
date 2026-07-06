@@ -1,5 +1,5 @@
 export interface SubmissionRequest {
-    ThesisId: string;
+    //ThesisId: string;
     Grade: number;
     Document: File;
     Title: string; 

@@ -41,13 +41,13 @@ document.addEventListener("DOMContentLoaded", () => {
             const submitBtn = document.getElementById("submitBtn") as HTMLButtonElement;
 
             try {
-                const rawThesisId = (document.getElementById("ThesisId") as HTMLInputElement).value.trim();
+                /*const rawThesisId = (document.getElementById("ThesisId") as HTMLInputElement).value.trim();
                 const thesisIdPattern = /^[a-zA-Z0-9_-]{1,128}$/;
                 if (!thesisIdPattern.test(rawThesisId)) {
                     alert("Erreur locale : L'ID de la thèse est invalide. Lettres, chiffres, '-' et '_' uniquement.");
                     return;
                 }
-
+                */
                 const fileInput = document.getElementById("Document") as HTMLInputElement;
                 if (!fileInput.files || fileInput.files.length === 0) {
                     alert("Erreur : Veuillez sélectionner un document.");
@@ -55,7 +55,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
 
                 const payload: SubmissionRequest = {
-                    ThesisId: rawThesisId,
+                    //ThesisId: rawThesisId,
                     Grade: parseFloat((document.getElementById("Grade") as HTMLInputElement).value),
                     Document: fileInput.files[0],
                     Title: (document.getElementById("Title") as HTMLInputElement).value,
