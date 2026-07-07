@@ -1,0 +1,21 @@
+# /etc/systemd/system/vhsmd.service
+# Some path should be adjusted
+[Unit]
+Description=vHSM Electronic Signature REST API
+Documentation=https://github.com/sergiorandria/vHSM
+After=network-online.target minio.service softhsm.target
+Wants=network-online.target
+Requires=minio.service
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=/etc/vhsmd/vhsmd.env
+WorkingDirectory=/home/sergio/project/vHSM/rest_api
+ExecStart=/home/sergio/project/vHSM/rest_api/target/vhsmd
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

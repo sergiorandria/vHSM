@@ -1,0 +1,8 @@
+docker exec cli.misa.university.com \
+  peer chaincode invoke \
+  -o orderer.university.com:7050 \
+  --channelID firstcanal \
+  --name thesis \
+  -c '{"Args":["CreateThesis","TH001","18.5","{\"student\":{\"name\":\"Jean\"},\"administrative\":{},\"metadata\":{\"title\":\"Titre de la thèse\"}}","2026-06-28"]}' \
+  --tls \
+  --cafile /etc/hyperledger/orderer/tls/ca.crt
