@@ -3,32 +3,24 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
 )
-
-// ThesisMetadata contient les informations descriptives d'une thèse.
-type ThesisMetadata struct {
-	ThesisTitle string `json:"thesisTitle"`
-	DefenseDate string `json:"DefenseDate"`
-}
 
 // ThesisContract regroupe les fonctions du smart contract (CRUD basique).
 type ThesisContract struct {
 	contractapi.Contract
 }
-package models
-
-import "time"
 
 // ThesisStatus represents the lifecycle state of a thesis record on the ledger
 type ThesisStatus string
 
 const (
-	StatusDraft      ThesisStatus = "DRAFT"      // Created by superadmin, awaiting defense
-	StatusDefended   ThesisStatus = "DEFENDED"   // Grade submitted, pending notarization
-	StatusNotarized  ThesisStatus = "NOTARIZED"  // Hash + signature committed
-	StatusArchived   ThesisStatus = "ARCHIVED"
+	StatusDraft     ThesisStatus = "DRAFT"     // Created by superadmin, awaiting defense
+	StatusDefended  ThesisStatus = "DEFENDED"  // Grade submitted, pending notarization
+	StatusNotarized ThesisStatus = "NOTARIZED" // Hash + signature committed
+	StatusArchived  ThesisStatus = "ARCHIVED"
 )
 
 // ThesisPayload is the on-chain representation of a thesis record.
@@ -39,15 +31,15 @@ type ThesisPayload struct {
 	StudentID string `json:"studentId"`
 
 	// --- Identity & administrative data (filled by superadmin at creation) ---
-	Student       StudentInfo       `json:"student"`
+	Student        StudentInfo        `json:"student"`
 	Administrative AdministrativeInfo `json:"administrative"`
 
 	// --- Academic performance (filled later, after defense) ---
 	AcademicPerformance AcademicPerformance `json:"academicPerformance,omitempty"`
 
 	// --- Thesis metadata ---
-	Metadata 			ThesisMetadata `json:"metadata"`
-	ThesisGrade 	 	string `json:"grade"`
+	Metadata    ThesisMetadata `json:"metadata"`
+	ThesisGrade string         `json:"grade"`
 
 	// --- Jury members information
 
@@ -58,27 +50,27 @@ type ThesisPayload struct {
 	UpdatedAt time.Time    `json:"updatedAt,omitempty"`
 
 	// --- Integrity / HSM-signed proof, empty until notarization ---
-	HashDocument      			string `json:"hashDocument,omitempty"`      // dev-only for now
-	SignatureDocument 	      	string `json:"signatureDocument,omitempty"` // dev-only for now
-	HashPv 						string `json:"hashPv"`
-	SignaturePv 				string `json:"signaturePv"`
+	HashDocument      string `json:"hashDocument,omitempty"`      // dev-only for now
+	SignatureDocument string `json:"signatureDocument,omitempty"` // dev-only for now
+	HashPv            string `json:"hashPv"`
+	SignaturePv       string `json:"signaturePv"`
 }
 
 // StudentInfo holds identity data, set once at record creation
 type StudentInfo struct {
-	FullName    string `json:"fullName"`
-	NationalID  string `json:"nationalId,omitempty"` // consider hashing/omitting on-chain for privacy
-	Email       string `json:"email"`
-	EnrollmentYear int `json:"enrollmentYear"`
-	Program     string `json:"program"`     
-	Department  string `json:"department"`
+	FullName       string `json:"fullName"`
+	NationalID     string `json:"nationalId,omitempty"` // consider hashing/omitting on-chain for privacy
+	Email          string `json:"email"`
+	EnrollmentYear int    `json:"enrollmentYear"`
+	Program        string `json:"program"`
+	Department     string `json:"department"`
 }
 
 // AdministrativeInfo covers institutional/registrar-level data
 type AdministrativeInfo struct {
 	Institution      string    `json:"institution"`
 	Faculty          string    `json:"faculty"`
-	AcademicYear     string    `json:"academicYear"`    
+	AcademicYear     string    `json:"academicYear"`
 	SupervisorName   string    `json:"supervisorName"`
 	SupervisorID     string    `json:"supervisorId,omitempty"`
 	JuryMembers      []string  `json:"juryMembers,omitempty"`
@@ -96,13 +88,13 @@ type AcademicPerformance struct {
 
 // ThesisMetadata describes the document itself
 type ThesisMetadata struct {
-	Title        string   `json:"title"`
-	Abstract     string   `json:"abstract,omitempty"`
-	Keywords     []string `json:"keywords,omitempty"`
-	Language     string   `json:"language"`
-	PageCount    int      `json:"pageCount,omitempty"`
-	FileRef      string   `json:"fileRef"`      // MinIO object reference, not the file itself
-	FileChecksum string   `json:"fileChecksum,omitempty"` // sha256 of the raw file in MinIO
+	Title        string    `json:"title"`
+	Abstract     string    `json:"abstract,omitempty"`
+	Keywords     []string  `json:"keywords,omitempty"`
+	Language     string    `json:"language"`
+	PageCount    int       `json:"pageCount,omitempty"`
+	FileRef      string    `json:"fileRef"`                // MinIO object reference, not the file itself
+	FileChecksum string    `json:"fileChecksum,omitempty"` // sha256 of the raw file in MinIO
 	SubmittedAt  time.Time `json:"submittedAt,omitempty"`
 }
 
@@ -126,8 +118,8 @@ func (c *ThesisContract) NotarizeThesis(
 		return fmt.Errorf("échec de désérialisation de la thèse : %w", err)
 	}
 
-	thesis.Hash = hash
-	thesis.Signature = signature
+	thesis.HashDocument = hash
+	thesis.SignatureDocument = signature
 
 	updatedJSON, err := json.Marshal(thesis)
 	if err != nil {
