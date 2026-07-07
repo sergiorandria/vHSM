@@ -1,0 +1,96 @@
+# =================================================================
+# Exemple de fichier .ldif d'identités pour une organisation peer
+# (ex: misa / misaMSP), à pointer via le chemin demandé par
+# generate-network.sh.
+#
+# IMPORTANT : la valeur de "businessCategory" doit correspondre
+# EXACTEMENT à l'une des constantes de rôle définies dans le package
+# Go "internal" (voir rbac.go) :
+#
+#   RoleAdmin     = "admin"
+#   RoleProfessor = "professeurs"
+#   RoleStudent   = "etudiants"
+#
+# Sinon HasPermission() ne retrouvera jamais le rôle de l'utilisateur
+# et toute action lui sera refusée (fail closed).
+#
+# Adaptez le suffixe "ou=users,dc=misa,dc=university,dc=com" au
+# LDAP_BASE_DN réel de votre organisation (déduit de son domaine par
+# generate-network.sh, ex: misa.university.com -> dc=misa,dc=university,dc=com).
+#
+# ⚠️ userPassword est ici en clair pour la lisibilité de l'exemple.
+# Pour un usage réel, générez un hash avec :
+#   slappasswd -s "votre_mot_de_passe"
+# et collez le résultat (ex: {SSHA}xxxxxxx...) à la place du mot de
+# passe en clair.
+# =================================================================
+
+# --- Compte administrateur (RoleAdmin) ---
+dn: uid=orgadmin,ou=users,dc=misa,dc=university,dc=com
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: orgadmin
+sn: orgadmin
+uid: orgadmin
+businessCategory: admin
+userPassword: orgadminpw
+
+# --- Comptes professeurs (RoleProfessor) ---
+dn: uid=prof0,ou=users,dc=misa,dc=university,dc=com
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: Rakoto Jean
+sn: Rakoto
+uid: prof0
+businessCategory: professeurs
+userPassword: prof0pw
+
+dn: uid=prof1,ou=users,dc=misa,dc=university,dc=com
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: Rasoanaivo Marie
+sn: Rasoanaivo
+uid: prof1
+businessCategory: professeurs
+userPassword: prof1pw
+
+# --- Comptes étudiants (RoleStudent) ---
+dn: uid=etud0,ou=users,dc=misa,dc=university,dc=com
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: Rabe Tojo
+sn: Rabe
+uid: etud0
+businessCategory: etudiants
+userPassword: etud0pw
+
+dn: uid=etud1,ou=users,dc=misa,dc=university,dc=com
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: Andria Fara
+sn: Andria
+uid: etud1
+businessCategory: etudiants
+userPassword: etud1pw
+
+# --- Identité d'infrastructure du peer (hors RBAC applicatif) ---
+dn: uid=peer0,ou=users,dc=misa,dc=university,dc=com
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: peer0
+sn: peer0
+uid: peer0
+businessCategory: peer
+userPassword: peer0pw

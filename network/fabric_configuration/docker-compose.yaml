@@ -27,8 +27,9 @@ services:
       LDAP_DOMAIN: "university.com"
       LDAP_ADMIN_PASSWORD: "ldapadminpw"
       LDAP_BASE_DN: "dc=university,dc=com"
+      LDAP_REMOVE_CONFIG_AFTER_SETUP: "false"
     volumes:
-      - ./fabric-ca/orderer/ldap-bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom/
+      - ./fabric-ca/orderer/ldap-bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom
       - ldapdata.orderer:/var/lib/ldap
       - ldapconfig.orderer:/etc/ldap/slapd.d
     ports:
@@ -76,8 +77,9 @@ services:
       LDAP_DOMAIN: "misa.university.com"
       LDAP_ADMIN_PASSWORD: "ldapadminpw"
       LDAP_BASE_DN: "dc=misa,dc=university,dc=com"
+      LDAP_REMOVE_CONFIG_AFTER_SETUP: "false"
     volumes:
-      - ./fabric-ca/misa/ldap-bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom/
+      - ./fabric-ca/misa/ldap-bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom
       - ldapdata.misa:/var/lib/ldap
       - ldapconfig.misa:/etc/ldap/slapd.d
     ports:
@@ -136,7 +138,7 @@ services:
       - ./channel-artifacts:/var/hyperledger/orderer/channel-artifacts
       - ./peer-data/peer0.misa.university.com:/var/hyperledger/production
     ports:
-      - "7051:7051"
+      - "7052:7051"
     networks:
       - fabric
     depends_on:
@@ -209,7 +211,7 @@ services:
     image: thesis-ccaas:1.0
     container_name: cc-peer0.misa.university.com
     environment:
-      CORE_CHAINCODE_ID_NAME: thesis_1.0:51790c8abe2ccafc2dd2a113050e6dab1bc711683c764b9482a5b32b6cd09fb6
+      CORE_CHAINCODE_ID_NAME: thesis_1.0:fb55197bc81a91b1b7ce11c094d932049a1175bf9b2736aebfd8e33e91a8b568
       CHAINCODE_SERVER_ADDRESS: 0.0.0.0:9999
       CHAINCODE_TLS_DISABLED: "true"
     networks:

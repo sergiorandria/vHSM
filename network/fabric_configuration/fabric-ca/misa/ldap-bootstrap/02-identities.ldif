@@ -1,0 +1,62 @@
+dn: uid=orgadmin,ou=users,dc=misa,dc=university,dc=com
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: orgadmin
+sn: orgadmin
+uid: orgadmin
+businessCategory: admin
+userPassword: orgadminpw
+
+dn: uid=prof0,ou=users,dc=misa,dc=university,dc=com
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: prof0
+sn: prof0
+uid: prof0
+businessCategory: professeurs
+userPassword: prof0pw
+
+dn: uid=etud0,ou=users,dc=misa,dc=university,dc=com
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: etud0
+sn: etud0
+uid: etud0
+businessCategory: etudiants
+userPassword: etud0pw
+
+dn: uid=peer0,ou=users,dc=misa,dc=university,dc=com
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: peer0
+sn: peer0
+uid: peer0
+businessCategory: peer
+userPassword: peer0pw
+
+
+dn: cn=professeurs,ou=groups,dc=misa,dc=university,dc=com
+objectClass: groupOfNames
+objectClass: top
+cn: professeurs
+member: uid=prof0,ou=users,dc=misa,dc=university,dc=com
+
+dn: cn=etudiants,ou=groups,dc=misa,dc=university,dc=com
+objectClass: groupOfNames
+objectClass: top
+cn: etudiants
+member: uid=etud0,ou=users,dc=misa,dc=university,dc=com
+
+dn: cn=admin,ou=groups,dc=misa,dc=university,dc=com
+objectClass: groupOfNames
+objectClass: top
+cn: admin
+member: uid=orgadmin,ou=users,dc=misa,dc=university,dc=com
