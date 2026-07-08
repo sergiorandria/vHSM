@@ -144,6 +144,7 @@ func (c *ThesisContract) CreateThesis(
 	if err != nil {
 		return err
 	}
+
 	if exists {
 		return fmt.Errorf("la thèse avec l'ID '%s' existe déjà", thesisID)
 	}
