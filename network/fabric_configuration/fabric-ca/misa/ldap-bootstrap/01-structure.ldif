@@ -1,3 +1,7 @@
 dn: ou=users,dc=misa,dc=university,dc=com
 objectClass: organizationalUnit
 ou: users
+
+dn: ou=groups,dc=misa,dc=university,dc=com
+objectClass: organizationalUnit
+ou: groups

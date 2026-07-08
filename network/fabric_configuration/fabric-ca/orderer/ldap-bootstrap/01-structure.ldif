@@ -1,4 +1,3 @@
-
 dn: ou=users,dc=university,dc=com
 objectClass: organizationalUnit
 ou: users

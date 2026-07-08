@@ -1,3 +1,58 @@
+# =================================================================
+# Exemple de fichier .ldif d'identités pour une organisation peer
+# (ex: misa / misaMSP), à pointer via le chemin demandé par
+# generate-network.sh.
+#
+# IMPORTANT — CE QUI DETERMINE REELLEMENT LE ROLE :
+#
+# D'apres LDAP_ENV.sh, vhsmd NE lit PAS "businessCategory" sur
+# l'entree utilisateur pour determiner son role. Il fait une
+# recherche en 2 temps :
+#   1. Trouve l'utilisateur sous LDAP_USER_BASE_DN (ou=users,...)
+#      via LDAP_USER_FILTER="(uid=%s)"
+#   2. Cherche sous LDAP_GROUP_BASE_DN (ou=groups,...) les groupes
+#      dont l'attribut "member" contient le DN de l'utilisateur
+#      (LDAP_GROUP_FILTER="(member=%s)"), et prend le "cn"
+#      (LDAP_ROLE_ATTR="cn") de ce groupe comme role.
+#
+# => Le role vient donc du "cn" du groupe LDAP dont l'utilisateur est
+#    "member", PAS de l'attribut businessCategory (conserve ici a
+#    titre indicatif uniquement, et pour compatibilite avec un futur
+#    mapping Fabric-CA -> hf.Registrar.Roles si besoin).
+#
+# Le "cn" de chaque groupe doit correspondre EXACTEMENT a l'une des
+# constantes de role definies dans le package Go "internal" (rbac.go) :
+#
+#   RoleAdmin     = "admin"
+#   RoleProfessor = "professeurs"
+#   RoleStudent   = "etudiants"
+#
+# Sinon HasPermission() ne retrouvera jamais le role de l'utilisateur
+# et toute action lui sera refusee (fail closed).
+#
+# NOTE SUR L'ORDRE DE CHARGEMENT : generate-network.sh cree maintenant
+# automatiquement "ou=groups,<LDAP_BASE_DN>" dans 01-structure.ldif
+# (charge avant ce fichier, qui devient 02-identities.ldif). Les
+# entrees de groupe ci-dessous peuvent donc etre ajoutees directement
+# dans CE fichier sans creer l'OU vous-meme.
+#
+# Adaptez le suffixe "ou=users,dc=misa,dc=university,dc=com" /
+# "ou=groups,dc=misa,dc=university,dc=com" au LDAP_BASE_DN reel de
+# votre organisation (deduit de son domaine par generate-network.sh,
+# ex: misa.university.com -> dc=misa,dc=university,dc=com).
+#
+# userPassword est ici en clair pour la lisibilite de l'exemple.
+# Pour un usage reel, generez un hash avec :
+#   slappasswd -s "votre_mot_de_passe"
+# et collez le resultat (ex: {SSHA}xxxxxxx...) a la place du mot de
+# passe en clair.
+# =================================================================
+
+# =================================================================
+# --- Utilisateurs (ou=users) ---
+# =================================================================
+
+# --- Compte administrateur ---
 dn: uid=orgadmin,ou=users,dc=misa,dc=university,dc=com
 objectClass: inetOrgPerson
 objectClass: organizationalPerson
@@ -9,28 +64,53 @@ uid: orgadmin
 businessCategory: admin
 userPassword: orgadminpw
 
+# --- Comptes professeurs ---
 dn: uid=prof0,ou=users,dc=misa,dc=university,dc=com
 objectClass: inetOrgPerson
 objectClass: organizationalPerson
 objectClass: person
 objectClass: top
-cn: prof0
-sn: prof0
+cn: Rakoto Jean
+sn: Rakoto
 uid: prof0
 businessCategory: professeurs
 userPassword: prof0pw
 
+dn: uid=prof1,ou=users,dc=misa,dc=university,dc=com
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: Rasoanaivo Marie
+sn: Rasoanaivo
+uid: prof1
+businessCategory: professeurs
+userPassword: prof1pw
+
+# --- Comptes etudiants ---
 dn: uid=etud0,ou=users,dc=misa,dc=university,dc=com
 objectClass: inetOrgPerson
 objectClass: organizationalPerson
 objectClass: person
 objectClass: top
-cn: etud0
-sn: etud0
+cn: Rabe Tojo
+sn: Rabe
 uid: etud0
 businessCategory: etudiants
 userPassword: etud0pw
 
+dn: uid=etud1,ou=users,dc=misa,dc=university,dc=com
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: Andria Fara
+sn: Andria
+uid: etud1
+businessCategory: etudiants
+userPassword: etud1pw
+
+# --- Identite d'infrastructure du peer (hors RBAC applicatif, pas de groupe) ---
 dn: uid=peer0,ou=users,dc=misa,dc=university,dc=com
 objectClass: inetOrgPerson
 objectClass: organizationalPerson
@@ -42,21 +122,24 @@ uid: peer0
 businessCategory: peer
 userPassword: peer0pw
 
-
-dn: cn=professeurs,ou=groups,dc=misa,dc=university,dc=com
-objectClass: groupOfNames
-objectClass: top
-cn: professeurs
-member: uid=prof0,ou=users,dc=misa,dc=university,dc=com
-
-dn: cn=etudiants,ou=groups,dc=misa,dc=university,dc=com
-objectClass: groupOfNames
-objectClass: top
-cn: etudiants
-member: uid=etud0,ou=users,dc=misa,dc=university,dc=com
+# =================================================================
+# --- Groupes (ou=groups) — C'EST CE QUI DEFINIT LE ROLE POUR vhsmd ---
+# objectClass groupOfNames exige au moins un attribut "member".
+# =================================================================
 
 dn: cn=admin,ou=groups,dc=misa,dc=university,dc=com
 objectClass: groupOfNames
-objectClass: top
 cn: admin
 member: uid=orgadmin,ou=users,dc=misa,dc=university,dc=com
+
+dn: cn=professeurs,ou=groups,dc=misa,dc=university,dc=com
+objectClass: groupOfNames
+cn: professeurs
+member: uid=prof0,ou=users,dc=misa,dc=university,dc=com
+member: uid=prof1,ou=users,dc=misa,dc=university,dc=com
+
+dn: cn=etudiants,ou=groups,dc=misa,dc=university,dc=com
+objectClass: groupOfNames
+cn: etudiants
+member: uid=etud0,ou=users,dc=misa,dc=university,dc=com
+member: uid=etud1,ou=users,dc=misa,dc=university,dc=com

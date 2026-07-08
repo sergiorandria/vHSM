@@ -120,7 +120,7 @@ EOF
             if [ -f "$O_IDENTITIES_LDIF" ]; then
                 break
             fi
-            echo "    ❌ Fichier introuvable : '$O_IDENTITIES_LDIF'. Réessayez."
+            echo "     Fichier introuvable : '$O_IDENTITIES_LDIF'. Réessayez."
         done
 
         cat << EOF >> $ENV_FILE
@@ -348,11 +348,15 @@ operations:
     enabled: false
 EOF
 
-    # ---- Bootstrap LDAP (LDIF) : OU + une entrée par identité ----
+    # ---- Bootstrap LDAP (LDIF) : OU (users + groups) + une entrée par identité ----
     cat << EOF > "${LDAP_DIR}/01-structure.ldif"
 dn: ou=users,${LDAP_BASE_DN}
 objectClass: organizationalUnit
 ou: users
+
+dn: ou=groups,${LDAP_BASE_DN}
+objectClass: organizationalUnit
+ou: groups
 EOF
 
     local ENTRY_FILE="${LDAP_DIR}/02-identities.ldif"
