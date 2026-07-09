@@ -5,13 +5,19 @@ set -e
 #  GÉNÉRATION D'UN RÉSEAU HYPERLEDGER FABRIC BASÉ SUR FABRIC-CA
 #  (Fabric-CA + PostgreSQL + OpenLDAP par organisation, conteneurisé)
 #
-#  Remplace l'ancienne approche "cryptogen" par une PKI Fabric-CA :
+#  Ce script ne s'occupe QUE du réseau :
 #   - 1 serveur Fabric-CA par organisation (+ 1 pour l'Orderer)
 #   - Chaque CA persiste ses identités/certificats dans PostgreSQL
-#   - Chaque organisation a son propre annuaire OpenLDAP, pré-rempli
-#     avec les identités de l'organisation (admin, orderer/peers, user1)
-#   - L'enrôlement (register/enroll) se fait via fabric-ca-client,
-#     exécuté dans des conteneurs Docker jetables (voir enroll-network.sh)
+#   - Chaque organisation a un conteneur OpenLDAP prêt à recevoir un
+#     bootstrap LDIF (structure/groupes/utilisateurs)
+#   - docker-compose.yaml, configtx.yaml (généralisé pour N organisations)
+#
+#  La génération des groupes et utilisateurs LDAP (LDIF, mots de passe
+#  hashés SSHA) est désormais un sujet séparé : voir
+#  ./generate-ldap-identities.sh, qui lit configtx.yaml après coup et
+#  écrit directement dans ${FABRIC_CA_DIR}/<org>/ldap-bootstrap/.
+#  Ce script-ci se contente de créer le dossier vide (monté par
+#  docker-compose) : rien n'y est pré-rempli ici.
 # =================================================================
 
 ENV_FILE="network.env"
@@ -104,29 +110,6 @@ ORG${i}_LDAP_PORT=$LDAP_PORT
 ORG${i}_LDAP_ADMIN_PASS="ldapadminpw"
 EOF
 
-        # -------------------------------------------------------------
-        # Identités applicatives LDAP pour ${O_NAME} : au lieu de saisir
-        # chaque compte un par un, on demande simplement le chemin d'un
-        # fichier .ldif déjà prêt (rôles businessCategory déjà positionnés
-        # sur admin / professeurs / etudiants, conformément aux constantes
-        # RoleAdmin/RoleProfessor/RoleStudent du package Go "internal").
-        # Ce fichier sera copié tel quel comme 02-identities.ldif et monté
-        # dans le conteneur ldap.${O_NAME} au démarrage.
-        # -------------------------------------------------------------
-        echo ""
-        echo "    --- Identités LDAP applicatives pour ${O_NAME} ---"
-        while true; do
-            read -p "    Chemin du fichier .ldif des identités pour ${O_NAME} : " O_IDENTITIES_LDIF
-            if [ -f "$O_IDENTITIES_LDIF" ]; then
-                break
-            fi
-            echo "     Fichier introuvable : '$O_IDENTITIES_LDIF'. Réessayez."
-        done
-
-        cat << EOF >> $ENV_FILE
-ORG${i}_IDENTITIES_LDIF="$O_IDENTITIES_LDIF"
-EOF
-
         for ((p=0; p<${O_PEERS}; p++)); do
             echo ""
             echo "    --- Configuration du peer $p de ${O_NAME} ---"
@@ -136,7 +119,6 @@ EOF
             PEER_PORT=${PEER_PORT:-7051}
             read -p "    Port externe du peer $p [${PEER_PORT}]: " PEER_EXTERNAL_PORT
             PEER_EXTERNAL_PORT=${PEER_EXTERNAL_PORT:-$PEER_PORT}
-
 
             cat << PEER_EOF >> $ENV_FILE
 ORG${i}_PEER${p}_HOST="$PEER_HOST"
@@ -195,37 +177,32 @@ source $ENV_FILE
 export PATH=$(realpath "${FABRIC_BIN_DIR}"):$PATH
 
 # =================================================================
-# 2. GÉNÉRATION DES CONFIGS FABRIC-CA + LDAP (PAR ORGANISATION)
+# 2. GÉNÉRATION DES CONFIGS FABRIC-CA (PAR ORGANISATION)
+#    -> Ne génère plus aucun LDIF. Uniquement fabric-ca-server-config.yaml
+#       et le dossier vide ldap-bootstrap/ (rempli plus tard par
+#       generate-ldap-identities.sh).
 # =================================================================
-# Fonction : écrit fabric-ca-server-config.yaml + le LDIF de bootstrap LDAP
-# pour une "organisation" (peer org ou l'orderer).
-#   $1 = nom court (ex: org1, orderer)
-#   $2 = nom d'affichage / O= du certificat (ex: Org1, Orderer)
-#   $3 = port CA
-#   $4 = port operations CA
-#   $5 = port DB (interne, toujours 5432 dans le conteneur postgres dédié)
-#   $6 = nom DB
-#   $7 = utilisateur DB
-#   $8 = mot de passe DB
-#   $9 = mot de passe admin LDAP
-#   $10 = base DN LDAP (ex: dc=org1,dc=example,dc=com)
-#   $11 = liste des identités à pré-provisionner dans LDAP, séparées par ';'
-#         (format "uid:password:role") — ignoré si $12 est fourni
-#   $12 = (optionnel) chemin d'un fichier .ldif déjà prêt à copier tel
-#         quel comme 02-identities.ldif, à la place de $11
-generate_ca_and_ldap_config() {
+# $1 = nom court (ex: org1, orderer)
+# $2 = nom d'affichage / O= du certificat (ex: Org1, Orderer)
+# $3 = port CA
+# $4 = port operations CA
+# $5 = nom DB
+# $6 = utilisateur DB
+# $7 = mot de passe DB
+# $8 = mot de passe admin LDAP (utilisé uniquement dans le bloc commenté
+#      ci-dessous, si vous activez un jour LDAP comme registry de la CA)
+# $9 = base DN LDAP (idem)
+generate_ca_config() {
     local SHORTNAME="$1"
     local DISPLAYNAME="$2"
     local CA_PORT="$3"
     local OP_PORT="$4"
     local DB_HOST="postgres.${SHORTNAME}"
-    local DB_NAME="$6"
-    local DB_USER="$7"
-    local DB_PASS="$8"
-    local LDAP_ADMIN_PASS="$9"
-    local LDAP_BASE_DN="${10}"
-    local IDENTITIES="${11}"
-    local CUSTOM_LDIF_PATH="${12:-}"
+    local DB_NAME="$5"
+    local DB_USER="$6"
+    local DB_PASS="$7"
+    local LDAP_ADMIN_PASS="$8"
+    local LDAP_BASE_DN="$9"
 
     local CA_DIR="${FABRIC_CA_DIR}/${SHORTNAME}"
     local LDAP_DIR="${FABRIC_CA_DIR}/${SHORTNAME}/ldap-bootstrap"
@@ -274,10 +251,11 @@ db:
 # Désactivée par défaut : PostgreSQL reste le "registry" faisant autorité
 # pour le register/enroll de Fabric-CA (c'est ce qui garantit que le type
 # d'identité - peer/orderer/admin/client - est correctement gravé dans le
-# certificat pour les NodeOUs). Un annuaire LDAP est démarré et pré-rempli
-# avec les mêmes identités (voir ldap.${SHORTNAME} dans docker-compose)
-# pour un usage applicatif (SSO, lookup d'identité, futurs contrôles
-# d'accès), conformément au schéma d'architecture Fabric-CA fourni.
+# certificat pour les NodeOUs). Un annuaire LDAP est démarré séparément et
+# rempli par ./generate-ldap-identities.sh (groupes RBAC applicatifs +
+# utilisateurs), pour un usage applicatif (SSO, lookup d'identité,
+# contrôles d'accès dans vhsmd), conformément au schéma d'architecture
+# Fabric-CA fourni.
 #
 # Pour faire de LDAP le registre d'authentification de la CA elle-même
 # (comme le permet Fabric-CA nativement), décommentez le bloc ci-dessous.
@@ -347,47 +325,6 @@ operations:
   tls:
     enabled: false
 EOF
-
-    # ---- Bootstrap LDAP (LDIF) : OU (users + groups) + une entrée par identité ----
-    cat << EOF > "${LDAP_DIR}/01-structure.ldif"
-dn: ou=users,${LDAP_BASE_DN}
-objectClass: organizationalUnit
-ou: users
-
-dn: ou=groups,${LDAP_BASE_DN}
-objectClass: organizationalUnit
-ou: groups
-EOF
-
-    local ENTRY_FILE="${LDAP_DIR}/02-identities.ldif"
-
-    if [ -n "$CUSTOM_LDIF_PATH" ]; then
-        if [ ! -f "$CUSTOM_LDIF_PATH" ]; then
-            echo "❌ Fichier LDIF introuvable pour ${SHORTNAME} : $CUSTOM_LDIF_PATH" >&2
-            exit 1
-        fi
-        cp "$CUSTOM_LDIF_PATH" "$ENTRY_FILE"
-    else
-        > "$ENTRY_FILE"
-        IFS=';' read -ra ID_ARRAY <<< "$IDENTITIES"
-        for entry in "${ID_ARRAY[@]}"; do
-            [ -z "$entry" ] && continue
-            IFS=':' read -r UID_NAME UID_PASS UID_ROLE <<< "$entry"
-            cat << EOF >> "$ENTRY_FILE"
-dn: uid=${UID_NAME},ou=users,${LDAP_BASE_DN}
-objectClass: inetOrgPerson
-objectClass: organizationalPerson
-objectClass: person
-objectClass: top
-cn: ${UID_NAME}
-sn: ${UID_NAME}
-uid: ${UID_NAME}
-businessCategory: ${UID_ROLE}
-userPassword: ${UID_PASS}
-
-EOF
-        done
-    fi
 }
 
 # Convertit un domaine (org1.example.com) en base DN LDAP (dc=org1,dc=example,dc=com)
@@ -396,14 +333,13 @@ domain_to_dn() {
     echo "dc=$(echo "$DOMAIN" | sed 's/\./,dc=/g')"
 }
 
-echo "==> Génération des configurations Fabric-CA + LDAP..."
+echo "==> Génération des configurations Fabric-CA..."
 
 # --- CA de l'Orderer ---
 ORDERER_LDAP_DN=$(domain_to_dn "$ORDERER_DOMAIN")
-ORDERER_IDENTITIES="ordereradmin:ordereradminpw:admin;orderer:ordererpw:orderer"
-generate_ca_and_ldap_config "orderer" "OrdererOrg" "$ORDERER_CA_PORT" "$ORDERER_CA_OPERATIONS_PORT" \
-    "" "$ORDERER_DB_NAME" "$ORDERER_DB_USER" "$ORDERER_DB_PASS" \
-    "$ORDERER_LDAP_ADMIN_PASS" "$ORDERER_LDAP_DN" "$ORDERER_IDENTITIES"
+generate_ca_config "orderer" "OrdererOrg" "$ORDERER_CA_PORT" "$ORDERER_CA_OPERATIONS_PORT" \
+    "$ORDERER_DB_NAME" "$ORDERER_DB_USER" "$ORDERER_DB_PASS" \
+    "$ORDERER_LDAP_ADMIN_PASS" "$ORDERER_LDAP_DN"
 
 # --- CA de chaque organisation ---
 for ((i=1; i<=NUM_ORGS; i++)); do
@@ -413,19 +349,15 @@ for ((i=1; i<=NUM_ORGS; i++)); do
     OP_PORT_VAR="ORG${i}_CA_OPERATIONS_PORT"
     DB_NAME_VAR="ORG${i}_DB_NAME"; DB_USER_VAR="ORG${i}_DB_USER"; DB_PASS_VAR="ORG${i}_DB_PASS"
     LDAP_PASS_VAR="ORG${i}_LDAP_ADMIN_PASS"
-    PEERS_VAR="ORG${i}_PEERS"
 
     ORG_LDAP_DN=$(domain_to_dn "${!DOMAIN_VAR}")
 
-    # Chemin du fichier .ldif fourni interactivement pour cette organisation
-    LDIF_PATH_VAR="ORG${i}_IDENTITIES_LDIF"
-
-    generate_ca_and_ldap_config "${!NAME_VAR}" "${!NAME_VAR}" "${!CA_PORT_VAR}" "${!OP_PORT_VAR}" \
-        "" "${!DB_NAME_VAR}" "${!DB_USER_VAR}" "${!DB_PASS_VAR}" \
-        "${!LDAP_PASS_VAR}" "$ORG_LDAP_DN" "" "${!LDIF_PATH_VAR}"
+    generate_ca_config "${!NAME_VAR}" "${!NAME_VAR}" "${!CA_PORT_VAR}" "${!OP_PORT_VAR}" \
+        "${!DB_NAME_VAR}" "${!DB_USER_VAR}" "${!DB_PASS_VAR}" \
+        "${!LDAP_PASS_VAR}" "$ORG_LDAP_DN"
 done
 
-echo "   ✓ Fichiers écrits dans ${FABRIC_CA_DIR}/<org>/"
+echo "   ✓ Fichiers écrits dans ${FABRIC_CA_DIR}/<org>/ (config CA + dossier ldap-bootstrap/ vide)"
 
 # =================================================================
 # 3. GÉNÉRATION DOCKER-COMPOSE (CA + POSTGRES + LDAP + PEERS + ORDERER)
@@ -689,7 +621,7 @@ echo ""
 echo "✓ docker-compose.yaml généré (CA + PostgreSQL + LDAP + peers + orderer)"
 
 # =================================================================
-# 4. GÉNÉRATION DU CONFIGTX.YAML DYNAMIQUE
+# 4. GÉNÉRATION DU CONFIGTX.YAML DYNAMIQUE (déjà généralisé pour N orgs)
 # =================================================================
 echo "==> Génération de $CONFIG_FILE..."
 echo "" > $CONFIG_FILE
@@ -843,13 +775,19 @@ echo "  2. ./enroll-network.sh"
 echo "     (registre/enrôle toutes les identités auprès de chaque Fabric-CA"
 echo "      et construit l'arborescence ${ORG_ROOT_DIR}/ attendue par Fabric)"
 echo ""
-echo "  3. export FABRIC_CFG_PATH=\${PWD} && configtxgen -profile MultiOrgsOrdererGenesis -channelID system-channel -outputBlock /dev/null"
+echo "  3. ./generate-ldap-identities.sh"
+echo "     (lit configtx.yaml, génère les groupes RBAC + utilisateurs LDAP"
+echo "      avec mots de passe hashés SSHA dans ${FABRIC_CA_DIR}/<org>/ldap-bootstrap/ ;"
+echo "      première exécution = crée des modèles CSV à éditer dans ./ldap-users/)"
+echo ""
+echo "  4. export FABRIC_CFG_PATH=\${PWD} && configtxgen -profile MultiOrgsOrdererGenesis -channelID system-channel -outputBlock /dev/null"
 echo "     (vérifie que configtx.yaml est valide, optionnel)"
 echo ""
-echo "  4. Pour chaque canal :"
+echo "  5. Pour chaque canal :"
 echo "       configtxgen -profile Profile_<canal> -outputBlock ${ARTIFACTS_DIR}/<canal>_genesis.block -channelID <canal>"
 echo ""
-echo "  5. docker-compose up -d"
-echo "     (démarre l'orderer, les peers, les CLI)"
+echo "  6. docker-compose up -d"
+echo "     (démarre l'orderer, les peers, les CLI ; les conteneurs ldap.<org>"
+echo "      chargeront le bootstrap LDIF généré à l'étape 3)"
 echo ""
-echo "  6. Rejoindre les canaux via osnadmin / peer channel join, comme d'habitude."
+echo "  7. Rejoindre les canaux via osnadmin / peer channel join, comme d'habitude."

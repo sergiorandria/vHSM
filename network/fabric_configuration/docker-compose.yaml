@@ -211,7 +211,7 @@ services:
     image: thesis-ccaas:1.0
     container_name: cc-peer0.misa.university.com
     environment:
-      CORE_CHAINCODE_ID_NAME: thesis_1.0:cda06b174eec3019ff6d60a8e4887fc12585b02d90b3560fa4bdf1c8d597d71f
+      CORE_CHAINCODE_ID_NAME: thesis_1.0:cda9b9f177a2fe3a8a4c0e6159f9dbf9fbfa0ed1eface1d0e139201a2c521500
       CHAINCODE_SERVER_ADDRESS: 0.0.0.0:9999
       CHAINCODE_TLS_DISABLED: "true"
     networks:

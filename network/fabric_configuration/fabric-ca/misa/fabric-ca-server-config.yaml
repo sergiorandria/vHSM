@@ -40,10 +40,11 @@ db:
 # Désactivée par défaut : PostgreSQL reste le "registry" faisant autorité
 # pour le register/enroll de Fabric-CA (c'est ce qui garantit que le type
 # d'identité - peer/orderer/admin/client - est correctement gravé dans le
-# certificat pour les NodeOUs). Un annuaire LDAP est démarré et pré-rempli
-# avec les mêmes identités (voir ldap.misa dans docker-compose)
-# pour un usage applicatif (SSO, lookup d'identité, futurs contrôles
-# d'accès), conformément au schéma d'architecture Fabric-CA fourni.
+# certificat pour les NodeOUs). Un annuaire LDAP est démarré séparément et
+# rempli par ./generate-ldap-identities.sh (groupes RBAC applicatifs +
+# utilisateurs), pour un usage applicatif (SSO, lookup d'identité,
+# contrôles d'accès dans vhsmd), conformément au schéma d'architecture
+# Fabric-CA fourni.
 #
 # Pour faire de LDAP le registre d'authentification de la CA elle-même
 # (comme le permet Fabric-CA nativement), décommentez le bloc ci-dessous.

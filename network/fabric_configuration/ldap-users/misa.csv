@@ -1,0 +1,11 @@
+# Fichier généré automatiquement pour misa.
+# Format : role,uid,password
+# - "role" devient un groupe LDAP (groupOfNames) cn=<role>,ou=groups,dc=misa,dc=university,dc=com
+#   Exemple de rôles alignés sur les constantes RBAC Go (internal.RoleAdmin,
+#   internal.RoleProfessor, internal.RoleStudent) : admin, professeurs, etudiants
+# - Les mots de passe ci-dessous sont des EXEMPLES en clair : ils ne seront
+#   JAMAIS écrits en clair dans les fichiers LDIF, uniquement sous forme
+#   hashée SSHA. Remplacez-les puis relancez ce script.
+admin,admin.misa,ChangeMe1!
+professeurs,prof1.misa,ChangeMe2!
+etudiants,etu1.misa,ChangeMe3!

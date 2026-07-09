@@ -1,0 +1,6 @@
+dn: cn=professeurs,ou=groups,dc=misa,dc=university,dc=com
+objectClass: groupOfNames
+objectClass: top
+cn: professeurs
+member: cn=admin,dc=misa,dc=university,dc=com
+

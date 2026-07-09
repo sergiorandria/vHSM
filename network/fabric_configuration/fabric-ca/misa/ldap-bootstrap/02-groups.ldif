@@ -1,0 +1,6 @@
+dn: cn=etudiants,ou=groups,dc=misa,dc=university,dc=com
+objectClass: groupOfNames
+objectClass: top
+cn: etudiants
+member: uid=r,ou=users,dc=misa,dc=university,dc=com
+

@@ -15,7 +15,12 @@ docker rm -f $(docker ps -aq --filter "name=university") 2>/dev/null
 # Remove peer/orderer data volumes
 docker volume prune -f
 ```
-
+```bash
+osnadmin channel join --channelID <canal> \
+         --config-block ${ARTIFACTS_DIR}/<canal>_genesis.block \
+         -o localhost:7053 --ca-file <orderer-tls-ca> \
+         --client-cert <admin-tls-cert> --client-key <admin-tls-key>
+```
 
 Ce dépôt contient des scripts automatisés pour déployer un réseau Hyperledger Fabric complet (ledger node/blockchain privée) incluant :
 - Génération de la configuration réseau (organisations, peers, orderer, canaux)

@@ -1,0 +1,11 @@
+dn: uid=a,ou=users,dc=misa,dc=university,dc=com
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: a
+sn: a
+uid: a
+businessCategory: professeurs
+userPassword: {SSHA}rJU8wn/gHh3z7uMaZkcRS/QHxUuJ76Gk
+
