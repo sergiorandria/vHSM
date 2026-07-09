@@ -85,6 +85,8 @@ docker exec cli.org1.example.com \
   --cafile /etc/hyperledger/orderer/tls/ca.crt
 ```
 
+#### Here run osnadmin
+
 #### Faire rejoindre les peers au canal
 ```bash
 # Peer0 de l'organisation 1 (ciblé par défaut)
