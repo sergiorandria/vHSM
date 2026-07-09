@@ -35,7 +35,7 @@ type ThesisPayload struct {
 	Administrative AdministrativeInfo `json:"administrative"`
 
 	// --- Academic performance (filled later, after defense) ---
-	AcademicPerformance AcademicPerformance `json:"academicPerformance,omitempty"`
+	AcademicPerformance AcademicPerformance `json:"academicPerformance"`
 
 	// --- Thesis metadata ---
 	Metadata    ThesisMetadata `json:"metadata"`
@@ -47,7 +47,7 @@ type ThesisPayload struct {
 	Status    ThesisStatus `json:"status"`
 	CreatedBy string       `json:"createdBy"` // superadmin ID
 	CreatedAt time.Time    `json:"createdAt"`
-	UpdatedAt time.Time    `json:"updatedAt,omitempty"`
+	UpdatedAt time.Time    `json:"updatedAt"`
 
 	// --- Integrity / HSM-signed proof, empty until notarization ---
 	HashDocument      string `json:"hashDocument,omitempty"`      // dev-only for now
@@ -74,7 +74,7 @@ type AdministrativeInfo struct {
 	SupervisorName   string    `json:"supervisorName"`
 	SupervisorID     string    `json:"supervisorId,omitempty"`
 	JuryMembers      []string  `json:"juryMembers,omitempty"`
-	DefenseDate      time.Time `json:"defenseDate,omitempty"` // empty until scheduled
+	DefenseDate      time.Time `json:"defenseDate"` // empty until scheduled
 	RegistrationDate time.Time `json:"registrationDate"`
 }
 
@@ -95,7 +95,7 @@ type ThesisMetadata struct {
 	PageCount    int       `json:"pageCount,omitempty"`
 	FileRef      string    `json:"fileRef"`                // MinIO object reference, not the file itself
 	FileChecksum string    `json:"fileChecksum,omitempty"` // sha256 of the raw file in MinIO
-	SubmittedAt  time.Time `json:"submittedAt,omitempty"`
+	SubmittedAt  time.Time `json:"submittedAt"`
 }
 
 // NotarizeThesis attaches a document hash and HSM signature to an existing thesis record.

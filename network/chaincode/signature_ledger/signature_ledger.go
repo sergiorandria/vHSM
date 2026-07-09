@@ -14,7 +14,7 @@ type SignatureLedgerContract struct {
 
 // SignatureLedgerEntry describes the structure of a ledger entry
 type SignatureLedgerEntry struct {
-	RecordID       string `json:"record_id"`
+	RecordID       string `json:"record_id"` // Point to the current ThesisId
 	KeyFingerprint string `json:"key_fingerprint"`
 	PayloadDigest  string `json:"payload_digest"`
 	SignatureB64   string `json:"signature_b64"`
@@ -117,12 +117,14 @@ func (s *SignatureLedgerContract) UpdateBlockNumber(ctx contractapi.TransactionC
 }
 
 func main() {
-	chaincode, err := contractapi.NewChaincode(new(SignatureLedgerContract))
+	// TODO: Where should we put this chaincode ?
+	// It calculates/verify the block hash integrity
+	blockSignatureChaincode, err := contractapi.NewChaincode(new(SignatureLedgerContract))
 	if err != nil {
 		panic(fmt.Sprintf("Error creating signature-ledger chaincode: %v", err))
 	}
 
-	if err := chaincode.Start(); err != nil {
+	if err := blockSignatureChaincode.Start(); err != nil {
 		panic(fmt.Sprintf("Error starting signature-ledger chaincode: %v", err))
 	}
 }
