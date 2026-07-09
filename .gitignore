@@ -25,7 +25,6 @@ network/fabric_configuration/Conf_with_fabric-CA/fabric-ca/
 network/fabric_configuration/Conf_with_fabric-CA/organizations/
 network/fabric_configuration/Conf_with_fabric-CA/peer-data/
 network/fabric_configuration/Conf_with_fabric-CA/configtx.yaml
-network/fabric_configuration/Conf_with_fabric-CA/docker-compose.yaml
 network/fabric_configuration/Conf_with_fabric-CA/network.env
 network/fabric_configuration/peer-data 
 network/fabric_configuration/crypto-config 

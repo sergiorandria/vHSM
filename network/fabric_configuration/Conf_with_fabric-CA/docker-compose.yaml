@@ -26,7 +26,7 @@ services:
       LDAP_ORGANISATION: "OrdererOrg"
       LDAP_DOMAIN: "university.com"
       LDAP_ADMIN_PASSWORD: "ldapadminpw"
-      LDAP_BASE_DN: "dc=university,dc=com" 
+      LDAP_BASE_DN: "dc=university,dc=com"
       LDAP_TLS: "false"
       LDAP_REPLICATION: "false"
       LDAP_REMOVE_CONFIG_AFTER_SETUP: "false"
@@ -215,7 +215,7 @@ services:
     image: thesis-ccaas:1.0
     container_name: cc-peer0.misa.university.com
     environment:
-      CORE_CHAINCODE_ID_NAME: thesis_1.0:1ec44983d7ab276d90305eb6ff29fd0b3aec2c0259d961ff0891ccf18ec0c5b2
+      CORE_CHAINCODE_ID_NAME: thesis_1.0:4dfbe682923f1a7b81872f6170065dbeba1b37f46aa9258ea545f176c5dcc9c8
       CHAINCODE_SERVER_ADDRESS: 0.0.0.0:9999
       CHAINCODE_TLS_DISABLED: "true"
     networks:
