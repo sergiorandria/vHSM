@@ -5,9 +5,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"strconv"
@@ -24,6 +26,66 @@ import (
 const maxUploadSize = 50 << 20 // 50 MiB
 
 const defaultTokenTTL = time.Hour
+
+// storedFile describes the outcome of encrypting, uploading and hashing a
+// single defense-time document (either the PV or the thesis PDF).
+type storedFile struct {
+	ObjectName string
+	Hash       string
+	IV         string
+}
+
+// encryptSignAndStore reads an uploaded file (capped at maxUploadSize),
+// encrypts it inside the HSM, uploads the resulting blob to MinIO, then
+// hashes and signs the stored blob. label is used both to namespace the
+// MinIO object name and to make error messages identify which of the two
+// defense documents (pv/document) failed.
+func encryptSignAndStore(
+	ctx context.Context,
+	minioSvc *internal.MinioService,
+	hsmSvc *internal.HSMService,
+	bucket string,
+	thesisID string,
+	label string,
+	fh *multipart.FileHeader,
+) (*storedFile, string, error) {
+	f, err := fh.Open()
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to open %s file: %w", label, err)
+	}
+	defer f.Close()
+
+	lr := io.LimitReader(f, maxUploadSize+1)
+	data, err := io.ReadAll(lr)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to read %s file: %w", label, err)
+	}
+	if int64(len(data)) > maxUploadSize {
+		return nil, "", fmt.Errorf("%s file too large", label)
+	}
+
+	iv, ciphertext, err := hsmSvc.Encrypt(data)
+	if err != nil {
+		return nil, "", fmt.Errorf("HSM encrypt error (%s): %w", label, err)
+	}
+
+	objectName := fmt.Sprintf("%s-%s-%s", thesisID, label, fh.Filename)
+	blob := append(iv, ciphertext...)
+	if err := minioSvc.UploadThesis(ctx, bucket, objectName, bytes.NewReader(blob), int64(len(blob)), thesisID); err != nil {
+		return nil, "", fmt.Errorf("upload failed (%s): %w", label, err)
+	}
+
+	h := sha256.Sum256(blob)
+	hashHex := hex.EncodeToString(h[:])
+
+	sigBytes, err := hsmSvc.Sign(h[:])
+	if err != nil {
+		return nil, "", fmt.Errorf("HSM sign error (%s): %w", label, err)
+	}
+	sig := hex.EncodeToString(sigBytes)
+
+	return &storedFile{ObjectName: objectName, Hash: hashHex, IV: hex.EncodeToString(iv)}, sig, nil
+}
 
 func main() {
 	// Env
@@ -256,99 +318,118 @@ func main() {
 		c.Data(http.StatusOK, "application/json", result)
 	})
 
-	// Submitting a thesis document does two protected things at once
-	// (creates the ledger record, then submits the document), so both
-	// permissions are required — currently identical role sets in
-	// roles.go, but kept as two checks so they can diverge safely later.
-	r.POST("/api/v1/submissions",
+	// Superadmin defines a thesis record up front — student identity,
+	// administrative info and document metadata are all known at this
+	// point, but the grade is not: that field stays empty on the ledger
+	// until the defense happens (see /api/v1/submissions below).
+	r.POST("/api/v1/theses",
 		authRequired,
 		requirePermission("CreateThesis"),
-		requirePermission("SubmitDocument"),
 		func(c *gin.Context) {
-			thesisID := c.PostForm("ThesisId")
-			grade := c.PostForm("Grade")
-			title := c.PostForm("Title")
-			date := c.PostForm("Date")
-
-			if thesisID == "" || grade == "" || title == "" || date == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "thesisId, grade, title and date are required"})
+			var req internal.CreateThesisRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
 				return
 			}
 
-			// Create the ledger record first — fails fast on duplicate thesisID
-			if err := notarySvc.CreateThesis(thesisID, grade, title, date); err != nil {
+			initialData := struct {
+				Student        internal.StudentInfo        `json:"student"`
+				Administrative internal.AdministrativeInfo `json:"administrative"`
+				Metadata       internal.ThesisMetadata     `json:"metadata"`
+			}{
+				Student:        req.Student,
+				Administrative: req.Administrative,
+				Metadata:       req.Metadata,
+			}
+			initialDataJSON, err := json.Marshal(initialData)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to encode thesis data"})
+				return
+			}
+
+			claims := c.MustGet("claims").(*internal.SessionClaims)
+			if err := notarySvc.CreateThesis(req.ThesisID, req.StudentID, string(initialDataJSON), claims.Username); err != nil {
 				log.Printf("create thesis failed: %v", err)
 				c.JSON(http.StatusConflict, gin.H{"error": "failed to create thesis on ledger"})
 				return
 			}
 
-			log.Printf("DEBUG: ThesisId:%s, Grade:%s, Title:%s, Date:%s\n", thesisID, grade, title, date)
+			c.JSON(http.StatusCreated, gin.H{"status": "created", "thesisId": req.ThesisID})
+		})
 
-			fileHeader, err := c.FormFile("Document")
+	// Submitting a defense appends the grade to an existing thesis record
+	// and notarizes the two documents produced at defense time: the PV
+	// (defense minutes) and the thesis PDF itself. Both are encrypted with
+	// the HSM, stored in MinIO, hashed and signed independently, since the
+	// chaincode tracks their hash/signature pairs separately.
+	r.POST("/api/v1/submissions",
+		authRequired,
+		requirePermission("SubmitDocument"),
+		func(c *gin.Context) {
+			thesisID := c.PostForm("ThesisId")
+			grade := c.PostForm("Grade")
+
+			if thesisID == "" || grade == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "thesisId and grade are required"})
+				return
+			}
+
+			pvHeader, err := c.FormFile("Pv")
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "pv file required"})
+				return
+			}
+
+			docHeader, err := c.FormFile("Document")
 			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "document file required"})
 				return
 			}
 
-			f, err := fileHeader.Open()
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to open uploaded file"})
-				return
-			}
-			defer f.Close()
-
-			// Read with cap
-			lr := io.LimitReader(f, maxUploadSize+1)
-			data, err := io.ReadAll(lr)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read uploaded file"})
-				return
-			}
-			
-			if int64(len(data)) > maxUploadSize {
-				c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "file too large"})
+			// Append the grade first — fails fast if the thesis doesn't
+			// exist yet (it must have been created by a superadmin).
+			if err := notarySvc.SubmitGrade(thesisID, grade); err != nil {
+				log.Printf("submit grade failed: %v", err)
+				c.JSON(http.StatusConflict, gin.H{"error": "failed to submit grade on ledger"})
 				return
 			}
 
-			// Encrypt with HSM (performed inside the token)
-			iv, ciphertext, err := hsmSvc.Encrypt(data)
-			if err != nil {
-				log.Printf("HSM encrypt error: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "encryption failed"})
-				return
-			}
-
-			// Upload ciphertext to MinIO
-			objectName := fmt.Sprintf("%s-%s", thesisID, fileHeader.Filename)
 			ctx := context.Background()
-			// store IV concatenated with ciphertext or as part of filename/metadata; here we prefix IV to object bytes
-			blob := append(iv, ciphertext...)
-			err = minioSvc.UploadThesis(ctx, minioBucket, objectName, bytes.NewReader(blob), int64(len(blob)), thesisID)
+
+			pvStored, pvSig, err := encryptSignAndStore(ctx, minioSvc, hsmSvc, minioBucket, thesisID, "pv", pvHeader)
 			if err != nil {
-				log.Printf("upload failed: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload to storage"})
+				log.Printf("pv processing failed: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
 
-			// Compute hash of stored ciphertext for notarisation
-			h := sha256.Sum256(blob)
-			hashHex := hex.EncodeToString(h[:])
-
-			// Au lieu de : sig := "TODO-HSM-SIGNATURE"
-			// Utilisez :
-			sigBytes, err := hsmSvc.Sign(h[:]) // Signe le hash (ou le JSON de la preuve)
+			docStored, docSig, err := encryptSignAndStore(ctx, minioSvc, hsmSvc, minioBucket, thesisID, "document", docHeader)
 			if err != nil {
-				log.Printf("HSM sign error: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "signature failed"})
+				log.Printf("document processing failed: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
 
-			sig := hex.EncodeToString(sigBytes)
-			if err := notarySvc.Notarize(thesisID, hashHex, sig); err != nil {
-				log.Printf("notarize failed: %v", err)
+			if err := notarySvc.NotarizePv(thesisID, pvStored.Hash, pvSig); err != nil {
+				log.Printf("notarize pv failed: %v", err)
+			}
+			if err := notarySvc.NotarizeDocument(thesisID, docStored.Hash, docSig); err != nil {
+				log.Printf("notarize document failed: %v", err)
 			}
 
-			c.JSON(http.StatusCreated, gin.H{"status": "stored", "object": objectName, "hash": hashHex, "iv": hex.EncodeToString(iv)})
+			c.JSON(http.StatusCreated, gin.H{
+				"status": "stored",
+				"pv": gin.H{
+					"object": pvStored.ObjectName,
+					"hash":   pvStored.Hash,
+					"iv":     pvStored.IV,
+				},
+				"document": gin.H{
+					"object": docStored.ObjectName,
+					"hash":   docStored.Hash,
+					"iv":     docStored.IV,
+				},
+			})
 		})
 
 	port := os.Getenv("PORT")
