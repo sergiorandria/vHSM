@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { useApi, Thesis } from '../lib/api';
+import { TransactionHistory } from '../components/TransactionHistory';
 
 const emptyDossier = () => ({
   thesisId: `TH-${Date.now()}`,
@@ -41,6 +42,9 @@ export const Registry = () => {
   // the dossier. IDs here must match the LDAP usernames jurors log in
   // with, since that's what the chaincode checks submissions against.
   const [jurorDraft, setJurorDraft] = useState('');
+  // Which thesisId (if any) has its transaction-details row expanded in
+  // the ledger table below. Only one at a time to keep the table simple.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const addJuror = () => {
     const id = jurorDraft.trim();
@@ -346,6 +350,7 @@ export const Registry = () => {
                   <th className="px-6 py-2 font-medium">Status</th>
                   <th className="px-6 py-2 font-medium">Jury</th>
                   <th className="px-6 py-2 font-medium">Grade</th>
+                  <th className="px-6 py-2 font-medium">Details</th>
                 </tr>
               </thead>
               <tbody>
@@ -353,31 +358,50 @@ export const Registry = () => {
                   const required = t.administrative?.juryMembers?.length || 0;
                   const gradesIn = t.juryGrades?.length || 0;
                   const signaturesIn = t.pvSignatures?.length || 0;
+                  const isExpanded = expandedId === t.thesisId;
                   return (
-                    <tr key={t.thesisId ?? i} className="border-t border-[var(--parchment-line)]/60 odd:bg-[var(--parchment-soft)]/60">
-                      <td className="px-6 py-3 font-data text-xs text-[var(--ink-soft)]">{t.thesisId}</td>
-                      <td className="px-6 py-3 text-[var(--ink)]">{t.student?.fullName || '—'}</td>
-                      <td className="px-6 py-3">
-                        <span
-                          className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border ${
-                            t.status === 'DRAFT'
-                              ? 'border-[var(--gold)]/50 text-[var(--gold)]'
-                              : 'border-[var(--seal)]/50 text-[var(--seal)]'
-                          }`}
-                        >
+                    <React.Fragment key={t.thesisId ?? i}>
+                      <tr className="border-t border-[var(--parchment-line)]/60 odd:bg-[var(--parchment-soft)]/60">
+                        <td className="px-6 py-3 font-data text-xs text-[var(--ink-soft)]">{t.thesisId}</td>
+                        <td className="px-6 py-3 text-[var(--ink)]">{t.student?.fullName || '—'}</td>
+                        <td className="px-6 py-3">
                           <span
-                            className={`w-1.5 h-1.5 rounded-full ${t.status === 'DRAFT' ? 'bg-[var(--gold)]' : 'bg-[var(--seal)]'}`}
-                          />
-                          {t.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3 font-data text-xs text-[var(--ink-soft)]">
-                        {t.status === 'DRAFT' && `${gradesIn}/${required} graded`}
-                        {t.status === 'DEFENDED' && `${signaturesIn}/${required} signed`}
-                        {(t.status === 'NOTARIZED' || t.status === 'ARCHIVED') && `${required}/${required} complete`}
-                      </td>
-                      <td className="px-6 py-3 font-data text-xs text-[var(--ink-soft)]">{t.grade || '—'}</td>
-                    </tr>
+                            className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border ${
+                              t.status === 'DRAFT'
+                                ? 'border-[var(--gold)]/50 text-[var(--gold)]'
+                                : 'border-[var(--seal)]/50 text-[var(--seal)]'
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${t.status === 'DRAFT' ? 'bg-[var(--gold)]' : 'bg-[var(--seal)]'}`}
+                            />
+                            {t.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3 font-data text-xs text-[var(--ink-soft)]">
+                          {t.status === 'DRAFT' && `${gradesIn}/${required} graded`}
+                          {t.status === 'DEFENDED' && `${signaturesIn}/${required} signed`}
+                          {(t.status === 'NOTARIZED' || t.status === 'ARCHIVED') && `${required}/${required} complete`}
+                        </td>
+                        <td className="px-6 py-3 font-data text-xs text-[var(--ink-soft)]">{t.grade || '—'}</td>
+                        <td className="px-6 py-3">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedId(isExpanded ? null : t.thesisId)}
+                            className="font-body text-xs underline underline-offset-2 text-[var(--ink-soft)] hover:text-[var(--ink)] transition-colors"
+                          >
+                            {isExpanded ? 'Hide' : 'View'}
+                          </button>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="border-t border-[var(--parchment-line)]/60 bg-[var(--parchment-soft)]/40">
+                          <td colSpan={6} className="px-6 py-3">
+                            <TransactionHistory thesisId={t.thesisId} variant="light" />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>

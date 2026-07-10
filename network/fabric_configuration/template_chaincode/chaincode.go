@@ -636,6 +636,38 @@ func (c *ThesisContract) GetAllTheses(
 	return theses, nil
 }
 
+func (c *ThesisContract) GetThesisHistory(ctx contractapi.TransactionContextInterface, thesisID string) ([]map[string]any, error) {
+	resultsIterator, err := ctx.GetStub().GetHistoryForKey(thesisID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get history for key %s: %w", thesisID, err)
+	}
+	defer resultsIterator.Close()
+
+	var history []map[string]any
+
+	for resultsIterator.HasNext() {
+		response, err := resultsIterator.Next()
+		if err != nil {
+			return nil, err
+		}
+
+		var payload map[string]any
+		if len(response.Value) > 0 {
+			_ = json.Unmarshal(response.Value, &payload)
+		}
+
+		record := map[string]any{
+			"txId":      response.TxId,
+			"timestamp": time.Unix(response.Timestamp.Seconds, int64(response.Timestamp.Nanos)).UTC().Format(time.RFC3339),
+			"isDelete":  response.IsDelete,
+			"value":     payload,
+		}
+		history = append(history, record)
+	}
+
+	return history, nil
+}
+
 // GetThesisIDs retourne uniquement les IDs (clés) de toutes les thèses présentes
 // sur le ledger, sans tenter de désérialiser leur contenu. Utile pour retrouver
 // l'ID d'un enregistrement incomplet/corrompu qui ferait échouer la validation

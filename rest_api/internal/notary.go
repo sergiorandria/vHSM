@@ -5,27 +5,22 @@ import (
 )
 
 type NotaryService struct {
-	client *gateway_sdk.GatewayClient
-	hsm    *HSMService
+	client      *gateway_sdk.GatewayClient
+	hsm         *HSMService
+	channelName string
 }
 
-func NewNotaryService(client *gateway_sdk.GatewayClient, hsm *HSMService) *NotaryService {
-	return &NotaryService{client: client, hsm: hsm}
+func NewNotaryService(client *gateway_sdk.GatewayClient, hsm *HSMService, channelName string) *NotaryService {
+	return &NotaryService{client: client, hsm: hsm, channelName: channelName}
 }
 
 // CreateThesis creates a new thesis record on the ledger. It is called by a
 // superadmin at the time the thesis is registered, before any defense has
 // taken place: initialDataJSON carries the Student, Administrative and
 // Metadata fields only — no grade. The grade is appended later, once the
-// defense happens, via SubmitGrade.
+// defense happens, one juror at a time, via SubmitJuryGrade.
 func (n *NotaryService) CreateThesis(thesisID, studentID, initialDataJSON, createdBy string) error {
 	return n.client.ExecuteTransaction("CreateThesis", thesisID, studentID, initialDataJSON, createdBy)
-}
-
-// SubmitGrade appends the grade to an existing thesis record once the
-// defense has taken place, moving its status from DRAFT to DEFENDED.
-func (n *NotaryService) SubmitGrade(thesisID string, grade string) error {
-	return n.client.ExecuteTransaction("SubmitGrade", thesisID, grade)
 }
 
 // SubmitJuryGrade records an individual juror's grade evaluation and comments.
@@ -46,13 +41,6 @@ func (n *NotaryService) NotarizeDocument(thesisID string, hash string, signature
 	return n.client.ExecuteTransaction("NotarizeDocument", thesisID, hash, signature)
 }
 
-// NotarizePv attaches the hash and HSM signature of the defense
-// procès-verbal (PV) to an existing thesis record. Once both the document
-// and the PV are notarized, the chaincode moves the thesis to NOTARIZED.
-func (n *NotaryService) NotarizePv(thesisID string, hashPv string, signaturePv string) error {
-	return n.client.ExecuteTransaction("NotarizePv", thesisID, hashPv, signaturePv)
-}
-
 // GetThesis evaluates a transaction to read a single thesis payload.
 func (n *NotaryService) GetThesis(thesisID string) ([]byte, error) {
 	return n.client.EvaluateTransaction("ReadThesis", thesisID)
@@ -66,4 +54,35 @@ func (n *NotaryService) GetJuryStatus(thesisID string) ([]byte, error) {
 // GetAllTheses evaluates a transaction to return all thesis records on the ledger.
 func (n *NotaryService) GetAllTheses() ([]byte, error) {
 	return n.client.EvaluateTransaction("GetAllTheses")
+}
+
+// GetThesisHistory returns the full change history of a thesis record —
+// one entry per committed transaction that touched it, each carrying the
+// txId, the block timestamp, whether that transaction was a delete, and
+// the record's value as of that transaction. This is genuinely different
+// from GetThesis/ReadThesis, which only returns the *current* state: this
+// walks the ledger's per-key history, so the API/frontend can show how a
+// thesis moved through DRAFT -> DEFENDED -> NOTARIZED over time, with the
+// txId of each step. It invokes the 'GetThesisHistory' chaincode function.
+func (n *NotaryService) GetThesisHistory(thesisID string) ([]byte, error) {
+	return n.client.EvaluateTransaction("GetThesisHistory", thesisID)
+}
+
+// GetTransactionByID looks up a single transaction's details directly via
+// QSCC (the system chaincode deployed on every peer), given a txId — e.g.
+// one returned by GetThesisHistory above.
+//
+// NOTE: this is not currently wired up to any HTTP route. QSCC is a
+// separate system chaincode from the one this NotaryService's client is
+// bound to (cfg.ChaincodeName), and gateway_sdk.GatewayClient as used
+// elsewhere in this file always evaluates against that single bound
+// chaincode. Passing "qscc" as the transaction name below does NOT target
+// the QSCC contract — it would just ask the bound chaincode for a
+// function literally named "qscc", which doesn't exist and will fail.
+// Querying QSCC properly requires a gateway_sdk client (or a second one)
+// constructed against the "qscc" chaincode name specifically. Left here,
+// disabled by omission from main.go's routes, until gateway_sdk supports
+// that.
+func (n *NotaryService) GetTransactionByID(txID string) ([]byte, error) {
+	return n.client.EvaluateTransaction("qscc", "GetTransactionByID", n.channelName, txID)
 }

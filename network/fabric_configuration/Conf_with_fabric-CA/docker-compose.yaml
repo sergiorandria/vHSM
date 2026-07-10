@@ -212,10 +212,10 @@ services:
       - fabric
 
   cc-peer0.misa.university.com:
-    image: thesis-ccaas:1.3
+    image: thesis-ccaas:1.4
     container_name: cc-peer0.misa.university.com
     environment:
-      CORE_CHAINCODE_ID_NAME: thesis_1.3:b150117acd9a7df55692cf26f62fd354552dad3732854f539d6c7d1b942cb42c
+      CORE_CHAINCODE_ID_NAME: thesis_1.4:e0d2d21ddc8ecad6f1cb1a63b373c8c90b259da1a732013b1672b720f95e4749
       CHAINCODE_SERVER_ADDRESS: 0.0.0.0:9999
       CHAINCODE_TLS_DISABLED: "true"
     networks:

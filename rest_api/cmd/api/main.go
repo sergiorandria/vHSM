@@ -223,7 +223,7 @@ func main() {
 	}
 
 	// Notary
-	notarySvc := internal.NewNotaryService(fabricClient, hsmSvc)
+	notarySvc := internal.NewNotaryService(fabricClient, hsmSvc, cfg.ChannelName)
 
 	// HTTP server
 	r := gin.Default()
@@ -466,6 +466,29 @@ func main() {
 			}
 			c.Data(http.StatusCreated, "application/json", status)
 		})
+
+	// Transaction history for a thesis: one entry per committed ledger
+	// transaction that touched the record (txId, block timestamp,
+	// isDelete, and the record's value as of that transaction). This is
+	// what powers the "transaction details" view on the frontend — unlike
+	// GET /theses/:thesisId, which only ever returns the current state.
+	// Same read permission as the rest of the thesis-read endpoints.
+	r.GET("/api/v1/theses/:thesisId/history", authRequired, requirePermission("ReadThesis"), func(c *gin.Context) {
+		thesisID := c.Param("thesisId")
+		if thesisID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "thesisId required"})
+			return
+		}
+
+		history, err := notarySvc.GetThesisHistory(thesisID)
+		if err != nil {
+			log.Printf("get thesis history failed: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve transaction history"})
+			return
+		}
+
+		c.Data(http.StatusOK, "application/json", history)
+	})
 
 	// Co-signing the PV. Only reachable once the thesis has been fully
 	// graded (chaincode enforces Status == DEFENDED — this handler
