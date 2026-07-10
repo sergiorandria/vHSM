@@ -14,9 +14,12 @@ const (
 // perform it. Add one entry here per protected action — anything not
 // listed is denied by default (fail closed).
 var actionPermissions = map[string][]string{
-	"CreateThesis":   {RoleAdmin, RoleProfessor},
-	"SubmitDocument": {RoleAdmin, RoleProfessor},
-	"ReadThesis":     {RoleAdmin, RoleProfessor, RoleStudent},
+	"CreateThesis":     {RoleAdmin, RoleProfessor},
+	"SubmitJuryGrade":  {RoleAdmin, RoleProfessor},
+	"SignPv":           {RoleAdmin, RoleProfessor},
+	"NotarizeDocument": {RoleAdmin, RoleProfessor},
+
+	"ReadThesis": {RoleAdmin, RoleProfessor, RoleStudent},
 }
 
 // HasPermission reports whether any of the user's roles is allowed to
@@ -35,3 +38,5 @@ func HasPermission(userRoles []string, action string) bool {
 	}
 	return false
 }
+
+

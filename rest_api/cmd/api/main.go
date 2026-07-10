@@ -28,18 +28,49 @@ const maxUploadSize = 50 << 20 // 50 MiB
 const defaultTokenTTL = time.Hour
 
 // storedFile describes the outcome of encrypting, uploading and hashing a
-// single defense-time document (either the PV or the thesis PDF).
+// single defense-time document (the thesis PDF, or — on first upload only —
+// the PV).
 type storedFile struct {
 	ObjectName string
 	Hash       string
 	IV         string
 }
 
-// encryptSignAndStore reads an uploaded file (capped at maxUploadSize),
-// encrypts it inside the HSM, uploads the resulting blob to MinIO, then
-// hashes and signs the stored blob. label is used both to namespace the
-// MinIO object name and to make error messages identify which of the two
-// defense documents (pv/document) failed.
+// thesisLedgerView is a minimal, local decode of the on-chain
+// ThesisPayload (see chaincode.go). We only pull the fields the API needs
+// to decide things server-side (has the PV already been established? what
+// hash must a new co-signer sign over?) — it deliberately does not try to
+// mirror the full ledger schema, so it won't need updating every time an
+// unrelated field is added on the chaincode side.
+type thesisLedgerView struct {
+	Status string `json:"status"`
+	HashPv string `json:"hashPv"`
+}
+
+// readUploadedFile reads a multipart file capped at maxUploadSize. label is
+// only used to make error messages identify which upload failed.
+func readUploadedFile(fh *multipart.FileHeader, label string) ([]byte, error) {
+	f, err := fh.Open()
+	if err != nil {
+		return nil, fmt.Errorf("failed to open %s file: %w", label, err)
+	}
+	defer f.Close()
+
+	lr := io.LimitReader(f, maxUploadSize+1)
+	data, err := io.ReadAll(lr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s file: %w", label, err)
+	}
+	if int64(len(data)) > maxUploadSize {
+		return nil, fmt.Errorf("%s file too large", label)
+	}
+	return data, nil
+}
+
+// encryptSignAndStore reads an uploaded file, encrypts it inside the HSM,
+// uploads the resulting blob to MinIO, then hashes and signs the stored
+// blob. Used for the thesis document, which — unlike the PV — is a single-
+// signature artifact with no cross-juror hash agreement to preserve.
 func encryptSignAndStore(
 	ctx context.Context,
 	minioSvc *internal.MinioService,
@@ -49,19 +80,9 @@ func encryptSignAndStore(
 	label string,
 	fh *multipart.FileHeader,
 ) (*storedFile, string, error) {
-	f, err := fh.Open()
+	data, err := readUploadedFile(fh, label)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to open %s file: %w", label, err)
-	}
-	defer f.Close()
-
-	lr := io.LimitReader(f, maxUploadSize+1)
-	data, err := io.ReadAll(lr)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to read %s file: %w", label, err)
-	}
-	if int64(len(data)) > maxUploadSize {
-		return nil, "", fmt.Errorf("%s file too large", label)
+		return nil, "", err
 	}
 
 	iv, ciphertext, err := hsmSvc.Encrypt(data)
@@ -85,6 +106,22 @@ func encryptSignAndStore(
 	sig := hex.EncodeToString(sigBytes)
 
 	return &storedFile{ObjectName: objectName, Hash: hashHex, IV: hex.EncodeToString(iv)}, sig, nil
+}
+
+// signHashHex asks the HSM to sign a hash that's already on record
+// (hex-encoded), returning the hex-encoded signature. Used by the PV
+// co-signing endpoint: every signer after the first signs the same
+// previously-recorded hash rather than a freshly computed one.
+func signHashHex(hsmSvc *internal.HSMService, hashHex string) (string, error) {
+	hashBytes, err := hex.DecodeString(hashHex)
+	if err != nil {
+		return "", fmt.Errorf("invalid stored pv hash: %w", err)
+	}
+	sigBytes, err := hsmSvc.Sign(hashBytes)
+	if err != nil {
+		return "", fmt.Errorf("HSM sign error (pv): %w", err)
+	}
+	return hex.EncodeToString(sigBytes), nil
 }
 
 func main() {
@@ -269,6 +306,12 @@ func main() {
 	// the authenticated user holds a role allowed to perform action
 	// (per roles.go's actionPermissions map — fail closed on anything
 	// not explicitly listed there).
+	//
+	// NOTE: the action names below now include SubmitJuryGrade, SignPv
+	// and NotarizeDocument, replacing the old SubmitDocument action.
+	// roles.go's actionPermissions map needs entries for these three or
+	// every jury member will get a 403 the first time they try to use
+	// them.
 	requirePermission := func(action string) gin.HandlerFunc {
 		return func(c *gin.Context) {
 			raw, ok := c.Get("claims")
@@ -318,10 +361,32 @@ func main() {
 		c.Data(http.StatusOK, "application/json", result)
 	})
 
+	// GetJuryStatus progress readout — "3 of 4 graded, 2 of 4 signed" —
+	// without the caller needing to fetch and diff the full thesis
+	// record. Same read permission as GET /theses/:thesisId since it's
+	// no more sensitive.
+	r.GET("/api/v1/theses/:thesisId/jury-status", authRequired, requirePermission("ReadThesis"), func(c *gin.Context) {
+		thesisID := c.Param("thesisId")
+		if thesisID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "thesisId required"})
+			return
+		}
+
+		result, err := notarySvc.GetJuryStatus(thesisID)
+		if err != nil {
+			log.Printf("get jury status failed: %v", err)
+			c.JSON(http.StatusNotFound, gin.H{"error": "thesis not found"})
+			return
+		}
+
+		c.Data(http.StatusOK, "application/json", result)
+	})
+
 	// Superadmin defines a thesis record up front — student identity,
-	// administrative info and document metadata are all known at this
-	// point, but the grade is not: that field stays empty on the ledger
-	// until the defense happens (see /api/v1/submissions below).
+	// administrative info (including the assigned jury) and document
+	// metadata are all known at this point, but the grade is not: that
+	// field stays empty on the ledger until every jury member has
+	// graded the defense (see /grades below).
 	r.POST("/api/v1/theses",
 		authRequired,
 		requirePermission("CreateThesis"),
@@ -357,26 +422,169 @@ func main() {
 			c.JSON(http.StatusCreated, gin.H{"status": "created", "thesisId": req.ThesisID})
 		})
 
-	// Submitting a defense appends the grade to an existing thesis record
-	// and notarizes the two documents produced at defense time: the PV
-	// (defense minutes) and the thesis PDF itself. Both are encrypted with
-	// the HSM, stored in MinIO, hashed and signed independently, since the
-	// chaincode tracks their hash/signature pairs separately.
-	r.POST("/api/v1/submissions",
+	// One jury member, one grade, one request. jurorID is taken from the
+	// authenticated session rather than the request body, so nobody can
+	// submit a grade on another juror's behalf — assumes the LDAP
+	// username matches the identifiers listed in
+	// Administrative.JuryMembers (that's what the chaincode checks
+	// against). The thesis only flips DRAFT -> DEFENDED, and
+	// ThesisGrade only gets computed, once every assigned juror has
+	// called this.
+	r.POST("/api/v1/theses/:thesisId/grades",
 		authRequired,
-		requirePermission("SubmitDocument"),
+		requirePermission("SubmitJuryGrade"),
 		func(c *gin.Context) {
-			thesisID := c.PostForm("ThesisId")
-			grade := c.PostForm("Grade")
-
-			if thesisID == "" || grade == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "thesisId and grade are required"})
+			thesisID := c.Param("thesisId")
+			if thesisID == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "thesisId required"})
 				return
 			}
 
-			pvHeader, err := c.FormFile("Pv")
+			var body struct {
+				Grade   string `json:"grade"`
+				Comment string `json:"comment"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil || body.Grade == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "grade is required"})
+				return
+			}
+
+			claims := c.MustGet("claims").(*internal.SessionClaims)
+			jurorID := claims.Username
+
+			if err := notarySvc.SubmitJuryGrade(thesisID, jurorID, body.Grade, body.Comment); err != nil {
+				log.Printf("submit jury grade failed: %v", err)
+				c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+				return
+			}
+
+			status, err := notarySvc.GetJuryStatus(thesisID)
 			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "pv file required"})
+				log.Printf("get jury status failed: %v", err)
+				c.JSON(http.StatusCreated, gin.H{"status": "graded"})
+				return
+			}
+			c.Data(http.StatusCreated, "application/json", status)
+		})
+
+	// Co-signing the PV. Only reachable once the thesis has been fully
+	// graded (chaincode enforces Status == DEFENDED — this handler
+	// doesn't need to duplicate that check, it just surfaces whatever
+	// error SignPv returns).
+	//
+	// The FIRST juror to sign must attach the PV file itself (multipart
+	// field "Pv"): the server hashes the plaintext, encrypts and stores
+	// it once in MinIO, and that hash becomes the thesis's permanent
+	// HashPv. Every juror after that can call this endpoint with no file
+	// at all — the server reads the already-recorded hash off the
+	// ledger and has the HSM sign it fresh for them. If a later caller
+	// does attach a file, it's checked against the recorded hash and
+	// rejected on mismatch, rather than silently accepted, so nobody can
+	// swap in a different document mid-signature-collection.
+	r.POST("/api/v1/theses/:thesisId/pv-signature",
+		authRequired,
+		requirePermission("SignPv"),
+		func(c *gin.Context) {
+			thesisID := c.Param("thesisId")
+			if thesisID == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "thesisId required"})
+				return
+			}
+
+			claims := c.MustGet("claims").(*internal.SessionClaims)
+			jurorID := claims.Username
+
+			rawThesis, err := notarySvc.GetThesis(thesisID)
+			if err != nil {
+				log.Printf("pv-signature: get thesis failed: %v", err)
+				c.JSON(http.StatusNotFound, gin.H{"error": "thesis not found"})
+				return
+			}
+			var view thesisLedgerView
+			if err := json.Unmarshal(rawThesis, &view); err != nil {
+				log.Printf("pv-signature: failed to parse thesis state: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read thesis state"})
+				return
+			}
+
+			ctx := context.Background()
+			var hashHex string
+
+			if fh, ferr := c.FormFile("Pv"); ferr == nil {
+				data, rerr := readUploadedFile(fh, "pv")
+				if rerr != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": rerr.Error()})
+					return
+				}
+
+				h := sha256.Sum256(data)
+				uploadedHashHex := hex.EncodeToString(h[:])
+
+				if view.HashPv != "" && view.HashPv != uploadedHashHex {
+					c.JSON(http.StatusConflict, gin.H{"error": "uploaded pv does not match the pv already on record for this thesis"})
+					return
+				}
+
+				if view.HashPv == "" {
+					iv, ciphertext, eerr := hsmSvc.Encrypt(data)
+					if eerr != nil {
+						log.Printf("pv-signature: HSM encrypt failed: %v", eerr)
+						c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to encrypt pv"})
+						return
+					}
+					blob := append(iv, ciphertext...)
+					objectName := fmt.Sprintf("%s-pv", thesisID)
+					if uerr := minioSvc.UploadThesis(ctx, minioBucket, objectName, bytes.NewReader(blob), int64(len(blob)), thesisID); uerr != nil {
+						log.Printf("pv-signature: upload failed: %v", uerr)
+						c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store pv"})
+						return
+					}
+				}
+
+				hashHex = uploadedHashHex
+			} else {
+				if view.HashPv == "" {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "pv not yet uploaded — the first signer must attach the Pv file"})
+					return
+				}
+				hashHex = view.HashPv
+			}
+
+			sigHex, serr := signHashHex(hsmSvc, hashHex)
+			if serr != nil {
+				log.Printf("pv-signature: %v", serr)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": serr.Error()})
+				return
+			}
+
+			if err := notarySvc.SignPv(thesisID, jurorID, hashHex, sigHex); err != nil {
+				log.Printf("sign pv failed: %v", err)
+				c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+				return
+			}
+
+			status, serr := notarySvc.GetJuryStatus(thesisID)
+			if serr != nil {
+				log.Printf("get jury status failed: %v", serr)
+				c.JSON(http.StatusCreated, gin.H{"status": "signed", "hashPv": hashHex})
+				return
+			}
+			c.Data(http.StatusCreated, "application/json", status)
+		})
+
+	// Notarizing the thesis document itself: a single hash+signature
+	// pair, no co-signing required. Same DEFENDED gate as PV signing,
+	// enforced chaincode-side. Typically called once, by whoever holds
+	// the final PDF (superadmin or a designated juror) — calling it
+	// twice just re-notarizes with a new hash/signature, which the
+	// chaincode currently allows.
+	r.POST("/api/v1/theses/:thesisId/document",
+		authRequired,
+		requirePermission("NotarizeDocument"),
+		func(c *gin.Context) {
+			thesisID := c.Param("thesisId")
+			if thesisID == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "thesisId required"})
 				return
 			}
 
@@ -386,22 +594,7 @@ func main() {
 				return
 			}
 
-			// Append the grade first — fails fast if the thesis doesn't
-			// exist yet (it must have been created by a superadmin).
-			if err := notarySvc.SubmitGrade(thesisID, grade); err != nil {
-				log.Printf("submit grade failed: %v", err)
-				c.JSON(http.StatusConflict, gin.H{"error": "failed to submit grade on ledger"})
-				return
-			}
-
 			ctx := context.Background()
-
-			pvStored, pvSig, err := encryptSignAndStore(ctx, minioSvc, hsmSvc, minioBucket, thesisID, "pv", pvHeader)
-			if err != nil {
-				log.Printf("pv processing failed: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
 
 			docStored, docSig, err := encryptSignAndStore(ctx, minioSvc, hsmSvc, minioBucket, thesisID, "document", docHeader)
 			if err != nil {
@@ -410,20 +603,14 @@ func main() {
 				return
 			}
 
-			if err := notarySvc.NotarizePv(thesisID, pvStored.Hash, pvSig); err != nil {
-				log.Printf("notarize pv failed: %v", err)
-			}
 			if err := notarySvc.NotarizeDocument(thesisID, docStored.Hash, docSig); err != nil {
 				log.Printf("notarize document failed: %v", err)
+				c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+				return
 			}
 
 			c.JSON(http.StatusCreated, gin.H{
-				"status": "stored",
-				"pv": gin.H{
-					"object": pvStored.ObjectName,
-					"hash":   pvStored.Hash,
-					"iv":     pvStored.IV,
-				},
+				"status": "notarized_document",
 				"document": gin.H{
 					"object": docStored.ObjectName,
 					"hash":   docStored.Hash,
