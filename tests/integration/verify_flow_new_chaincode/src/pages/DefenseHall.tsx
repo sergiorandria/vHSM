@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { useApi, Thesis, JuryStatusInfo } from '../lib/api';
 import { Seal, SealPhase } from '../components/Seal';
+import { TransactionHistory } from '../components/TransactionHistory';
 
 // What, if anything, the logged-in juror still owes on a given thesis.
 // A thesis can need more than one of these at once (e.g. still needs my
@@ -275,6 +276,9 @@ export const DefenseHall = () => {
                   <span className="font-data text-[var(--gold)]">{selected.thesisId}</span> — {selected.student?.fullName}
                 </h2>
                 <p className="font-body text-xs text-[var(--hall-text-dim)]">{selected.metadata?.title}</p>
+                <div className="mt-2">
+                  <TransactionHistory thesisId={selected.thesisId} variant="dark" />
+                </div>
               </div>
 
               {juryStatus && (
