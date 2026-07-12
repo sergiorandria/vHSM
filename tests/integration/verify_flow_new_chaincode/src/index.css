@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* The Registry — paper, filing, daylight */
+  --parchment: #f0e6d2;
+  --parchment-soft: #f7f1e3;
+  --parchment-line: #d8c9a8;
+  --ink: #1c2333;
+  --ink-soft: #3d4257;
+
+  /* The Defense Hall — dark, ceremonial */
+  --hall: #12151c;
+  --hall-panel: #1c2130;
+  --hall-line: #323a4d;
+  --hall-text: #e4dcc8;
+  --hall-text-dim: #9aa0b4;
+
+  /* The shared thread: notarization */
+  --seal: #8c2a35;
+  --seal-dark: #6e2029;
+  --gold: #b8924f;
+  --gold-soft: #d8b877;
+}
+
+@layer base {
+  .font-display {
+    font-family: "Fraunces", ui-serif, serif;
+    font-optical-sizing: auto;
+  }
+  .font-body {
+    font-family: "IBM Plex Sans", ui-sans-serif, sans-serif;
+  }
+  .font-data {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+}
+
+@layer components {
+  /* --- Registry (admin) surfaces --- */
+  .dossier-input {
+    @apply w-full bg-[var(--parchment-soft)] border border-[var(--parchment-line)] rounded-sm px-3 py-2 text-[var(--ink)] font-body text-sm
+    placeholder-[var(--ink-soft)] focus:outline-none focus:border-[var(--gold)] focus:ring-1 focus:ring-[var(--gold)] transition-colors;
+  }
+  .dossier-card {
+    @apply bg-[var(--parchment)] border border-[var(--parchment-line)] rounded-md;
+  }
+  .dossier-article-number {
+    @apply font-display text-[var(--gold)] text-sm tracking-widest;
+  }
+  .registry-button {
+    @apply w-full bg-[var(--ink)] hover:bg-[var(--ink-soft)] text-[var(--parchment-soft)] font-body font-medium text-sm
+    py-2.5 px-4 rounded-sm transition-colors border border-[var(--ink)] tracking-wide;
+  }
+
+  /* --- Defense Hall (jury) surfaces --- */
+  .hall-input {
+    @apply w-full bg-[var(--hall)] border border-[var(--hall-line)] rounded-sm px-3 py-2 text-[var(--hall-text)] font-body text-sm
+    placeholder-[var(--hall-text-dim)] focus:outline-none focus:border-[var(--gold)] focus:ring-1 focus:ring-[var(--gold)] transition-colors;
+  }
+  .hall-panel {
+    @apply bg-[var(--hall-panel)] border border-[var(--hall-line)] rounded-md;
+  }
+  .seal-button {
+    @apply w-full bg-[var(--seal)] hover:bg-[var(--seal-dark)] text-[var(--hall-text)] font-body font-medium text-sm
+    py-2.5 px-4 rounded-sm transition-colors border border-[var(--seal-dark)] tracking-wide disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

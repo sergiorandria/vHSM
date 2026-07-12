@@ -74,8 +74,14 @@ private:
     // Returns the system page size (cached after first call).
     static std::size_t page_size() noexcept;
 
-    // Platform-specific: lock `addr`/`len` into RAM.
-    static void lock_pages(void* addr, std::size_t len);
+    // This symbol isn't exported from the shared
+    // object, so it can't be interposed via LD_PRELOAD by an attacker
+    // with code-execution-adjacent access to the process
+    __attribute__((nonnull(1)))
+    __attribute__((warn_unused_result))
+    __attribute__((noinline))
+    __attribute__((visibility("hidden")))
+    static bool lock_pages(void* addr, std::size_t len);
 
     // Platform-specific: unlock pages (best-effort; called in destructor).
     static void unlock_pages(void* addr, std::size_t len) noexcept;

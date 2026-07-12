@@ -12,6 +12,13 @@ type MinioService struct {
 	Client *minio.Client
 }
 
+type BucketMetadata struct {
+	BucketName     string
+	BucketInFil    io.Reader
+	BucketFilenam  string
+	BucketFileSize int64
+}
+
 func NewMinioService(endpoint, accessKey, secretKey string) (*MinioService, error) {
 	client, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
