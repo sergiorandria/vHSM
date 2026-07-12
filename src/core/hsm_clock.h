@@ -8,8 +8,7 @@
 
 namespace vhsm {
 
-using HsmTimePoint = std::chrono::time_point<std::chrono::system_clock,
-                                            std::chrono::milliseconds>;
+using HsmTimePoint = std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>;
 
 class IHsmClock {
 public:

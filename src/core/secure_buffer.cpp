@@ -40,7 +40,7 @@ std::size_t SecureBuffer::round_up_to_page(std::size_t n) noexcept {
     return ((n + ps - 1) / ps) * ps;
 }
 
-void SecureBuffer::lock_pages(void* addr, std::size_t len) {
+bool SecureBuffer::lock_pages(void* addr, std::size_t len) {
 #ifdef _WIN32
     if (!VirtualLock(addr, len)) {
         throw std::runtime_error(
@@ -54,8 +54,12 @@ void SecureBuffer::lock_pages(void* addr, std::size_t len) {
             "SecureBuffer: mlock(2) failed. "
             "Check RLIMIT_MEMLOCK (see 'ulimit -l'). "
             "On Linux you can raise it in /etc/security/limits.conf.");
+
+        return false; // Execution doesn't reach this return.
     }
 #endif
+
+    return true;
 }
 
 void SecureBuffer::unlock_pages(void* addr, std::size_t len) noexcept {
@@ -142,7 +146,9 @@ SecureBuffer::SecureBuffer(std::size_t size) {
     size_ = size;
  
     try {
-        lock_pages(data_, data_pages);
+        if (!lock_pages(data_, data_pages)) {
+            
+        }
     } catch (...) {
         // Restore protections so munmap/VirtualFree can access all pages.
 #ifdef _WIN32

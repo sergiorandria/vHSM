@@ -35,13 +35,16 @@ func main() {
 		if err != nil {
 			log.Fatalf("Cannot read TLS key: %v", err)
 		}
-		ca, err := os.ReadFile(os.Getenv("CHAINCODE_TLS_CA"))
-		if err != nil {
-			log.Fatalf("Cannot read TLS CA: %v", err)
-		}
-		tlsProps.Key = key
 		tlsProps.Cert = cert
-		tlsProps.ClientCACerts = ca
+		tlsProps.Key = key
+
+		if caPath := os.Getenv("CHAINCODE_TLS_CA"); caPath != "" {
+			ca, err := os.ReadFile(caPath)
+			if err != nil {
+				log.Fatalf("Cannot read TLS CA: %v", err)
+			}
+			tlsProps.ClientCACerts = ca
+		}
 	}
 
 	server := &shim.ChaincodeServer{

@@ -1,0 +1,118 @@
+# ============================================
+# Orderer Organization LDAP Bootstrap
+# Base DN: dc=university,dc=com
+# ============================================
+
+# ============================================
+# Organizational Units (OUs)
+# ============================================
+
+dn: ou=people,dc=university,dc=com
+objectClass: organizationalUnit
+ou: people
+description: Users of the university
+
+dn: ou=groups,dc=university,dc=com
+objectClass: organizationalUnit
+ou: groups
+description: Groups for role-based access control
+
+# ============================================
+# Groups (for your roles)
+# ============================================
+
+# Admin group
+dn: cn=admin,ou=groups,dc=university,dc=com
+objectClass: top
+objectClass: groupOfNames
+cn: admin
+description: System administrators
+member: uid=adminuser,ou=people,dc=university,dc=com
+
+# Professors group
+dn: cn=professeurs,ou=groups,dc=university,dc=com
+objectClass: top
+objectClass: groupOfNames
+cn: professeurs
+description: University professors
+member: uid=prof1,ou=people,dc=university,dc=com
+member: uid=prof2,ou=people,dc=university,dc=com
+member: uid=adminuser,ou=people,dc=university,dc=com
+
+# Students group
+dn: cn=etudiants,ou=groups,dc=university,dc=com
+objectClass: top
+objectClass: groupOfNames
+cn: etudiants
+description: University students
+member: uid=student1,ou=people,dc=university,dc=com
+member: uid=student2,ou=people,dc=university,dc=com
+
+# ============================================
+# Users
+# ============================================
+
+# Admin user
+dn: uid=adminuser,ou=people,dc=university,dc=com
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: adminuser
+cn: Admin User
+sn: User
+givenName: Admin
+mail: admin@university.com
+userPassword: {SSHA}Cyq144ChhbJ/MJm6VbU0HLbLTFid2lN8
+
+# Professor 1
+dn: uid=prof1,ou=people,dc=university,dc=com
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: prof1
+cn: Dr. Alice Professor
+sn: Professor
+givenName: Alice
+mail: alice.prof@university.com
+userPassword: {SSHA}Cyq144ChhbJ/MJm6VbU0HLbLTFid2lN8
+
+# Professor 2
+dn: uid=prof2,ou=people,dc=university,dc=com
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: prof2
+cn: Dr. Bob Professor
+sn: Professor
+givenName: Bob
+mail: bob.prof@university.com
+userPassword: {SSHA}Cyq144ChhbJ/MJm6VbU0HLbLTFid2lN8
+
+# Student 1
+dn: uid=student1,ou=people,dc=university,dc=com
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: student1
+cn: Carol Student
+sn: Student
+givenName: Carol
+mail: carol.student@university.com
+userPassword: {SSHA}Cyq144ChhbJ/MJm6VbU0HLbLTFid2lN8
+
+# Student 2
+dn: uid=student2,ou=people,dc=university,dc=com
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+uid: student2
+cn: Dave Student
+sn: Student
+givenName: Dave
+mail: dave.student@university.com
+userPassword: {SSHA}Cyq144ChhbJ/MJm6VbU0HLbLTFid2lN8

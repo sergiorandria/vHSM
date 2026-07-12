@@ -5,6 +5,110 @@ networks:
     name: fabric
 
 services:
+  postgres.orderer:
+    image: postgres:15
+    container_name: postgres.orderer
+    environment:
+      POSTGRES_DB: fabric_ca_orderer
+      POSTGRES_USER: fabricca
+      POSTGRES_PASSWORD: fabriccapw
+    volumes:
+      - pgdata.orderer:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - fabric
+
+  ldap.orderer:
+    image: osixia/openldap:1.5.0
+    container_name: ldap.orderer
+    environment:
+      LDAP_ORGANISATION: "OrdererOrg"
+      LDAP_DOMAIN: "university.com"
+      LDAP_ADMIN_PASSWORD: "ldapadminpw"
+      LDAP_BASE_DN: "dc=university,dc=com" 
+      LDAP_TLS: "false"
+      LDAP_REPLICATION: "false"
+      LDAP_REMOVE_CONFIG_AFTER_SETUP: "false"
+    volumes:
+      - ./fabric-ca/orderer/ldap-bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom
+      - ldapdata.orderer:/var/lib/ldap
+      - ldapconfig.orderer:/etc/ldap/slapd.d
+    ports:
+      - "1389:389"
+    networks:
+      - fabric
+
+  ca.orderer:
+    image: hyperledger/fabric-ca:1.5
+    container_name: ca.orderer
+    command: sh -c 'fabric-ca-server start -c /etc/hyperledger/fabric-ca-server/fabric-ca-server-config.yaml'
+    environment:
+      FABRIC_CA_SERVER_HOME: /etc/hyperledger/fabric-ca-server
+    volumes:
+      - ./fabric-ca/orderer/fabric-ca-server-config.yaml:/etc/hyperledger/fabric-ca-server/fabric-ca-server-config.yaml
+      - ca-data.orderer:/etc/hyperledger/fabric-ca-server/msp
+    ports:
+      - "7054:7054"
+      - "17054:17054"
+    networks:
+      - fabric
+    depends_on:
+      - postgres.orderer
+      - ldap.orderer
+
+  postgres.misa:
+    image: postgres:15
+    container_name: postgres.misa
+    environment:
+      POSTGRES_DB: fabric_ca_misa
+      POSTGRES_USER: fabricca
+      POSTGRES_PASSWORD: fabriccapw
+    volumes:
+      - pgdata.misa:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - fabric
+
+  ldap.misa:
+    image: osixia/openldap:1.5.0
+    container_name: ldap.misa
+    environment:
+      LDAP_ORGANISATION: "misa"
+      LDAP_DOMAIN: "misa.university.com"
+      LDAP_ADMIN_PASSWORD: "ldapadminpw"
+      LDAP_BASE_DN: "dc=misa,dc=university,dc=com"
+      LDAP_TLS: "false"
+      LDAP_REPLICATION: "false"
+      LDAP_REMOVE_CONFIG_AFTER_SETUP: "false"
+    volumes:
+      - ./fabric-ca/misa/ldap-bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom
+      - ldapdata.misa:/var/lib/ldap
+      - ldapconfig.misa:/etc/ldap/slapd.d
+    ports:
+      - "1390:389"
+    networks:
+      - fabric
+
+  ca.misa:
+    image: hyperledger/fabric-ca:1.5
+    container_name: ca.misa
+    command: sh -c 'fabric-ca-server start -c /etc/hyperledger/fabric-ca-server/fabric-ca-server-config.yaml'
+    environment:
+      FABRIC_CA_SERVER_HOME: /etc/hyperledger/fabric-ca-server
+    volumes:
+      - ./fabric-ca/misa/fabric-ca-server-config.yaml:/etc/hyperledger/fabric-ca-server/fabric-ca-server-config.yaml
+      - ca-data.misa:/etc/hyperledger/fabric-ca-server/msp
+    ports:
+      - "8054:8054"
+      - "18054:18054"
+    networks:
+      - fabric
+    depends_on:
+      - postgres.misa
+      - ldap.misa
+
   peer0.misa.university.com:
     image: hyperledger/fabric-peer:2.5
     container_name: peer0.misa.university.com
@@ -32,13 +136,13 @@ services:
       CORE_LEDGER_STATE_STATEDATABASE: goleveldb
     volumes:
       - /var/run/docker.sock:/host/var/run/docker.sock
-      - ./crypto-config/peerOrganizations/misa.university.com/peers/peer0.misa.university.com/msp:/etc/hyperledger/fabric/msp:ro
-      - ./crypto-config/peerOrganizations/misa.university.com/peers/peer0.misa.university.com/tls:/etc/hyperledger/fabric/tls:ro
-      - ./crypto-config/ordererOrganizations/university.com/orderers/orderer.university.com/tls:/etc/hyperledger/orderer/tls:ro
+      - ./organizations/peerOrganizations/misa.university.com/peers/peer0.misa.university.com/msp:/etc/hyperledger/fabric/msp:ro
+      - ./organizations/peerOrganizations/misa.university.com/peers/peer0.misa.university.com/tls:/etc/hyperledger/fabric/tls:ro
+      - ./organizations/ordererOrganizations/university.com/orderers/orderer.university.com/tls:/etc/hyperledger/orderer/tls:ro
       - ./channel-artifacts:/var/hyperledger/orderer/channel-artifacts
       - ./peer-data/peer0.misa.university.com:/var/hyperledger/production
     ports:
-      - "7051:7051"
+      - "7052:7051"
     networks:
       - fabric
     depends_on:
@@ -63,11 +167,11 @@ services:
       ORDERER_CA: /etc/hyperledger/orderer/tls/ca.crt
     volumes:
       - /var/run/docker.sock:/host/var/run/docker.sock
-      - ./crypto-config/peerOrganizations/misa.university.com/users/Admin@misa.university.com/msp:/etc/hyperledger/fabric/admin-msp:ro
-      - ./crypto-config/peerOrganizations/misa.university.com/peers/peer0.misa.university.com/tls:/etc/hyperledger/fabric/tls:ro
-      - ./crypto-config/ordererOrganizations/university.com/orderers/orderer.university.com/tls:/etc/hyperledger/orderer/tls:ro
+      - ./organizations/peerOrganizations/misa.university.com/users/Admin@misa.university.com/msp:/etc/hyperledger/fabric/admin-msp:ro
+      - ./organizations/peerOrganizations/misa.university.com/peers/peer0.misa.university.com/tls:/etc/hyperledger/fabric/tls:ro
+      - ./organizations/ordererOrganizations/university.com/orderers/orderer.university.com/tls:/etc/hyperledger/orderer/tls:ro
       - ./channel-artifacts:/var/hyperledger/orderer/channel-artifacts
-      - ./crypto-config:/etc/hyperledger/fabric/crypto-config:ro
+      - ./organizations:/etc/hyperledger/fabric/organizations:ro
     networks:
       - fabric
     depends_on:
@@ -97,8 +201,8 @@ services:
       ORDERER_GENERAL_BOOTSTRAPMETHOD: none
       ORDERER_CHANNELPARTICIPATION_ENABLED: true
     volumes:
-      - ./crypto-config/ordererOrganizations/university.com/orderers/orderer.university.com/msp:/var/hyperledger/orderer/msp:ro
-      - ./crypto-config/ordererOrganizations/university.com/orderers/orderer.university.com/tls:/var/hyperledger/orderer/tls:ro
+      - ./organizations/ordererOrganizations/university.com/orderers/orderer.university.com/msp:/var/hyperledger/orderer/msp:ro
+      - ./organizations/ordererOrganizations/university.com/orderers/orderer.university.com/tls:/var/hyperledger/orderer/tls:ro
       - ./channel-artifacts:/var/hyperledger/orderer/channel-artifacts
       - orderer.university.com:/var/hyperledger/production/orderer
     ports:
@@ -108,10 +212,10 @@ services:
       - fabric
 
   cc-peer0.misa.university.com:
-    image: thesis2-ccaas:1.0
+    image: thesis-ccaas:1.0
     container_name: cc-peer0.misa.university.com
     environment:
-      CORE_CHAINCODE_ID_NAME: thesis2_1.0:c6d729702ad8398bcf74eb226687f57b6acc57e6177d7c760d425c2867a7eea5
+      CORE_CHAINCODE_ID_NAME: thesis_1.0:1ec44983d7ab276d90305eb6ff29fd0b3aec2c0259d961ff0891ccf18ec0c5b2
       CHAINCODE_SERVER_ADDRESS: 0.0.0.0:9999
       CHAINCODE_TLS_DISABLED: "true"
     networks:
@@ -120,5 +224,12 @@ services:
       - "9999"
 
 volumes:
-  peer0.misa.university.com:
   orderer.university.com:
+  ca-data.orderer:
+  pgdata.orderer:
+  ldapdata.orderer:
+  ldapconfig.orderer:
+  ca-data.misa:
+  pgdata.misa:
+  ldapdata.misa:
+  ldapconfig.misa:

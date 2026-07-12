@@ -1,5 +1,8 @@
 package main
 
+// This is the first version of the ledger chaincode
+// Doesn't implement yet any complex contract. Just basic CRUD
+// with the ThesisRecord
 import (
 	"fmt"
 	"log"
