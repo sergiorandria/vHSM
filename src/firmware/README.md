@@ -33,8 +33,8 @@ This firmware uses the ESP-IDF framework and requires the following components:
 ## WiFi Configuration
 
 The firmware is configured to connect to a specific WiFi network (hardcoded):
-- SSID: `Ttano`
-- Password: `#123Wifi_trano_456`
+- SSID: `YOUR_SSID`
+- Password: `YOUR_PASSWORD`
 
 To change these, modify `STA_SSID` and `STA_PASS` in `main/hsm.cpp`.
 
