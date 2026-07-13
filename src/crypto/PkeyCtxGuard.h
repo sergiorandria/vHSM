@@ -1,21 +1,23 @@
-#ifndef VHSM_CRYPTO_PKEY_CTX_GUARD 
+#ifndef VHSM_CRYPTO_PKEY_CTX_GUARD
 #define VHSM_CRYPTO_PKEY_CTX_GUARD
 
+#include "ctx_guard.h"
 #include <openssl/evp.h>
 
-namespace vhsm::crypto {
-struct PkeyCtxGuard {
+namespace vhsm::crypto
+{
+struct PkeyCtxGuard : public CtxGuard<EVP_PKEY_CTX>
+{
     EVP_PKEY_CTX* ctx;
-    explicit PkeyCtxGuard(EVP_PKEY_CTX* c) noexcept : ctx(c) {}
-    
-    ~PkeyCtxGuard() noexcept { 
-        if (ctx) {
-            EVP_PKEY_CTX_free(ctx);         
+    explicit PkeyCtxGuard(EVP_PKEY_CTX* c) noexcept : CtxGuard(c) {}
+
+    ~PkeyCtxGuard() noexcept
+    {
+        if (ctx)
+        {
+            EVP_PKEY_CTX_free(ctx);
         }
     }
-
-    PkeyCtxGuard(const PkeyCtxGuard&) = delete;
-    PkeyCtxGuard& operator=(const PkeyCtxGuard&) = delete;
 };
-}
+} // namespace vhsm::crypto
 #endif // VHSM_CRYPTO_PKEY_CTX_GUARD

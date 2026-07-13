@@ -30,7 +30,7 @@ private:
 
     // These methods should be callable without 
     // instanciation.
-    void increment_V();
+    void increment_v();
     void aes256_encrypt_block(const std::vector<u8>& input, std::vector<u8>& output);
     void update(const std::vector<u8>& provided_data);
 };

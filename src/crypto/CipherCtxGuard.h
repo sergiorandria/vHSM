@@ -1,22 +1,24 @@
-#ifndef VHSM_CRYPTO_CIPHER_CTX_GUARD 
+#ifndef VHSM_CRYPTO_CIPHER_CTX_GUARD
 #define VHSM_CRYPTO_CIPHER_CTX_GUARD
 
-#include <openssl/evp.h> 
+#include "ctx_guard.h"
+#include <openssl/evp.h>
 
-namespace vhsm::crypto { 
-struct CipherCtxGuard { 
-    EVP_CIPHER_CTX* ctx;
-    explicit CipherCtxGuard(EVP_CIPHER_CTX* c) noexcept : ctx(c) {}
-    
-    ~CipherCtxGuard() noexcept { 
-        if (ctx) {
-            EVP_CIPHER_CTX_free(ctx);         
+namespace vhsm::crypto
+{
+class CipherCtxGuard : public vhsm::crypto::CtxGuard<EVP_CIPHER_CTX>
+{
+public:
+    explicit CipherCtxGuard(EVP_CIPHER_CTX* c) noexcept : CtxGuard(c) {}
+
+    ~CipherCtxGuard() noexcept
+    {
+        if (this->ctx_)
+        {
+            EVP_CIPHER_CTX_free(this->ctx_);
         }
     }
-
-    CipherCtxGuard(const CipherCtxGuard&) = delete;
-    CipherCtxGuard& operator=(const CipherCtxGuard&) = delete;
 };
-} // vhsm::crypto
+} // namespace vhsm::crypto
 
-#endif // VHSM_CRYPTO_CIPHER_CTX_GUARD 
+#endif // VHSM_CRYPTO_CIPHER_CTX_GUARD

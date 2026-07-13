@@ -12,6 +12,8 @@
 
 .claude/
 .clangd
+.astylerc
+.clang-format
 build/
 docker-compose.yml
 .vscode
