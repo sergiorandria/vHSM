@@ -10,24 +10,28 @@
  */
 
 #include "ecc.h"
+#include "../core/error.h"
+#include "../core/types.h"
 #include "MdCtxGuard.h"
 #include "PkeyCtxGuard.h"
-#include "../core/types.h"
-#include "../core/error.h"
 
 #include <openssl/ec.h>
 #include <openssl/evp.h>
 #include <stdexcept>
 
-namespace vhsm::crypto {
+namespace vhsm::crypto
+{
 // Convert an enum Curve into the corresponding OpenSSL NID.
 static int curve_to_nid(Curve curve)
 {
     switch (curve)
     {
-        case Curve::P256: return NID_X9_62_prime256v1;
-        case Curve::P384: return NID_secp384r1;
-        case Curve::P521: return NID_secp521r1;
+        case Curve::EccCurveType_P256:
+            return NID_X9_62_prime256v1;
+        case Curve::EccCurveType_P384:
+            return NID_secp384r1;
+        case Curve::EccCurveType_P521:
+            return NID_secp521r1;
     }
 
     // Unreachable if all enum values are handled above; guard against
@@ -37,7 +41,7 @@ static int curve_to_nid(Curve curve)
 
 // Generate an EC keypair for `curve`. Returns an ECKeyPair holding an
 // EVP_PKEY*; caller must free with EVP_PKEY_free.
-ECKeyPair ECC::generate_key(Curve curve)
+ECCKeyPair ECC::generate_key(Curve curve)
 {
     EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, nullptr);
     VHSM_CHECK_MSG(ctx != nullptr, "ECC::generate_key: EVP_PKEY_CTX_new_id failed");
@@ -49,7 +53,7 @@ ECKeyPair ECC::generate_key(Curve curve)
     EVP_PKEY* key = nullptr;
     VHSM_CHECK(EVP_PKEY_keygen(ctx, &key) == 1);
 
-    return { key };
+    return {key};
 }
 
 // Sign `data` with `key` using SHA-256. Returns the DER-encoded signature.
@@ -81,7 +85,7 @@ std::vector<u8> ECC::sign(EVP_PKEY* key, const std::vector<u8>& data)
 // Verify `signature` over `data` with `key`. Returns true iff the signature
 // is valid; returns false on verification failure (rc == 0).
 // Any other negative return value from OpenSSL is treated as an error.
-bool ECC::verify(EVP_PKEY*  key, const std::vector<u8>&  data, const std::vector<u8>& signature)
+bool ECC::verify(EVP_PKEY* key, const std::vector<u8>& data, const std::vector<u8>& signature)
 {
     VHSM_CHECK_MSG(key != nullptr, "ECC::verify: key is null");
 
@@ -91,12 +95,7 @@ bool ECC::verify(EVP_PKEY*  key, const std::vector<u8>&  data, const std::vector
 
     VHSM_CHECK(EVP_DigestVerifyInit(ctx, nullptr, EVP_sha256(), nullptr, key) == 1);
 
-    const int rc = EVP_DigestVerify(
-        ctx,
-        signature.data(),
-        signature.size(),
-        data.data(),
-        data.size());
+    const int rc = EVP_DigestVerify(ctx, signature.data(), signature.size(), data.data(), data.size());
 
     // rc == 1  → valid signature
     // rc == 0  → invalid signature (not an OpenSSL error, just a mismatch)

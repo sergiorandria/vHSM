@@ -1,4 +1,4 @@
-#ifndef VHSM_CRYPTO_GENTRY_IDEAL_LATTICE 
+#ifndef VHSM_CRYPTO_GENTRY_IDEAL_LATTICE
 #define VHSM_CRYPTO_GENTRY_IDEAL_LATTICE
 /**
  * ideal_lattice.hpp (Research perspective)
@@ -22,92 +22,131 @@
 
 #include "gentry_polynomial.h"
 
-#include <vector>
+#include <cmath>
 #include <functional>
 #include <random>
-#include <cmath>
+#include <vector>
 
-namespace vhsm::crypto::fhe {
+namespace vhsm::crypto::fhe
+{
 
-using Matrix  = std::vector<std::vector<double>>;   // n×n real matrix
+using Matrix = std::vector<std::vector<double>>;     // n×n real matrix
 using IMatrix = std::vector<std::vector<long long>>; // n×n integer matrix
 
 //  Small linear-algebra helpers
-namespace linalg {
+namespace linalg
+{
 
 /// Return n×n identity matrix.
-inline IMatrix identity(int n) {
+inline IMatrix identity(int n)
+{
     IMatrix I(n, std::vector<long long>(n, 0LL));
-    for (int i = 0; i < n; ++i) I[i][i] = 1LL;
+    for (int i = 0; i < n; ++i)
+    {
+        I[i][i] = 1LL;
+    }
     return I;
 }
 
 /// Matrix–vector product (integer).
-inline std::vector<long long> matvec(const IMatrix& A,
-                                    const std::vector<long long>& v) {
-    int n = (int)A.size();
+inline std::vector<long long> matvec(const IMatrix& A, const std::vector<long long>& v)
+{
+    int n = (int) A.size();
     std::vector<long long> res(n, 0LL);
     for (int i = 0; i < n; ++i)
+    {
         for (int j = 0; j < n; ++j)
+        {
             res[i] += A[i][j] * v[j];
+        }
+    }
     return res;
 }
 
 /// Matrix–vector product (real).
-inline std::vector<double> matvec(const Matrix& A,
-                                const std::vector<double>& v) {
-    int n = (int)A.size();
+inline std::vector<double> matvec(const Matrix& A, const std::vector<double>& v)
+{
+    int n = (int) A.size();
     std::vector<double> res(n, 0.0);
     for (int i = 0; i < n; ++i)
+    {
         for (int j = 0; j < n; ++j)
+        {
             res[i] += A[i][j] * v[j];
+        }
+    }
     return res;
 }
 
 /// Round each entry of a real vector to the nearest integer.
-inline std::vector<long long> round_vec(const std::vector<double>& v) {
+inline std::vector<long long> round_vec(const std::vector<double>& v)
+{
     std::vector<long long> res(v.size());
     for (std::size_t i = 0; i < v.size(); ++i)
-        res[i] = (long long)std::round(v[i]);
+    {
+        res[i] = (long long) std::round(v[i]);
+    }
     return res;
 }
 
 /// Euclidean norm of an integer vector.
-inline double l2_norm(const std::vector<long long>& v) {
+inline double l2_norm(const std::vector<long long>& v)
+{
     double s = 0.0;
-    for (auto x : v) s += (double)x * (double)x;
+    for (auto x : v)
+    {
+        s += (double) x * (double) x;
+    }
     return std::sqrt(s);
 }
 
 /// l∞ norm of integer vector.
-inline long long linf_norm(const std::vector<long long>& v) {
+inline long long linf_norm(const std::vector<long long>& v)
+{
     long long m = 0;
-    for (auto x : v) { long long a = x < 0 ? -x : x; if (a > m) m = a; }
+    for (auto x : v)
+    {
+        long long a = x < 0 ? -x : x;
+        if (a > m)
+        {
+            m = a;
+        }
+    }
     return m;
 }
 
 /// Add two integer vectors.
-inline std::vector<long long> add(const std::vector<long long>& a,
-                                const std::vector<long long>& b) {
-    int n = (int)a.size();
+inline std::vector<long long> add(const std::vector<long long>& a, const std::vector<long long>& b)
+{
+    int n = (int) a.size();
     std::vector<long long> r(n);
-    for (int i = 0; i < n; ++i) r[i] = a[i] + b[i];
+    for (int i = 0; i < n; ++i)
+    {
+        r[i] = a[i] + b[i];
+    }
     return r;
 }
 
 /// Subtract two integer vectors.
-inline std::vector<long long> sub(const std::vector<long long>& a,
-                                const std::vector<long long>& b) {
-    int n = (int)a.size();
+inline std::vector<long long> sub(const std::vector<long long>& a, const std::vector<long long>& b)
+{
+    int n = (int) a.size();
     std::vector<long long> r(n);
-    for (int i = 0; i < n; ++i) r[i] = a[i] - b[i];
+    for (int i = 0; i < n; ++i)
+    {
+        r[i] = a[i] - b[i];
+    }
     return r;
 }
 
 /// Scale integer vector by scalar.
-inline std::vector<long long> scale(const std::vector<long long>& v, long long s) {
+inline std::vector<long long> scale(const std::vector<long long>& v, long long s)
+{
     std::vector<long long> r(v.size());
-    for (std::size_t i = 0; i < v.size(); ++i) r[i] = v[i] * s;
+    for (std::size_t i = 0; i < v.size(); ++i)
+    {
+        r[i] = v[i] * s;
+    }
     return r;
 }
 
@@ -130,22 +169,24 @@ IMatrix rotation_basis(const Polynomial& v, const Polynomial& f);
  *
  * The caller pre-computes B_inv = B^{-1} for efficiency.
  */
-std::vector<long long> vec_mod_basis(const std::vector<long long>& t,
-                                    const IMatrix&                  B,
-                                    const Matrix&                   B_inv);
+std::vector<long long> vec_mod_basis(const std::vector<long long>& t, const IMatrix& B, const Matrix& B_inv);
 
 //  rDec  =  1 / (2 · ‖(B^{sk}_J)^{-1}‖)   (Lemma 1)
 double compute_rDec(const Matrix& B_sk_inv);
 
 //  Polynomial ↔ vector conversions (coefficient vector representation)
-inline std::vector<long long> poly_to_vec(const Polynomial& p, int n) {
+inline std::vector<long long> poly_to_vec(const Polynomial& p, int n)
+{
     std::vector<long long> v(n, 0LL);
     for (int i = 0; i < n && i <= p.degree(); ++i)
+    {
         v[i] = p[i];
+    }
     return v;
 }
 
-inline Polynomial vec_to_poly(const std::vector<long long>& v) {
+inline Polynomial vec_to_poly(const std::vector<long long>& v)
+{
     std::vector<Polynomial::Coeff> c(v.begin(), v.end());
     return Polynomial(std::move(c));
 }
@@ -162,5 +203,5 @@ std::vector<long long> sample_gaussian(int n, double sigma, std::mt19937_64& rng
  */
 std::vector<long long> sample_uniform(int n, long long bound, std::mt19937_64& rng);
 
-} // namespace fhe
+} // namespace vhsm::crypto::fhe
 #endif

@@ -13,44 +13,32 @@
 
 #pragma once
 
-#include <vector>
 #include <openssl/evp.h>
+#include <vector>
 
-namespace vhsm::crypto {
-enum class Curve 
+namespace vhsm::crypto
 {
-    P256,
-    P384,
-    P521
+enum class Curve
+{
+    EccCurveType_P256,
+    EccCurveType_P384,
+    EccCurveType_P521
 };
 
-struct ECKeyPair 
+struct ECCKeyPair
 {
     EVP_PKEY* key;
 };
 
-class ECC 
+class ECC
 {
-    public:
-        static ECKeyPair generate_key(Curve curve);
+public:
+    static ECCKeyPair generate_key(Curve curve);
 
-        static std::vector<uint8_t> sign
-        (
-            EVP_PKEY* key,
-            const std::vector<uint8_t>& data
-        );
+    static std::vector<uint8_t> sign(EVP_PKEY* key, const std::vector<uint8_t>& data);
 
-        static bool verify
-        (
-            EVP_PKEY* key,
-            const std::vector<uint8_t>& data,
-            const std::vector<uint8_t>& signature
-        );
+    static bool verify(EVP_PKEY* key, const std::vector<uint8_t>& data, const std::vector<uint8_t>& signature);
 
-        static std::vector<uint8_t> derive_shared_secret
-        (
-            EVP_PKEY* private_key,
-            EVP_PKEY* peer_public_key
-        );
+    static std::vector<uint8_t> derive_shared_secret(EVP_PKEY* private_key, EVP_PKEY* peer_public_key);
 };
-}
+} // namespace vhsm::crypto

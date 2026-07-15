@@ -1,9 +1,9 @@
-#ifndef VHSM_CRYPTO_RSA 
+#ifndef VHSM_CRYPTO_RSA
 #define VHSM_CRYPTO_RSA
 
 #include <memory>
-#include <vector>
 #include <openssl/evp.h>
+#include <vector>
 
 /*
  * rsa.h
@@ -18,30 +18,22 @@
  * - Errors from OpenSSL are not propagated by these declarations; implementations
  *   should check and surface OpenSSL error information.
  */
-namespace vhsm::crypto { 
+namespace vhsm::crypto
+{
 
-struct RSAKeyPair 
+struct RSAKeyPair
 {
     EVP_PKEY* key;
 };
 
-class RSAUtil 
+class RSAUtil
 {
-    public:
-        static RSAKeyPair generate_key(int bits);
+public:
+    static RSAKeyPair generate_key(int bits);
 
-        static std::vector<uint8_t> sign
-        (
-            EVP_PKEY* key,
-            const std::vector<uint8_t>& data
-        );
+    static std::vector<uint8_t> sign(EVP_PKEY* key, const std::vector<uint8_t>& data);
 
-        static bool verify
-        (
-            EVP_PKEY* key,
-            const std::vector<uint8_t>& data,
-            const std::vector<uint8_t>& signature
-        );
+    static bool verify(EVP_PKEY* key, const std::vector<uint8_t>& data, const std::vector<uint8_t>& signature);
 };
 } // namespace vhsm::crypto
 #endif // VHSM_CRYPTO_RSA
