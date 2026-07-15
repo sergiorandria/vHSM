@@ -11,7 +11,6 @@
  * - Proper error checking and buffer length handling are important; callers
  *   should ensure key lengths are correct and handle exceptions on auth failure.
  */
-
 #include "aes_gcm.h"
 #include "../core/error.h"
 #include "../core/types.h"
@@ -20,20 +19,29 @@
 #include <openssl/rand.h>
 #include <stdexcept>
 
-namespace {
-
+namespace
+{
 // RAII wrapper — ensures EVP_CIPHER_CTX_free is called on every exit path.
-struct CtxGuard {
+struct CtxGuard
+{
     EVP_CIPHER_CTX* ctx;
     explicit CtxGuard(EVP_CIPHER_CTX* c) noexcept : ctx(c) {}
-    ~CtxGuard() noexcept { if (ctx) EVP_CIPHER_CTX_free(ctx); }
-    CtxGuard(const CtxGuard&)            = delete;
+    ~CtxGuard() noexcept
+    {
+        if (ctx)
+        {
+            EVP_CIPHER_CTX_free(ctx);
+        }
+    }
+    
+    CtxGuard(const CtxGuard&) = delete;
     CtxGuard& operator=(const CtxGuard&) = delete;
 };
 
 } // namespace
 
-namespace vhsm::crypto {
+namespace vhsm::crypto
+{
 // Encrypt: initializes a GCM context, sets IV length, provides the key/nonce,
 // then encrypts the plaintext producing ciphertext and the authentication tag.
 // The caller receives ciphertext, nonce and tag in AESGCMResult.
@@ -45,8 +53,7 @@ AESGCMResult AESGCM::encrypt(const std::vector<u8>& key, const std::vector<u8>& 
     AESGCMResult result;
 
     result.nonce.resize(12);
-    VHSM_CHECK_MSG(RAND_bytes(result.nonce.data(), 12) == 1,
-                "AESGCM::encrypt: RAND_bytes failed");
+    VHSM_CHECK_MSG(RAND_bytes(result.nonce.data(), 12) == 1, "AESGCM::encrypt: RAND_bytes failed");
 
     result.tag.resize(16);
 
@@ -93,12 +100,12 @@ std::vector<u8> AESGCM::decrypt(const std::vector<u8>& key, const AESGCMResult& 
 
     // Tag must be set before EVP_DecryptFinal_ex, not after — otherwise
     // the final call verifies against uninitialised data and auth is bypassed.
-    VHSM_CHECK(EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16,
-                                const_cast<u8*>(data.tag.data())) == 1);
+    VHSM_CHECK(EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16, const_cast<u8*>(data.tag.data())) == 1);
 
     ret = EVP_DecryptFinal_ex(ctx, plaintext.data() + len, &final_len);
 
-    if (ret <= 0) {
+    if (ret <= 0)
+    {
         throw std::runtime_error("authentication failed");
     }
 
@@ -107,4 +114,4 @@ std::vector<u8> AESGCM::decrypt(const std::vector<u8>& key, const AESGCMResult& 
 
     return plaintext;
 }
-}
+} // namespace vhsm::crypto
