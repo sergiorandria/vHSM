@@ -11,7 +11,7 @@ class CipherCtxGuard : public vhsm::crypto::CtxGuard<EVP_CIPHER_CTX>
 public:
     explicit CipherCtxGuard(EVP_CIPHER_CTX* c) noexcept : CtxGuard(c) {}
 
-    ~CipherCtxGuard() noexcept
+    ~CipherCtxGuard() override
     {
         if (this->ctx_)
         {

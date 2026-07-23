@@ -55,7 +55,7 @@ KeyFingerprint::Fingerprint sha256_of(const std::vector<uint8_t>& data)
 
 /// Generate a fresh P-256 key pair wrapped in vhsm::crypto::ECKeyPair.
 /// Adjust the struct initialisation to match your actual ECKeyPair layout.
-vhsm::crypto::ECKeyPair make_ec_key()
+vhsm::crypto::ECCKeyPair make_ec_key()
 {
     EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, nullptr);
     EVP_PKEY_keygen_init(ctx);
@@ -66,7 +66,7 @@ vhsm::crypto::ECKeyPair make_ec_key()
 
     // Assumes ECKeyPair holds a public `EVP_PKEY* key` member.
     // Adapt if your struct uses a different field name or ownership model.
-    return vhsm::crypto::ECKeyPair{ pkey };
+    return vhsm::crypto::ECCKeyPair{ pkey };
 }
 
 /// Generate a fresh RSA-2048 key pair wrapped in vhsm::crypto::RSAKeyPair.

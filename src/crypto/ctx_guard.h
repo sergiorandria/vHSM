@@ -26,11 +26,19 @@ public:
 
     // Should be implemented by
     // child classes
-    virtual ~CtxGuard() = 0;
+    virtual ~CtxGuard() = 0; 
+
+    inline CtxContext* getCtx() { return ctx_; } 
 
     CtxGuard(const CtxGuard&) = delete;
     CtxGuard& operator=(const CtxGuard&) = delete;
 };
+
+template <class CtxContext>
+    requires EVP_CTX_CONCEPT<CtxContext>
+inline CtxGuard<CtxContext>::~CtxGuard() {
+    // Placeholder for destructor implementation
+} 
 } // namespace vhsm::crypto
 
 #endif // VHSM_CTX_GUARD_H

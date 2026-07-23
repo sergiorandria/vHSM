@@ -13,7 +13,7 @@ TEST(CipherCtxGuardTest, ConstructorAndDestruction) {
     {
         CipherCtxGuard guard(ctx);
         // Guard holds the context
-        EXPECT_EQ(guard.ctx, ctx);
+        EXPECT_EQ(guard.getCtx(), ctx);
     }
     // When guard goes out of scope, ctx should be freed
 }

@@ -51,6 +51,14 @@ namespace vhsm::signature_store {
                 const std::function<void(IDbTransaction&)>& func) = 0;
         };
 
+        
+        std::unique_ptr<IDbConnection> make_sqlite_connection(const std::string& path);
+
+        // Stub for PostgreSQL connection — to be implemented in future phases
+        std::unique_ptr<IDbConnection> make_postgresql_connection(const std::string& /*connection_string*/);
+
+        // Stub for MySQL connection — to be implemented in future phases
+        std::unique_ptr<IDbConnection> make_mysql_connection(const std::string& /*connection_string*/);
     }  // namespace db
 }  // namespace vhsm::signature_store
 

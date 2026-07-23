@@ -11,9 +11,7 @@ struct sqlite3;
 #include "db_result_set.h"
 #include "db_connection.h"
 
-// ─────────────────────────────────────────────────────────────────────────────
 // SqliteConnection — IDbConnection backed by a single sqlite3 handle
-// ─────────────────────────────────────────────────────────────────────────────
 namespace vhsm::signature_store {
     namespace db {
 
@@ -26,7 +24,7 @@ namespace vhsm::signature_store {
                 SqliteConnection(const SqliteConnection&)            = delete;
                 SqliteConnection& operator=(const SqliteConnection&) = delete;
 
-                // ── IDbConnection ────────────────────────────────────────────────────────
+                // IDbConnection
                 DbResultSet query(const std::string& sql, const std::vector<std::string>& params = {}) override;
                 i64 exec(const std::string& sql, const std::vector<std::string>& params = {}) override;
                 void with_transaction(const std::function<void(IDbTransaction&)>& func) override;

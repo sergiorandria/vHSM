@@ -96,5 +96,4 @@ bool RSAUtil::verify(EVP_PKEY* key, const std::vector<uint8_t>& data, const std:
 
     return rc == 1;
 }
-
 } // namespace vhsm::crypto

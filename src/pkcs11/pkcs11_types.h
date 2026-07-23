@@ -1,0 +1,6 @@
+#ifndef VHSM_PKCS11_TYPES_H
+#define VHSM_PKCS11_TYPES_H
+
+
+
+#endif // VHSM_PKCS11_TYPES_H

@@ -11,6 +11,7 @@ target_sources(vhsm_signature_store
     db_config.h
     db_hmac_key.cpp
     row_integrity.cpp
+    signature_repository.cpp
 )
 
 target_include_directories(vhsm_signature_store
