@@ -6,16 +6,16 @@
 
 namespace vhsm::crypto
 {
-struct PkeyCtxGuard : public CtxGuard<EVP_PKEY_CTX>
+class PkeyCtxGuard : public CtxGuard<EVP_PKEY_CTX>
 {
-    EVP_PKEY_CTX* ctx;
+public: 
     explicit PkeyCtxGuard(EVP_PKEY_CTX* c) noexcept : CtxGuard(c) {}
 
-    ~PkeyCtxGuard() noexcept
+    ~PkeyCtxGuard() override
     {
-        if (ctx)
+        if (this->ctx_)
         {
-            EVP_PKEY_CTX_free(ctx);
+            EVP_PKEY_CTX_free(this->ctx_);
         }
     }
 };

@@ -5,8 +5,8 @@ using namespace vhsm::crypto;
 
 TEST(ECC, GenerateSignVerifyDerive)
 {
-    ECKeyPair a = ECC::generate_key(Curve::P256);
-    ECKeyPair b = ECC::generate_key(Curve::P256);
+    ECCKeyPair a = ECC::generate_key(Curve::EccCurveType_P256);
+    ECCKeyPair b = ECC::generate_key(Curve::EccCurveType_P256);
 
     ASSERT_NE(a.key, nullptr);
     ASSERT_NE(b.key, nullptr);

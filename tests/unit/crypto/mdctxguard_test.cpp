@@ -13,7 +13,7 @@ TEST(MdCtxGuardTest, ConstructorAndDestruction) {
     {
         MdCtxGuard guard(ctx);
         // Guard holds the context, but we can still use it
-        EXPECT_EQ(guard.ctx, ctx);
+        EXPECT_EQ(guard.getCtx(), ctx);
     }
     // When guard goes out of scope, ctx should be freed
     // We can't easily test that it's freed without causing UB by using freed memory

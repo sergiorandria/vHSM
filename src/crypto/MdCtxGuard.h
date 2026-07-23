@@ -6,15 +6,15 @@
 
 namespace vhsm::crypto
 {
-struct MdCtxGuard : public CtxGuard<EVP_MD_CTX>
+class MdCtxGuard : public CtxGuard<EVP_MD_CTX>
 {
-    EVP_MD_CTX* ctx;
+public: 
     explicit MdCtxGuard(EVP_MD_CTX* c) noexcept : CtxGuard(c) {}
-    ~MdCtxGuard() noexcept
+    ~MdCtxGuard() override
     {
-        if (ctx)
+        if (this->ctx_)
         {
-            EVP_MD_CTX_free(ctx);
+            EVP_MD_CTX_free(this->ctx_);
         }
     }
 };

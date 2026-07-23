@@ -26,11 +26,11 @@ protected:
         conn_ = make_sqlite_connection(":memory:");
         
         // Bootstrap the schema
-        schema_ = DbSchema(*conn_);
-        schema_.bootstrap();
+        schema_ = std::make_unique<DbSchema>(*conn_);
+        schema_->bootstrap();
         
         // Create a token for the repository
-        token_ = std::make_unique<vhsm::keystore::Token>("test-token");
+        token_ = std::make_unique<vhsm::keystore::Token>("test-token", "test-id");
         
         // Create the repository
         repo_ = std::make_unique<SignatureRepository>(*conn_, *token_);
@@ -125,7 +125,7 @@ TEST_F(SignatureRepositoryTest, UpdateLedgerFields) {
     entry.signature_b64 = "MEUCIQD...";
     entry.created_at = 1234567890;
     entry.tx_id = "tx123456789";
-    entry.block_num = 42;
+    entry.block_number = 42;
 
     // Update the ledger fields
     bool result = repo_->update_ledger_fields(*signature_id, entry);
@@ -169,7 +169,7 @@ TEST_F(SignatureRepositoryTest, LedgerCrossCheckOnTamperedRow) {
     entry.signature_b64 = "MEUCIQD...";
     entry.created_at = 1234567890;
     entry.tx_id = "tx123456789";
-    entry.block_num = 42;
+    entry.block_number = 42;
 
     bool update_result = repo_->update_ledger_fields(*signature_id, entry);
     EXPECT_TRUE(update_result) << "Failed to update ledger fields";

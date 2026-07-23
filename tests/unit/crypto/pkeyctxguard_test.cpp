@@ -14,7 +14,7 @@ TEST(PkeyCtxGuardTest, ConstructorAndDestruction) {
     {
         PkeyCtxGuard guard(ctx);
         // Guard holds the context (even if null)
-        EXPECT_EQ(guard.ctx, ctx);
+        EXPECT_EQ(guard.getCtx(), ctx);
     }
     // When guard goes out of scope, ctx should be freed if not null
 }
@@ -55,7 +55,7 @@ TEST(PkeyCtxGuardTest, ValidContextHandling) {
     if (ctx != nullptr) {
         {
             PkeyCtxGuard guard(ctx);
-            EXPECT_EQ(guard.ctx, ctx);
+            EXPECT_EQ(guard.getCtx(), ctx);
         }
         // ctx should be freed by guard
         EVP_PKEY_free(pkey);

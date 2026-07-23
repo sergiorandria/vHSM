@@ -36,7 +36,7 @@ KeyFingerprint::Fingerprint KeyFingerprint::from_SPKI(const std::vector<uint8_t>
 // Serialize an EC `ECKeyPair` to DER/SPKI via a memory BIO and delegate
 // to `from_SPKI` for the SHA-256 calculation.
 // CORRIGÉ : vhsm::crypto:: ajouté devant ECKeyPair
-KeyFingerprint::Fingerprint KeyFingerprint::from_public_key(const vhsm::crypto::ECKeyPair& key)
+KeyFingerprint::Fingerprint KeyFingerprint::from_public_key(const vhsm::crypto::ECCKeyPair& key)
 {
     KeyFingerprint::Fingerprint fingerprint{};
     BIO* bio = BIO_new(BIO_s_mem());

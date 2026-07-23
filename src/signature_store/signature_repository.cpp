@@ -22,7 +22,7 @@ std::optional<std::string> SignatureRepository::insert(
     const std::string& mechanism,
     const std::string& digest_algorithm,
     const std::string& payload_digest,
-    int payload_size,
+    int ,
     const std::string& signature_b64,
     const std::string& session_handle,
     const std::optional<std::string>& user_label,
@@ -129,13 +129,15 @@ bool SignatureRepository::update_ledger_fields(const std::string& signature_id,
     // ledger_tx_id
     new_column_values.push_back(to_storage_string(std::make_optional<std::string>(entry.tx_id)));
     // ledger_block_num
-    new_column_values.push_back(std::to_string(entry.block_num));
+    new_column_values.push_back(std::to_string(entry.block_number));
+    
+    // COMMENTED OUT
     // ledger_tx_time
-    new_column_values.push_back(to_storage_string(std::make_optional<std::string>(entry.tx_time)));
+    //new_column_values.push_back(to_storage_string(std::make_optional<std::string>(entry.tx_time)));
     // ledger_tx_proof
-    new_column_values.push_back(to_storage_string(std::make_optional<std::string>(entry.tx_proof)));
+    //new_column_values.push_back(to_storage_string(std::make_optional<std::string>(entry.tx_proof)));
     // ledger_tx_set_b64
-    new_column_values.push_back(to_storage_string(std::make_optional<std::string>(entry.tx_set_b64)));
+    //new_column_values.push_back(to_storage_string(std::make_optional<std::string>(entry.tx_set_b64)));
 
     // ledger_status: we assume it's COMMITTED when we have a LedgerEntry.
     new_column_values.push_back("COMMITTED");

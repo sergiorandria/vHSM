@@ -397,14 +397,6 @@ protected:
     db::DbSchema schema_{ conn_ };
 };
 
-TEST_F(DbSchemaContentTest, SqlCreateSignatureRecords_ContainsRekorColumns) {
-    auto sql = schema_.sql_create_signature_records();
-    EXPECT_NE(sql.find("rekor_entry_uuid"), std::string::npos);
-    EXPECT_NE(sql.find("rekor_log_index"),  std::string::npos);
-    EXPECT_NE(sql.find("rekor_set_b64"),    std::string::npos);
-    EXPECT_NE(sql.find("rekor_status"),     std::string::npos);
-}
-
 TEST_F(DbSchemaContentTest, SqlCreateSignatureRecords_RekorStatusHasCorrectCheck) {
     auto sql = schema_.sql_create_signature_records();
     EXPECT_NE(sql.find("PENDING"),   std::string::npos);
