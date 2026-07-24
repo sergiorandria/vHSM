@@ -22,11 +22,7 @@
 using namespace vhsm::signature_store;
 
 namespace vhsm::signature_store::db {
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers / fakes
-// ─────────────────────────────────────────────────────────────────────────────
-
+    
 // Minimal in-memory fake transaction used by FakeDbConnection below.
 class FakeTransaction : public IDbTransaction {
 public:
