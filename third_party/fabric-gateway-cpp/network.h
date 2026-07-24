@@ -2,10 +2,10 @@
 #define FABRIC_GATEWAY_NETWORK_H
 
 #include "contract.h"
-#include "gateway.h"
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <type_traits>
 
 #if defined(__NETWORK_PEER_ENDPOINT_IMPL) &&                                   \
     (__NETWORK_PEER_ENDPOINT_IMPL_VERSION >= 2)
@@ -16,17 +16,24 @@
 namespace fabric {
 class Gateway;
 
-template <class Endpoint, std::size_t PeersSize> class Network {
+template <class Endpoint, std::size_t N> 
+class Network {
 public:
   explicit Network(Gateway *gateway, const std::string &channelName);
   ~Network();
-  class Contract *GetContract(const std::string &chaincodeName);
+  
+  Contract<N> *GetContract(const std::string &chaincodeName);
+  inline Contract<N> *CreateContract(const Contract<N>& other) 
+    requires std::is_integral_v<decltype(N)> { 
+      contracts_ = other;
+  } 
 
 private:
   Gateway *gateway_;
   std::string channelName_;
+  std::array<Contract<N>, N> contracts_;  
 
-  std::array<Endpoint, PeersSize> endpoint_peers;
+  std::array<Endpoint, N> endpoint_peers_;
 };
 } // namespace fabric
 

@@ -2,17 +2,16 @@
 #define FABRIC_GATEWAY_CONTRACT_H
 
 #include "query.h"
+#include <curl/curl.h>
 #include <string>
 #include <vector>
 #include <memory>
 
 namespace fabric {
-
-class Network;
-
+template <std::size_t N> 
 class Contract {
 public:
-    explicit Contract(const std::string& name_, Network* network = nullptr, const std::string& chaincodeName = "");
+    explicit Contract(const std::string& name_, const std::string& chaincodeName = "");
     ~Contract();
     Query& SubmitTransaction(const std::string& functionName, std::vector<std::string> args);
     Query& EvaluateTransaction(const std::string& functionName, std::vector<std::string> args);
@@ -20,8 +19,8 @@ public:
 private:
     std::string name_;
     std::string description_;
-    Network* network_;
     std::string chaincodeName_;
+    
     // To avoid copying
     Contract(const Contract&) = delete;
     Contract& operator=(const Contract&) = delete;
