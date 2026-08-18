@@ -15,12 +15,16 @@
 
 namespace vhsm::keystore {
 
-HsmObject::HsmObject(ObjectType type, bool sensitive, bool extractable)
+HsmObject::HsmObject(ObjectType type, bool sensitive, bool extractable,
+                     bool token, bool priv)
     : type_(type)
     , sensitive_(sensitive)
     , extractable_(extractable)
+    , token_(token)
+    , private_(priv)
     , id_()
     , idSet_(false)
+    , attrs_()
 {}
 
 HsmObject::~HsmObject() noexcept {
@@ -31,7 +35,10 @@ HsmObject::HsmObject(const HsmObject& other)
     : type_(other.type_)
     , sensitive_(other.sensitive_)
     , extractable_(other.extractable_)
+    , token_(other.token_)
+    , private_(other.private_)
     , idSet_(false)
+    , attrs_(other.attrs_)
 {
     VHSM_CHECK_MSG(!sensitive_, "HsmObject: copy of sensitive object is not permitted");
 
@@ -55,6 +62,9 @@ HsmObject& HsmObject::operator=(const HsmObject& other) {
     type_        = other.type_;
     sensitive_   = other.sensitive_;
     extractable_ = other.extractable_;
+    token_       = other.token_;
+    private_     = other.private_;
+    attrs_       = other.attrs_;
 
     if (other.idSet_ && other.id_.size() > 0) {
         id_ = SecureBuffer(other.id_.size());
@@ -72,12 +82,17 @@ HsmObject::HsmObject(HsmObject&& other) noexcept
     : type_(other.type_)
     , sensitive_(other.sensitive_)
     , extractable_(other.extractable_)
+    , token_(other.token_)
+    , private_(other.private_)
     , id_(std::move(other.id_))
     , idSet_(other.idSet_)
+    , attrs_(std::move(other.attrs_))
 {
     other.type_        = ObjectType::OTHER;
     other.sensitive_   = false;
     other.extractable_ = false;
+    other.token_       = false;
+    other.private_     = false;
     other.idSet_       = false;
 }
 
@@ -90,11 +105,16 @@ HsmObject& HsmObject::operator=(HsmObject&& other) noexcept {
     idSet_       = other.idSet_;
     sensitive_   = other.sensitive_;
     extractable_ = other.extractable_;
+    token_       = other.token_;
+    private_     = other.private_;
     id_          = std::move(other.id_);
+    attrs_       = std::move(other.attrs_);
 
     other.type_        = ObjectType::OTHER;
     other.sensitive_   = false;
     other.extractable_ = false;
+    other.token_       = false;
+    other.private_     = false;
     other.idSet_       = false;
 
     return *this;
@@ -110,6 +130,33 @@ bool HsmObject::isSensitive() const noexcept {
 
 bool HsmObject::isExtractable() const noexcept {
     return extractable_;
+}
+
+bool HsmObject::isToken() const noexcept {
+    return token_;
+}
+
+bool HsmObject::isPrivate() const noexcept {
+    return private_;
+}
+
+const std::vector<u8>* HsmObject::findAttribute(CK_ATTRIBUTE_TYPE type) const noexcept {
+    auto it = attrs_.find(type);
+    if (it == attrs_.end()) {
+        return nullptr;
+    }
+    return &it->second;
+}
+
+void HsmObject::setAttribute(CK_ATTRIBUTE_TYPE type, const u8* data, std::size_t len) {
+    if (len > 0 && data == nullptr) {
+        throw std::invalid_argument("HsmObject::setAttribute: null data with non-zero length");
+    }
+    if (len == 0) {
+        attrs_[type].clear();
+        return;
+    }
+    attrs_[type].assign(data, data + len);
 }
 
 std::span<const u8> HsmObject::getId() const noexcept {
@@ -133,8 +180,20 @@ void HsmObject::setId(std::span<const u8> id) {
 // zero key material before the destructor chain reaches this base.
 void HsmObject::wipe() noexcept {
     id_.wipe();
+    for (auto& [type, value] : attrs_) {
+        (void)type;
+        if (!value.empty()) {
+            volatile unsigned char* p = value.data();
+            for (std::size_t i = 0; i < value.size(); ++i) {
+                p[i] = 0;
+            }
+        }
+    }
+    attrs_.clear();
     idSet_       = false;
     sensitive_   = false;
     extractable_ = false;
+    token_       = false;
+    private_     = false;
 }
 } // namespace vhsm::keystore

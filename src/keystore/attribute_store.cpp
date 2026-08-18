@@ -4,73 +4,23 @@
 
 namespace vhsm::keystore {
 
+namespace {
+// PKCS#11: the "attribute length is unknown/unavailable" marker.
+constexpr CK_ULONG CK_UNAVAILABLE_INFORMATION = static_cast<CK_ULONG>(~0UL);
+} // namespace
+
 AttributeStore::AttributeStore(HsmObject& object) : object_(object) {}
 
 CK_RV AttributeStore::getAttribute(CK_ATTRIBUTE_TYPE type, CK_VOID_PTR pValue, CK_ULONG_PTR pulValueLen) {
-    // First, determine the size needed for the attribute
-    CK_ULONG ulSize = 0;
-    //bool bResult = false;
-
-    switch (type) {
-        case CKA_CLASS:
-            ulSize = sizeof(CK_ULONG);
-            //bResult = true;
-            break;
-        case CKA_TOKEN:
-            ulSize = sizeof(CK_BBOOL);
-            //bResult = true;
-            break;
-        case CKA_PRIVATE:
-            ulSize = sizeof(CK_BBOOL);
-            //bResult = true;
-            break;
-        case CKA_LABEL: {
-            auto it = extraAttrs_.find(CKA_LABEL);
-            ulSize = (it != extraAttrs_.end())
-                    ? static_cast<CK_ULONG>(it->second.size())
-                    : 0;
-            break;
-        }
-        case CKA_ID:
-            // ID is stored in the object's id_ (SecureBuffer)
-            ulSize = object_.getId().size();
-            //bResult = true;
-            break;
-        case CKA_SENSITIVE:
-            ulSize = sizeof(CK_BBOOL);
-            //bResult = true;
-            break;
-        case CKA_EXTRACTABLE:
-            ulSize = sizeof(CK_BBOOL);
-            //bResult = true;
-            break;
-        case CKA_VALUE: {
-            auto it = extraAttrs_.find(CKA_VALUE);
-            ulSize = (it != extraAttrs_.end())
-                    ? static_cast<CK_ULONG>(it->second.size())
-                    : 0;
-            break;
-        }
-        default:
-            return CKR_ATTRIBUTE_TYPE_INVALID;
-    }
-
     if (pulValueLen == nullptr) {
         return CKR_ARGUMENTS_BAD;
     }
 
-    if (pValue == nullptr) {
-        // Caller just wants the size
-        *pulValueLen = ulSize;
-        return CKR_OK;
-    }
+    // Buffer that will hold a serialized copy of the attribute so the
+    // size-probe / copy-out two phase protocol can use a single code path.
+    std::vector<u8> value;
+    bool known = false;
 
-    if (*pulValueLen < ulSize) {
-        *pulValueLen = ulSize;
-        return CKR_BUFFER_TOO_SMALL;
-    }
-
-    // Now copy the value
     switch (type) {
         case CKA_CLASS: {
             CK_ULONG classValue = 0;
@@ -84,63 +34,80 @@ CK_RV AttributeStore::getAttribute(CK_ATTRIBUTE_TYPE type, CK_VOID_PTR pValue, C
                 case ObjectType::DOMAIN_PARAMETERS: classValue = CKO_DOMAIN_PARAMETERS; break;
                 case ObjectType::OTHER: classValue = CKO_OTHER; break;
             }
-            ::memcpy(pValue, &classValue, ulSize);
+            value.resize(sizeof(CK_ULONG));
+            std::memcpy(value.data(), &classValue, sizeof(CK_ULONG));
+            known = true;
             break;
         }
         case CKA_TOKEN: {
-            CK_BBOOL tokenValue = CK_TRUE; // Assume token object
-            ::memcpy(pValue, &tokenValue, ulSize);
+            CK_BBOOL v = object_.isToken() ? CK_TRUE : CK_FALSE;
+            value.resize(sizeof(CK_BBOOL));
+            std::memcpy(value.data(), &v, sizeof(CK_BBOOL));
+            known = true;
             break;
         }
         case CKA_PRIVATE: {
-            CK_BBOOL privateValue = CK_FALSE; // Assume not private by default
-            ::memcpy(pValue, &privateValue, ulSize);
+            CK_BBOOL v = object_.isPrivate() ? CK_TRUE : CK_FALSE;
+            value.resize(sizeof(CK_BBOOL));
+            std::memcpy(value.data(), &v, sizeof(CK_BBOOL));
+            known = true;
             break;
         }
-        case CKA_LABEL: {
-            auto it = extraAttrs_.find(CKA_LABEL);
-            if (it != extraAttrs_.end() && !it->second.empty()) {
-                ::memcpy(pValue, it->second.data(), it->second.size());
-                ulSize = static_cast<CK_ULONG>(it->second.size());
-            } else {
-                ulSize = 0;
-            }
+        case CKA_SENSITIVE: {
+            CK_BBOOL v = object_.isSensitive() ? CK_TRUE : CK_FALSE;
+            value.resize(sizeof(CK_BBOOL));
+            std::memcpy(value.data(), &v, sizeof(CK_BBOOL));
+            known = true;
+            break;
+        }
+        case CKA_EXTRACTABLE: {
+            CK_BBOOL v = object_.isExtractable() ? CK_TRUE : CK_FALSE;
+            value.resize(sizeof(CK_BBOOL));
+            std::memcpy(value.data(), &v, sizeof(CK_BBOOL));
+            known = true;
             break;
         }
         case CKA_ID: {
             auto idSpan = object_.getId();
-            if (idSpan.size() > 0) {
-                ::memcpy(pValue, idSpan.data(), idSpan.size());
-            } else {
-                ::memset(pValue, 0, ulSize);
+            value.assign(idSpan.begin(), idSpan.end());
+            known = true;
+            break;
+        }
+        case CKA_VALUE:
+            if (object_.isSensitive()) {
+                *pulValueLen = CK_UNAVAILABLE_INFORMATION;
+                return CKR_ATTRIBUTE_SENSITIVE;
+            }
+            [[fallthrough]];
+        default: {
+            const std::vector<u8>* stored = object_.findAttribute(type);
+            if (stored != nullptr) {
+                value = *stored;
+                known = true;
             }
             break;
         }
-        case CKA_SENSITIVE: {
-            CK_BBOOL sensitiveValue = object_.isSensitive() ? CK_TRUE : CK_FALSE;
-            ::memcpy(pValue, &sensitiveValue, ulSize);
-            break;
-        }
-        case CKA_EXTRACTABLE: {
-            CK_BBOOL extractableValue = object_.isExtractable() ? CK_TRUE : CK_FALSE;
-            ::memcpy(pValue, &extractableValue, ulSize);
-            break;
-        }
-        case CKA_VALUE: {
-            auto it = extraAttrs_.find(CKA_VALUE);
-            if (it != extraAttrs_.end() && !it->second.empty()) {
-                ::memcpy(pValue, it->second.data(), it->second.size());
-                ulSize = static_cast<CK_ULONG>(it->second.size());
-            } else {
-                ulSize = 0;
-            }
-            break;
-        }
-        default:
-            return CKR_ATTRIBUTE_TYPE_INVALID;
     }
 
-    *pulValueLen = ulSize;
+    if (!known) {
+        *pulValueLen = CK_UNAVAILABLE_INFORMATION;
+        return CKR_ATTRIBUTE_TYPE_INVALID;
+    }
+
+    if (pValue == nullptr) {
+        *pulValueLen = static_cast<CK_ULONG>(value.size());
+        return CKR_OK;
+    }
+
+    if (*pulValueLen < value.size()) {
+        *pulValueLen = static_cast<CK_ULONG>(value.size());
+        return CKR_BUFFER_TOO_SMALL;
+    }
+
+    if (!value.empty()) {
+        std::memcpy(pValue, value.data(), value.size());
+    }
+    *pulValueLen = static_cast<CK_ULONG>(value.size());
     return CKR_OK;
 }
 
@@ -160,39 +127,22 @@ CK_RV AttributeStore::setAttribute(CK_ATTRIBUTE_PTR pAttr) {
         return rv;
     }
 
+    const u8* src = static_cast<const u8*>(pAttr->pValue);
+
     // Now set the attribute
     switch (pAttr->type) {
-        case CKA_CLASS: {
-            // Class is immutable; cannot be changed after creation
+        case CKA_CLASS:
+        case CKA_TOKEN:
+        case CKA_PRIVATE:
+            // Class/token/private are immutable; cannot be changed after creation
             return CKR_ATTRIBUTE_READ_ONLY;
-        }
-        case CKA_TOKEN: {
-            // Token is immutable; cannot be changed after creation
-            return CKR_ATTRIBUTE_READ_ONLY;
-        }
-        case CKA_PRIVATE: {
-            // Private is immutable; cannot be changed after creation
-            return CKR_ATTRIBUTE_READ_ONLY;
-        }
-        case CKA_LABEL: {
-            // Store label in extraAttrs_
-            if (pAttr->pValue != nullptr && pAttr->ulValueLen > 0) {
-                const u8* src = static_cast<const u8*>(pAttr->pValue);
-                extraAttrs_[CKA_LABEL].assign(src, src + pAttr->ulValueLen);
-            } else {
-                extraAttrs_[CKA_LABEL].clear();
-            }
-            break;
-        }
-        case CKA_ID: {
-            // Set the object's ID
+        case CKA_ID:
             if (pAttr->ulValueLen > 0) {
-                object_.setId({static_cast<const u8*>(pAttr->pValue), pAttr->ulValueLen});
+                object_.setId({src, pAttr->ulValueLen});
             } else {
                 object_.setId({});
             }
             break;
-        }
         case CKA_SENSITIVE: {
             if (pAttr->ulValueLen != sizeof(CK_BBOOL)) {
                 return CKR_ATTRIBUTE_VALUE_INVALID;
@@ -217,13 +167,10 @@ CK_RV AttributeStore::setAttribute(CK_ATTRIBUTE_PTR pAttr) {
             object_.extractable_ = (bValue == CK_TRUE);
             break;
         }
-        case CKA_VALUE: {
-            const u8* src = static_cast<const u8*>(pAttr->pValue);
-            extraAttrs_[pAttr->type].assign(src, src + pAttr->ulValueLen);
-            break;
-        }
         default:
-            return CKR_ATTRIBUTE_TYPE_INVALID;
+            // Generic attribute: persists on the object.
+            object_.setAttribute(pAttr->type, src, pAttr->ulValueLen);
+            break;
     }
 
     return CKR_OK;
@@ -299,18 +246,9 @@ CK_RV AttributeStore::validateAttribute(CK_ATTRIBUTE_TYPE type, CK_VOID_PTR pVal
                 }
             }
             break;
-        case CKA_LABEL:
-            // Label can be any length, including zero
-            break;
-        case CKA_ID:
-            // ID can be any length, including zero
-            break;
-        case CKA_VALUE:
-            // Value validation is done elsewhere; here we just check length is reasonable
-            // In a real implementation, we would validate based on key type.
-            break;
         default:
-            return CKR_ATTRIBUTE_TYPE_INVALID;
+            // All other attributes are validated by their consumers.
+            break;
     }
 
     return CKR_OK;
