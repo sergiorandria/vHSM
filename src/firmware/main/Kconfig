@@ -1,0 +1,76 @@
+menu "vHSM HSM Firmware"
+
+config HSM_API_TOKEN
+    string "Bearer token required for /cmd API requests"
+    default ""
+    help
+      Every request to /cmd must send the header:
+        Authorization: Bearer <token>
+
+      A token of at least 32 random characters (e.g. a hex string from
+      /dev/urandom) is recommended. If left empty, authentication is
+      disabled and the HSM will sign for anyone on the network.
+      Keep the token at or below 64 characters.
+
+config HSM_AUDIT_ENABLED
+    bool "Write an audit log to the SD card"
+    default y
+    help
+      Appends one line per security-relevant operation (boot, key creation,
+      signing, auth failures, rate limiting) to /sdcard/logs/audit.log. Each
+      line includes a monotonic timestamp, sequence number and the SHA-256 of
+      the previous line, forming a tamper-evident chain.
+
+config HSM_MAX_REQ_PER_MIN
+    int "Maximum /cmd requests per minute (global)"
+    range 1 1000
+    default 120
+    help
+      Device-wide request throttle for the /cmd endpoint.
+
+config HSM_MAX_REQ_PER_CONN
+    int "Maximum /cmd requests per minute per TCP connection"
+    range 1 1000
+    default 30
+    help
+      Per-connection throttle. The HTTP server only keeps a few sockets open,
+      so this also bounds per-client traffic.
+
+config HSM_SIGN_LIMIT_PER_MIN
+    int "Maximum sign operations per minute per user"
+    range 1 1000
+    default 10
+    help
+      Limits how many files a single user can sign per minute.
+
+config HSM_AUTH_FAIL_WINDOW_S
+    int "Failed-auth tracking window (seconds)"
+    range 1 3600
+    default 60
+    help
+      Failures within this window count toward the lockout threshold.
+
+config HSM_AUTH_FAIL_MAX
+    int "Failed auth attempts before lockout"
+    range 1 100
+    default 5
+    help
+      Number of failed authentications within the tracking window that
+      triggers a cooldown lockout.
+
+config HSM_AUTH_LOCK_BASE_S
+    int "Initial lockout cooldown (seconds)"
+    range 1 3600
+    default 30
+    help
+      Base cooldown. Doubles on every consecutive lockout (exponential
+      backoff) up to HSM_AUTH_LOCK_MAX_S.
+
+config HSM_AUTH_LOCK_MAX_S
+    int "Maximum lockout cooldown (seconds)"
+    range 1 86400
+    default 900
+    help
+      Ceiling for the exponential backoff lockout.
+
+endmenu
