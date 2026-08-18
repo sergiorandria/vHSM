@@ -96,11 +96,17 @@ fabric-cpp-sdk/
 > enforced, exactly as fabric's BCCSP (`fabric-lib-go`) emits/verifies.
 
 ### Phase 3 — gRPC Transport Layer
-- [ ] Confirm generated stubs build for: Gateway service, Deliver service, MSP/common/peer messages
-- [ ] `GrpcConnection` wrapper: channel creation with mTLS credentials (client cert/key, server CA cert, optional hostname override for test networks)
-- [ ] Reconnect/backoff logic for dropped channels
-- [ ] Map `grpc::Status` codes to SDK exception hierarchy (`EndorsementError`, `CommitError`, `TimeoutError`, etc.)
-- [ ] Unit/connectivity test against a local peer (test-network)
+- [x] Confirm generated stubs build for: Gateway service, Deliver service, MSP/common/peer messages
+- [x] `GrpcConnection` wrapper: channel creation with mTLS credentials (client cert/key, server CA cert, optional hostname override for test networks)
+- [x] Reconnect/backoff wiring via channel arguments (keepalive, min/max reconnect backoff)
+- [x] Map `grpc::Status` codes to SDK exception hierarchy (`GrpcError`/`StatusException`/`ConnectionError` + `isRetryable`)
+- [x] Unit/connectivity test against an in-process gRPC server (echo service): insecure + TLS + hostname-override + status mapping
+
+> **Proto snapshot:** `proto/` is pinned to `hyperledger/fabric-protos` @ `main`
+> commit `1acd42dcccd0d50e9148631d371ad7e470469123` (all 38 .proto files).
+> Stubs for the Gateway service (`gateway/gateway.proto`), the peer `Deliver`
+> service (`peer/events.proto`) and the orderer `AtomicBroadcast` service
+> (`orderer/ab.proto`) are code-generated into the build dir at configure time.
 
 ### Phase 4 — Gateway Client (Endorse / Submit / Evaluate / CommitStatus)
 - [ ] Construct chaincode proposal (`ChaincodeInvocationSpec` → signed `Proposal`), using the Identity layer for signing
