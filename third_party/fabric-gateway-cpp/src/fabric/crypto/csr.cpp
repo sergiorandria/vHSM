@@ -153,7 +153,7 @@ std::string CSR::generate(
                 sk_X509_EXTENSION_free(ext);
                 ext = nullptr;
             }
-            X509_EXTENSION_free(extItem);
+            // extItem is now owned by the ext stack; do NOT free it here.
         }
 
         if (ext && X509_REQ_add_extensions(req, ext) != 1) {
@@ -166,8 +166,9 @@ std::string CSR::generate(
         if (ext) sk_X509_EXTENSION_free(ext);
     }
 
-    // Sign the CSR
-    if (X509_REQ_sign(req, pkey, EVP_sha256()) != 1) {
+    // Sign the CSR.
+    // X509_REQ_sign returns the signature length (>0) on success, or 0 on error.
+    if (X509_REQ_sign(req, pkey, EVP_sha256()) == 0) {
         X509_REQ_free(req);
         EVP_PKEY_free(pkey);
         throw std::runtime_error("Failed to sign CSR");

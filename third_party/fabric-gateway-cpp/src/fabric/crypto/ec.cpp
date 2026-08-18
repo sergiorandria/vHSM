@@ -147,6 +147,9 @@ std::pair<std::string, std::string> ECKeyPair::generate() {
 // Constructor
 ECKeyPair::ECKeyPair(const std::string& pem) : pimpl_(std::make_unique<Impl>(pem)) {}
 
+// Destructor must be out-of-line so unique_ptr<Impl> is completed here.
+ECKeyPair::~ECKeyPair() = default;
+
 // Getters
 std::string ECKeyPair::getPrivateKeyPEM() const {
     return pimpl_->getPrivateKeyPEM();
