@@ -70,8 +70,24 @@ public:
                 // Strip leading whitespace/newlines that may appear in multi-line SQL.
                 auto first = table_name.find_first_not_of(" \t\r\n");
                 if (first != std::string::npos) table_name = table_name.substr(first);
-                tables_[table_name] = {};  // mark as existing
+                // "IF NOT EXISTS" semantics: only mark as existing when absent,
+                // preserving any rows already seeded into it.
+                if (tables_.count(table_name) == 0) {
+                    tables_[table_name] = {};  // mark as existing
+                }
             }
+        }
+        // Track DROP TABLE for table_exists checks.
+        auto drop_pos = sql.find("DROP TABLE ");
+        if (drop_pos != std::string::npos) {
+            auto name_start = drop_pos + std::string("DROP TABLE ").size();
+            auto name_end   = sql.find(';', name_start);
+            if (name_end == std::string::npos) name_end = sql.find('\n', name_start);
+            if (name_end == std::string::npos) name_end = sql.size();
+            std::string table_name = sql.substr(name_start, name_end - name_start);
+            auto first = table_name.find_first_not_of(" \t\r\n");
+            if (first != std::string::npos) table_name = table_name.substr(first);
+            tables_.erase(table_name);  // mark as removed
         }
         // Track INSERT INTO db_meta(key,value) VALUES(?,?)
         if (sql.find("INSERT INTO db_meta") != std::string::npos && params.size() == 2) {
@@ -393,20 +409,19 @@ protected:
     db::DbSchema schema_{ conn_ };
 };
 
-TEST_F(DbSchemaContentTest, SqlCreateSignatureRecords_RekorStatusHasCorrectCheck) {
+TEST_F(DbSchemaContentTest, SqlCreateSignatureRecords_LedgerStatusHasCorrectCheck) {
     auto sql = schema_.sql_create_signature_records();
     EXPECT_NE(sql.find("PENDING"),   std::string::npos);
     EXPECT_NE(sql.find("COMMITTED"), std::string::npos);
     EXPECT_NE(sql.find("FAILED"),    std::string::npos);
-    EXPECT_NE(sql.find("DISABLED"),  std::string::npos);
+    EXPECT_EQ(sql.find("DISABLED"),  std::string::npos);  // no longer a valid ledger status
 }
 
 TEST_F(DbSchemaContentTest, SqlCreateSignatureRecords_NoIntegrityHmac) {
-    // Per the updated design: integrity_hmac dropped from signature_records.
-    // This test enforces that decision.
+    // The Fabric ledger anchoring design drops the local HMAC integrity scheme.
     auto sql = schema_.sql_create_signature_records();
     EXPECT_EQ(sql.find("integrity_hmac"), std::string::npos)
-        << "integrity_hmac should not exist in signature_records (dropped per Rekor-only design)";
+        << "integrity_hmac should not exist in signature_records (dropped per Fabric-ledger design)";
 }
 
 TEST_F(DbSchemaContentTest, SqlCreateSignatureRecords_CoreColumnsPresent) {
@@ -414,35 +429,26 @@ TEST_F(DbSchemaContentTest, SqlCreateSignatureRecords_CoreColumnsPresent) {
     for (const char* col : { "id", "created_at", "slot_id", "token_label",
                                "key_id", "key_fingerprint", "mechanism",
                                "payload_digest", "signature_b64", "session_handle",
-                               "user_label", "app_context" }) {
+                               "user_label", "app_context",
+                               "ledger_tx_id", "ledger_block_num", "ledger_status" }) {
         EXPECT_NE(sql.find(col), std::string::npos) << "Missing column: " << col;
     }
 }
 
-TEST_F(DbSchemaContentTest, SqlCreateSignatureVerifications_HasRekorOutcome) {
+TEST_F(DbSchemaContentTest, SqlCreateSignatureVerifications_HasLedgerOutcome) {
     auto sql = schema_.sql_create_signature_verifications();
-    EXPECT_NE(sql.find("rekor_outcome"), std::string::npos);
-    EXPECT_NE(sql.find("PROOF_OK"),      std::string::npos);
-    EXPECT_NE(sql.find("PROOF_FAILED"),  std::string::npos);
+    EXPECT_NE(sql.find("ledger_outcome"), std::string::npos);
+    EXPECT_NE(sql.find("MATCH"),         std::string::npos);
+    EXPECT_NE(sql.find("MISMATCH"),      std::string::npos);
+    EXPECT_NE(sql.find("NOT_FOUND"),     std::string::npos);
     EXPECT_NE(sql.find("NOT_CHECKED"),   std::string::npos);
 }
 
-TEST_F(DbSchemaContentTest, SqlCreateKeyRekorRegistry_RequiredColumns) {
-    auto sql = schema_.sql_create_key_rekor_registry();
-    for (const char* col : { "id", "key_fingerprint", "event_type",
-                               "occurred_at", "rekor_entry_uuid",
-                               "rekor_log_index", "rekor_status" }) {
-        EXPECT_NE(sql.find(col), std::string::npos) << "Missing column: " << col;
-    }
-    EXPECT_NE(sql.find("CREATED"), std::string::npos);
-    EXPECT_NE(sql.find("RETIRED"), std::string::npos);
-}
-
-TEST_F(DbSchemaContentTest, SqlCreateIndexes_IncludesRekorIndexes) {
+TEST_F(DbSchemaContentTest, SqlCreateIndexes_IncludesLedgerIndexes) {
     auto sql = schema_.sql_create_indexes();
-    EXPECT_NE(sql.find("idx_sig_rekor_uuid"),   std::string::npos);
-    EXPECT_NE(sql.find("idx_sig_rekor_status"), std::string::npos);
-    EXPECT_NE(sql.find("idx_krr_fingerprint"),  std::string::npos);
+    EXPECT_NE(sql.find("idx_sig_ledger_tx_id"),  std::string::npos);
+    EXPECT_NE(sql.find("idx_sig_ledger_status"), std::string::npos);
+    EXPECT_EQ(sql.find("idx_krr_fingerprint"),   std::string::npos);
 }
 
 TEST_F(DbSchemaContentTest, SqlCreateDbMeta_PrimaryKeyOnKey) {
@@ -467,10 +473,11 @@ TEST_F(DbSchemaBootstrapTest, Bootstrap_FreshDb_CreatesAllTables) {
     for (const char* tbl : { "db_meta", "signature_records",
                                "signature_verifications",
                                "notification_subscribers",
-                               "notification_log",
-                               "key_rekor_registry" }) {
+                               "notification_log" }) {
         EXPECT_TRUE(conn_.has_table(tbl)) << "Expected table: " << tbl;
     }
+    // Rekor-era tables must not be created.
+    EXPECT_FALSE(conn_.has_table("key_rekor_registry"));
 }
 
 TEST_F(DbSchemaBootstrapTest, Bootstrap_FreshDb_SetsSchemaVersion) {
@@ -503,8 +510,7 @@ TEST_F(DbSchemaBootstrapTest, Bootstrap_AlreadyAtCurrentVersion_IsNoop) {
     for (const char* tbl : { "db_meta", "signature_records",
                                "signature_verifications",
                                "notification_subscribers",
-                               "notification_log",
-                               "key_rekor_registry" }) {
+                               "notification_log" }) {
         conn_.exec("CREATE TABLE IF NOT EXISTS " + std::string(tbl) + " (x TEXT);");
     }
     conn_.exec_log();  // don't care about pre-seed log
@@ -522,8 +528,7 @@ TEST_F(DbSchemaBootstrapTest, Bootstrap_FutureVersion_ThrowsDbError) {
     for (const char* tbl : { "db_meta", "signature_records",
                                "signature_verifications",
                                "notification_subscribers",
-                               "notification_log",
-                               "key_rekor_registry" }) {
+                               "notification_log" }) {
         conn_.exec("CREATE TABLE IF NOT EXISTS " + std::string(tbl) + " (x TEXT);");
     }
     EXPECT_THROW(schema_.bootstrap(), DbError);
@@ -590,8 +595,7 @@ TEST_F(DbSchemaVerifyTest, VerifySchema_WrongSchemaVersion_ReturnsFalseWithReaso
     for (const char* tbl : { "db_meta", "signature_records",
                                "signature_verifications",
                                "notification_subscribers",
-                               "notification_log",
-                               "key_rekor_registry" }) {
+                               "notification_log" }) {
         bad_conn.exec("CREATE TABLE IF NOT EXISTS " + std::string(tbl) + " (x TEXT);");
     }
     bad_conn.seed_meta("schema_version", "0");  // wrong version
@@ -602,14 +606,14 @@ TEST_F(DbSchemaVerifyTest, VerifySchema_WrongSchemaVersion_ReturnsFalseWithReaso
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DbSchema — migrate() — v1 → v2
+// DbSchema — migrate() — legacy (v1/v2/v3) → v4 ledger schema
 // ─────────────────────────────────────────────────────────────────────────────
 
 class DbSchemaMigrateTest : public ::testing::Test {
 protected:
-    // Simulate a v1 database: all base tables exist, no Rekor columns.
-    // We do this by seeding db_meta with schema_version=1 and marking all v1
-    // tables as present (key_rekor_registry NOT present — it's a v2 addition).
+    // Simulate a legacy database at the given version: all base tables exist.
+    // The legacy Rekor staging table (key_rekor_registry) is intentionally NOT
+    // seeded in the "pre-Rekor" case — the migration must succeed either way.
     FakeDbConnection conn_;
     DbSchema schema_{ conn_ };
 
@@ -617,7 +621,8 @@ protected:
         for (const char* tbl : { "db_meta", "signature_records",
                                    "signature_verifications",
                                    "notification_subscribers",
-                                   "notification_log" }) {
+                                   "notification_log",
+                                   "key_rekor_registry" }) {
             conn_.exec("CREATE TABLE IF NOT EXISTS " + std::string(tbl) + " (x TEXT);");
         }
         conn_.seed_meta("schema_version", "1");
@@ -625,23 +630,24 @@ protected:
 };
 
 TEST_F(DbSchemaMigrateTest, Bootstrap_FromV1_RunsMigration) {
-    // bootstrap() detects v1 < kCurrentSchemaVersion (2) → calls migrate().
+    // bootstrap() detects v1 < kCurrentSchemaVersion → calls migrate().
     EXPECT_NO_THROW(schema_.bootstrap());
-    // After migration, key_rekor_registry must exist.
-    EXPECT_TRUE(conn_.has_table("key_rekor_registry"));
+    // After migration the DB is at v4 and the Rekor-era table is gone.
+    EXPECT_EQ(schema_.current_version(), kCurrentSchemaVersion);
+    EXPECT_FALSE(conn_.has_table("key_rekor_registry"));
 }
 
-TEST_F(DbSchemaMigrateTest, Bootstrap_FromV1_AltersSignatureRecords) {
+TEST_F(DbSchemaMigrateTest, Bootstrap_FromV1_CreatesLedgerColumns) {
     schema_.bootstrap();
     const auto& log = conn_.exec_log();
-    bool found_alter = false;
+    bool found_ledger = false;
     for (const auto& s : log) {
-        if (s.find("ALTER TABLE signature_records") != std::string::npos) {
-            found_alter = true;
+        if (s.find("ledger_tx_id") != std::string::npos) {
+            found_ledger = true;
             break;
         }
     }
-    EXPECT_TRUE(found_alter) << "Expected ALTER TABLE signature_records in exec log";
+    EXPECT_TRUE(found_ledger) << "Expected ledger column creation in exec log";
 }
 
 TEST_F(DbSchemaMigrateTest, Migrate_AlreadyAtCurrentVersion_IsNoop) {
@@ -653,8 +659,7 @@ TEST_F(DbSchemaMigrateTest, Migrate_AlreadyAtCurrentVersion_IsNoop) {
     for (const char* tbl : { "db_meta", "signature_records",
                                "signature_verifications",
                                "notification_subscribers",
-                               "notification_log",
-                               "key_rekor_registry" }) {
+                               "notification_log" }) {
         current_conn.exec("CREATE TABLE IF NOT EXISTS " + std::string(tbl) + " (x TEXT);");
     }
     current_conn.seed_meta("schema_version", std::to_string(kCurrentSchemaVersion));
@@ -672,7 +677,6 @@ TEST(DbSchemaConstantsTest, TableNameConstants_AreCorrect) {
     EXPECT_EQ(table::kSignatureVerifications,   "signature_verifications");
     EXPECT_EQ(table::kNotificationSubscribers,  "notification_subscribers");
     EXPECT_EQ(table::kNotificationLog,          "notification_log");
-    EXPECT_EQ(table::kKeyRekorRegistry,         "key_rekor_registry");
     EXPECT_EQ(table::kDbMeta,                   "db_meta");
 }
 
@@ -683,15 +687,14 @@ TEST(DbSchemaConstantsTest, MetaKeyConstants_AreCorrect) {
     EXPECT_EQ(meta_key::kInstanceId,     "instance_id");
 }
 
-TEST(DbSchemaConstantsTest, RekorStatusConstants_AreCorrect) {
-    EXPECT_EQ(rekor_status::kPending,   "PENDING");
-    EXPECT_EQ(rekor_status::kCommitted, "COMMITTED");
-    EXPECT_EQ(rekor_status::kFailed,    "FAILED");
-    EXPECT_EQ(rekor_status::kDisabled,  "DISABLED");
+TEST(DbSchemaConstantsTest, LedgerStatusConstants_AreCorrect) {
+    EXPECT_EQ(ledger_status::kPending,   "PENDING");
+    EXPECT_EQ(ledger_status::kCommitted, "COMMITTED");
+    EXPECT_EQ(ledger_status::kFailed,    "FAILED");
 }
 
-TEST(DbSchemaConstantsTest, CurrentSchemaVersion_IsTwo) {
-    EXPECT_EQ(kCurrentSchemaVersion, 2);
+TEST(DbSchemaConstantsTest, CurrentSchemaVersion_IsFour) {
+    EXPECT_EQ(kCurrentSchemaVersion, 4);
 }
 
 }  // namespace vhsm::signature_store::db

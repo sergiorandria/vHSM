@@ -10,6 +10,7 @@
 #include "../notification/notification_bus.h"
 #include "../notification/notification_event.h"
 #include "../audit/audit_log.h"
+#include "../ledger/ledger_worker.h"
 
 namespace vhsm::signature_store {
 namespace db {
@@ -18,14 +19,14 @@ SignatureDispatcher::SignatureDispatcher(
     IDbConnection& conn,
     vhsm::keystore::Token& token,
     vhsm::notification::NotificationBus& notification_bus,
-    vhsm::audit::AuditLog& audit_log)
-   
-    : conn_(conn),
+    vhsm::audit::AuditLog& audit_log,
+    vhsm::ledger::LedgerWorker* ledger_worker)
+   : conn_(conn),
       token_(token),
       signature_repository_(conn, token),
       notification_bus_(notification_bus),
-      audit_log_(audit_log)
-      // rekor_client_(rekor_client) // Removed for Phase 4
+      audit_log_(audit_log),
+      ledger_worker_(ledger_worker)
 {
 }
 
@@ -108,8 +109,28 @@ void SignatureDispatcher::dispatch(
     sign_event.hsm_instance = ""; // TODO: fetch from db_meta
     notification_bus_.publish(sign_event);
 
-    // Asynchronously submit to ledger will be handled in Phase 5 by the ledger worker.
-    // For Phase 4, we just leave the ledger fields empty and they will be updated later.
+    // Asynchronously anchor the record on the Hyperledger Fabric ledger.  The
+    // ledger worker submits RecordSignature and, on COMMITTED, fills in
+    // ledger_tx_id / ledger_block_num and sets ledger_status='COMMITTED'.
+    if (ledger_worker_) {
+        SignatureRecord record;
+        record.record_id          = signature_id;
+        record.created_at         = created_at;
+        record.slot_id            = slot_id;
+        record.token_label        = token_label;
+        record.key_id             = key_id;
+        record.key_fingerprint    = key_fingerprint;
+        record.mechanism          = mechanism;
+        record.digest_algorithm   = digest_algorithm;
+        record.payload_digest     = payload_digest;
+        record.payload_size       = static_cast<int>(sign_result.signature.size());
+        record.signature_b64      = signature_b64;
+        record.session_handle     = session_handle;
+        record.user_label         = user_label;
+        record.app_context        = app_context;
+        record.ledger_status      = "PENDING";
+        ledger_worker_->submit_record(record);
+    }
 }
 
 }  // namespace db
