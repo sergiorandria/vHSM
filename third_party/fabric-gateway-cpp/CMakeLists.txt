@@ -15,20 +15,21 @@ find_package(OpenSSL REQUIRED)
 # Find nlohmann_json
 find_package(nlohmann_json 3.2.0 REQUIRED)
 
-# Include directories
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-include_directories(${OPENSSL_INCLUDE_DIR})
+# Testing (BUILD_TESTING off by default unless CTest is included)
+include(CTest)
 
-# Library sources
+# Header locations
+set(FABRIC_SDK_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
+set(FABRIC_SDK_ROOT_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Library sources — the src/fabric tree is the canonical implementation.
 set(SOURCES
-    gateway.cpp
-    network.cpp
-    contract.cpp
-    query.cpp
     src/fabric/crypto/ec.cpp
     src/fabric/crypto/csr.cpp
     src/fabric/crypto/x509.cpp
+    src/fabric/crypto/client_tls_config.cpp
     src/fabric/identity/wallet.cpp
+    src/fabric/identity/identity.cpp
     src/fabric/ca/httpclient.cpp
     src/fabric/ca/ca_client.cpp
 )
@@ -36,11 +37,31 @@ set(SOURCES
 # Create library
 add_library(fabric-gateway-cpp STATIC ${SOURCES})
 
+target_include_directories(fabric-gateway-cpp
+    PUBLIC  ${FABRIC_SDK_INCLUDE_DIR}
+)
+
+# ec.cpp uses the pre-OpenSSL-3 ECDSA_* API for legacy-compat signing;
+# silence the deprecation warnings so the SDK builds -Werror-clean.
+target_compile_definitions(fabric-gateway-cpp PRIVATE OPENSSL_SUPPRESS_DEPRECATED)
+
 # Link libraries
-target_link_libraries(fabric-gateway-cpp PRIVATE CURL::libcurl OpenSSL::Crypto nlohmann_json::nlohmann_json)
+target_link_libraries(fabric-gateway-cpp
+    PUBLIC
+        CURL::libcurl
+        OpenSSL::Crypto
+        nlohmann_json::nlohmann_json
+)
 
 # Install headers
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ DESTINATION include/fabric-gateway-cpp FILES_MATCHING PATTERN "*.h")
-
-# Install library
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
+        DESTINATION include)
 install(TARGETS fabric-gateway-cpp DESTINATION lib)
+
+if(BUILD_TESTING)
+    # Smoke test: CaClient + CurlHttpClient construction
+    add_executable(fabric_gateway_cpp_smoke_test tests/test_ca_client.cpp)
+    target_include_directories(fabric_gateway_cpp_smoke_test PRIVATE ${FABRIC_SDK_INCLUDE_DIR})
+    target_link_libraries(fabric_gateway_cpp_smoke_test PRIVATE fabric-gateway-cpp)
+    add_test(NAME fabric_gateway_cpp_smoke_test COMMAND fabric_gateway_cpp_smoke_test)
+endif()
