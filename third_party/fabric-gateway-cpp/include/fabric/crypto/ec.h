@@ -25,6 +25,8 @@ public:
      */
     explicit ECKeyPair(const std::string& pem);
 
+    ~ECKeyPair();
+
     /**
      * Get the private key in PEM format
      * @return Private key as PEM string

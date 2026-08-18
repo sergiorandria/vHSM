@@ -64,4 +64,11 @@ if(BUILD_TESTING)
     target_include_directories(fabric_gateway_cpp_smoke_test PRIVATE ${FABRIC_SDK_INCLUDE_DIR})
     target_link_libraries(fabric_gateway_cpp_smoke_test PRIVATE fabric-gateway-cpp)
     add_test(NAME fabric_gateway_cpp_smoke_test COMMAND fabric_gateway_cpp_smoke_test)
+
+    # Phase 1 unit tests: keygen, CSR, sign/verify round-trip, identity, wallet
+    find_package(GTest REQUIRED)
+    add_executable(fabric_gateway_cpp_unit_tests tests/test_crypto.cpp)
+    target_include_directories(fabric_gateway_cpp_unit_tests PRIVATE ${FABRIC_SDK_INCLUDE_DIR})
+    target_link_libraries(fabric_gateway_cpp_unit_tests PRIVATE fabric-gateway-cpp GTest::gtest_main)
+    add_test(NAME fabric_gateway_cpp_unit_tests COMMAND fabric_gateway_cpp_unit_tests)
 endif()

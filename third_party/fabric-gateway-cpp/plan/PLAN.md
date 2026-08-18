@@ -77,7 +77,7 @@ fabric-cpp-sdk/
 - [x] `Identity` type: `{ mspId, certificate (PEM), privateKey (PEM) }`
 - [x] ECDSA signing helper over arbitrary bytes (used later for proposal/transaction signing)
 - [x] Wallet interface + `InMemoryWallet` + `FileSystemWallet` implementations
-- [ ] Unit tests: keygen, CSR, sign/verify round-trip
+- [x] Unit tests: keygen, CSR, sign/verify round-trip
 
 ### Phase 2 — Fabric CA Client (REST)
 - [ ] Define `HttpClient` interface; implement one concrete backend (libcurl or cpp-httplib)
