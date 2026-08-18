@@ -4,69 +4,65 @@
 #include "../../../src/keystore/hsm_object.h"
 
 using namespace vhsm::keystore;
+using namespace vhsm::keystore::internal;
 
-TEST(AttributeStore, SetAndGetLabel) {
+TEST(v_AttributeStore_M1, SetAndGetLabel) {
     HsmObject obj(ObjectType::SECRET_KEY);
-    AttributeStore store(obj);
+    v_AttributeStore_M1 store(obj);
 
     const char* label = "test-label";
     CK_ATTRIBUTE attr = {CKA_LABEL, (CK_VOID_PTR)label, (CK_ULONG)strlen(label)};
 
-    CK_RV rv = store.setAttribute(&attr);
+    CK_RV rv = store.v_set_attribute(&attr);
     EXPECT_EQ(rv, CKR_OK);
 
-    // Get the attribute value to verify
     CK_ULONG len = 0;
-    rv = store.getAttribute(CKA_LABEL, nullptr, &len);
+    rv = store.v_get_attribute(CKA_LABEL, nullptr, &len);
     EXPECT_EQ(rv, CKR_OK);
     EXPECT_EQ(len, (CK_ULONG)strlen(label));
 
     std::vector<unsigned char> value(len);
-    rv = store.getAttribute(CKA_LABEL, value.data(), &len);
+    rv = store.v_get_attribute(CKA_LABEL, value.data(), &len);
     EXPECT_EQ(rv, CKR_OK);
     EXPECT_EQ(len, (CK_ULONG)strlen(label));
     EXPECT_STREQ((char*)value.data(), label);
 }
 
-TEST(AttributeStore, SetAndGetValue) {
+TEST(v_AttributeStore_M1, SetAndGetValue) {
     HsmObject obj(ObjectType::SECRET_KEY);
-    AttributeStore store(obj);
+    v_AttributeStore_M1 store(obj);
 
     std::vector<unsigned char> keyValue = {0x01, 0x02, 0x03, 0x04};
     CK_ATTRIBUTE attr = {CKA_VALUE, keyValue.data(), (CK_ULONG)keyValue.size()};
 
-    CK_RV rv = store.setAttribute(&attr);
+    CK_RV rv = store.v_set_attribute(&attr);
     EXPECT_EQ(rv, CKR_OK);
 
-    // Get the attribute value to verify
     CK_ULONG len = 0;
-    rv = store.getAttribute(CKA_VALUE, nullptr, &len);
+    rv = store.v_get_attribute(CKA_VALUE, nullptr, &len);
     EXPECT_EQ(rv, CKR_OK);
     EXPECT_EQ(len, (CK_ULONG)keyValue.size());
 
     std::vector<unsigned char> value(len);
-    rv = store.getAttribute(CKA_VALUE, value.data(), &len);
+    rv = store.v_get_attribute(CKA_VALUE, value.data(), &len);
     EXPECT_EQ(rv, CKR_OK);
     EXPECT_EQ(len, (CK_ULONG)keyValue.size());
     EXPECT_EQ(value, keyValue);
 }
 
-TEST(AttributeStore, ReadOnlyAttributesAfterInit) {
+TEST(v_AttributeStore_M1, ReadOnlyAttributesAfterInit) {
     HsmObject obj(ObjectType::SECRET_KEY);
-    AttributeStore store(obj);
+    v_AttributeStore_M1 store(obj);
 
-    // Initialize default attributes (sets CKA_CLASS and others)
-    store.initializeDefaultAttributes();
+    store.v_initialize_default_attributes();
 
-    // Try to set CKA_TOKEN after initialization - should fail
     CK_BBOOL tokenFalse = CK_FALSE;
     CK_ATTRIBUTE tokenAttr = {CKA_TOKEN, &tokenFalse, sizeof(tokenFalse)};
-    CK_RV rv = store.setAttribute(&tokenAttr);
-    EXPECT_NE(rv, CKR_OK); // Expecting an error (likely CKR_ATTRIBUTE_READ_ONLY)
+    CK_RV rv = store.v_set_attribute(&tokenAttr);
+    EXPECT_NE(rv, CKR_OK);
 
-    // Try to set CKA_PRIVATE after initialization - should fail
     CK_BBOOL privFalse = CK_FALSE;
     CK_ATTRIBUTE privAttr = {CKA_PRIVATE, &privFalse, sizeof(privFalse)};
-    rv = store.setAttribute(&privAttr);
-    EXPECT_NE(rv, CKR_OK); // Expecting an error
+    rv = store.v_set_attribute(&privAttr);
+    EXPECT_NE(rv, CKR_OK);
 }

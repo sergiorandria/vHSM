@@ -110,14 +110,19 @@ target_link_libraries(fabric-proto PUBLIC protobuf::libprotobuf gRPC::grpc++ gRP
 set(SOURCES
     src/fabric/crypto/ec.cpp
     src/fabric/crypto/csr.cpp
+    src/fabric/crypto/hash.cpp
     src/fabric/crypto/x509.cpp
-    src/fabric/crypto/client_tls_config.cpp
     src/fabric/identity/wallet.cpp
     src/fabric/identity/identity.cpp
     src/fabric/ca/httpclient.cpp
     src/fabric/ca/ca_client.cpp
     src/fabric/grpc/grpc_connection.cpp
     src/fabric/grpc/grpc_status.cpp
+    src/fabric/protoutil/proposal_builder.cpp
+    src/fabric/gateway/gateway.cpp
+    src/fabric/gateway/network.cpp
+    src/fabric/gateway/contract.cpp
+    src/fabric/gateway/transaction.cpp
 )
 
 # Create library
@@ -196,4 +201,12 @@ if(BUILD_TESTING)
     target_compile_definitions(fabric_gateway_cpp_grpc_tests PRIVATE OPENSSL_SUPPRESS_DEPRECATED)
     target_link_libraries(fabric_gateway_cpp_grpc_tests PRIVATE fabric-gateway-cpp fabric_gateway_cpp_echo GTest::gtest_main OpenSSL::Crypto OpenSSL::SSL)
     add_test(NAME fabric_gateway_cpp_grpc_tests COMMAND fabric_gateway_cpp_grpc_tests)
+
+    # Phase 4 Gateway client tests: Evaluate / Endorse / Submit / CommitStatus
+    # against an in-process fake Gateway service.
+    add_executable(fabric_gateway_cpp_gateway_tests tests/test_gateway.cpp)
+    target_include_directories(fabric_gateway_cpp_gateway_tests PRIVATE ${FABRIC_SDK_INCLUDE_DIR})
+    target_compile_definitions(fabric_gateway_cpp_gateway_tests PRIVATE OPENSSL_SUPPRESS_DEPRECATED)
+    target_link_libraries(fabric_gateway_cpp_gateway_tests PRIVATE fabric-gateway-cpp GTest::gtest_main OpenSSL::Crypto OpenSSL::SSL)
+    add_test(NAME fabric_gateway_cpp_gateway_tests COMMAND fabric_gateway_cpp_gateway_tests)
 endif()

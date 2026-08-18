@@ -7,25 +7,37 @@
 #include <vector>
 #include <optional>
 
+// WHY fixed-width integer aliases: C++ standard library types (uint8_t, etc.) are verbose.
+// Short aliases (u8, u16, u32, u64) are used throughout vHSM for brevity and clarity.
+// They're also familiar to systems programmers (Go, Rust use the same convention).
+// Centralizing them here ensures consistent naming across all modules.
 typedef std::uint8_t u8;
 typedef std::uint16_t u16;
 typedef std::uint32_t u32;
 typedef std::uint64_t u64;
 
-// Will be used in future implementations
-// Preferred overed their std::uintXX correspondance,
-// Better for multi-threaded applications,
+// WHY atomic type aliases (ts8, ts16, ts32, ts64): Marked for future multi-threaded use.
+// This file establishes the naming convention so that when we migrate to atomics,
+// the change is localized. Current code uses non-atomic versions (i8, i16, etc.);
+// future code can switch to ts* by changing two lines here and recompiling.
+// Anticipating multi-threading this way prevents a refactoring surprise later.
 typedef std::atomic_int8_t ts8;
 typedef std::atomic_int16_t ts16;
 typedef std::atomic_int32_t ts32;
 typedef std::atomic_int64_t ts64;
 
+// WHY signed integer aliases: Needed for loop counters, offsets, and arithmetic where
+// negative values make semantic sense. Kept separate from unsigned to prevent
+// implicit conversion bugs (signed + unsigned arithmetic is a classic C pitfall).
 typedef std::int8_t i8;
 typedef std::int16_t i16;
 typedef std::int32_t i32;
 typedef std::int64_t i64;
 
-// PKCS#11 types
+// WHY PKCS#11 types centralized here: vHSM is a PKCS#11 implementation.
+// The standard defines fixed type mappings (CK_ULONG, CK_OBJECT_HANDLE, etc.).
+// Centralizing them prevents duplication and makes it easy to adapt if a platform
+// uses different types. Every PKCS#11 call uses these types directly (no wrappers).
 typedef unsigned long CK_ULONG;
 typedef CK_ULONG CK_OBJECT_HANDLE;
 typedef CK_ULONG CK_SESSION_HANDLE;
@@ -34,12 +46,17 @@ typedef CK_ULONG CK_CERTIFICATE_TYPE;
 typedef CK_ULONG CK_KEY_TYPE;
 typedef CK_ULONG CK_MECHANISM_TYPE;
 
-// PKCS#11 attribute types
+// WHY attribute types are separate typedef: CKA_* attributes (CKA_CLASS, CKA_LABEL, etc.)
+// use the same underlying type (CK_ULONG) but are semantically distinct from handles.
+// Separate typedef makes the distinction clear and allows future specialization.
 typedef CK_ULONG CK_ATTRIBUTE_TYPE;
 typedef void*    CK_VOID_PTR;
 typedef CK_ULONG* CK_ULONG_PTR;
 
-// PKCS#11 v3.0 mechanism types — AES family
+// WHY AES mechanism types from PKCS#11 v3.0: vHSM uses AES for key wrapping (RFC 3394).
+// Defining these constants here (rather than inline in code) makes them discoverable
+// and aligns with PKCS#11 spec references. Applications calling C_Encrypt with
+// CKM_AES_GCM can verify the mechanism constant is defined and correct.
 // Source: PKCS#11 Base Specification v3.0, Table 9-14
 #define CKM_AES_KEY_GEN     0x00001080UL
 #define CKM_AES_ECB         0x00001081UL
@@ -57,7 +74,10 @@ typedef CK_ULONG* CK_ULONG_PTR;
 #define CKM_AES_GMAC        0x0000108DUL
 #define CKM_SHA256_RSA_PKCS 0x00000241UL
 
-// The CK_ATTRIBUTE structure
+// WHY CK_ATTRIBUTE structure defined here: PKCS#11 API uses this struct for get/set
+// attribute operations (C_GetObjectAttribute, C_SetObjectAttribute). Defining it here
+// ensures vHSM's internal code matches the standard exactly. Any deviation would be
+// a compliance bug.
 typedef struct CK_ATTRIBUTE {
     CK_ATTRIBUTE_TYPE type;
     CK_VOID_PTR       pValue;
@@ -66,25 +86,28 @@ typedef struct CK_ATTRIBUTE {
 
 typedef CK_ATTRIBUTE* CK_ATTRIBUTE_PTR;
 
+// WHY separate CK_FALSE/CK_TRUE macros: PKCS#11 boolean type is CK_BBOOL (unsigned char).
+// Languages vary in boolean representation; defining these constants makes it explicit
+// that vHSM uses 0/1 (not 0xFF for true, which some legacy systems do). Prevents
+// accidental comparison bugs (if (ck_bool == CK_TRUE) is safer than if (ck_bool)).
 #define CK_FALSE 0
 #define CK_TRUE  1
 
-// an unsigned 8-bit value 
+// WHY CK_BYTE, CK_CHAR, CK_UTF8CHAR are all unsigned char: PKCS#11 treats them as
+// distinct semantic types (raw bytes, ASCII characters, UTF-8 bytes), but all map to
+// the same C representation. The names are for documentation; runtime behavior is identical.
 typedef unsigned char CK_BYTE;
-
-// an unsigned 8-bit character
 typedef CK_BYTE CK_CHAR;
-
-// an 8-bit UTF-8 character
 typedef CK_BYTE CK_UTF8CHAR;
 
-// a BYTE-sized Boolean flag
+// WHY CK_BBOOL is separate: A boolean flag that fits in a byte, but named distinctly
+// to signal "this is a PKCS#11 boolean, not a C++ bool".
 typedef CK_BYTE CK_BBOOL;
 
-/* a signed value, the same size as a CK_ULONG */
+// WHY CK_LONG and CK_FLAGS have comments: CK_LONG is a signed value (used in parameters);
+// CK_FLAGS is a bitmask (used for capability bits like CKF_RW_SESSION). The names alone
+// might not make this distinction clear to someone unfamiliar with PKCS#11.
 typedef long int CK_LONG;
-
-/* at least 32 bits; each bit is a Boolean flag */
 typedef CK_ULONG CK_FLAGS;
 
 // Status return values (CK_RV)
@@ -234,38 +257,6 @@ struct SignResult {
     std::string          digest_alg;     // e.g., "SHA-256"
     std::string          payload_digest; // hex SHA-256 of input
     size_t               payload_size;
-};
-
-// Enumerations for NotificationEvent
-enum class EventType {
-    SIGN_CREATED,
-    VERIFY_COMPLETED,
-    VERIFY_FAILED,
-    KEY_ROTATED,
-    KEY_DESTROYED,
-    INTEGRITY_ALERT,
-    DB_WRITE_FAILED,
-    ADMIN_LOGIN,
-    PIN_LOCKOUT
-};
-
-enum class Severity {
-    INFO,
-    WARN,
-    CRITICAL
-};
-
-// NotificationEvent struct used by the notification bus
-struct NotificationEvent {
-    std::string  event_id;       // UUID v4
-    EventType    type;           // SIGN_CREATED, VERIFY_FAILED, etc.
-    Severity     severity;       // INFO | WARN | CRITICAL
-    int64_t      timestamp;      // epoch ms
-    std::string  source;         // "slot:N/token:label"
-    std::string  actor;          // user_label or "SO"
-    std::string  summary;        // short human-readable
-    std::string  detail_json;    // JSON payload
-    std::string  hsm_instance;   // instance_id from db_meta
 };
 } // namespace vhsm::crypto
 

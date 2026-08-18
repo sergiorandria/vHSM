@@ -3,9 +3,11 @@
 
 #include "../core/secure_buffer.h"
 #include "../core/types.h"
+#include "../core/system_hsm_clock.h"
 #include "attribute_store.h"
 #include "hsm_object.h"
 #include "object_store.h"
+#include "internal/token_core.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -13,13 +15,39 @@
 #include <mutex>
 #include <shared_mutex>
 #include <string>
+#include <vector>
 
 namespace vhsm::keystore
 {
 
+// WHY Token is a public GLIBC-style facade: PKCS#11 is a C API; Token bridges
+// from C (raw pointers, error codes) to C++ (exceptions, smart pointers). This
+// layer does raw input validation (null checks, length bounds) and delegates all
+// business logic to v_TokenCore_M1. Separating concerns this way makes it easy to
+// test the core in isolation and easier to port to other languages later.
+//
+// WHY Token is non-copyable: Each Token manages identity (label, id) and shared state
+// (session counts). Copying would violate uniqueness constraints (two tokens with 
+// the same label could exist, breaking invariants). Non-copyable forces callers to
+// use shared_ptr or references, preventing accidental duplication.
+//
+// WHY input validation happens here, not in the core: The core focuses on PKCS#11
+// semantics and state. Facade handles C API quirks (null pointers, length mismatches).
+// This layering keeps the core clean and easier to reason about.
+//
+// Public, GLIBC-style facade for a Token.
+//
+// This layer ONLY validates raw CK_* inputs (null pointers, obvious length /
+// range problems) and forwards to the internal business-logic core
+// (vhsm::keystore::internal::v_TokenCore_M1). All state and semantics live in
+// the core; this class holds no logic of its own beyond input checks.
 class Token
 {
 public:
+    // WHY separate constructor takes label + id: PKCS#11 tokens are identified
+    // by label (human-readable name) and id (binary identifier). Both must be set
+    // at construction and are immutable. Passing them to the constructor makes this
+    // constraint explicit and prevents partially-initialized tokens from escaping.
     Token(const std::string& label, const std::string& id);
     ~Token();
 
@@ -40,104 +68,21 @@ public:
     CK_BBOOL is_user_login_required() const noexcept;
     CK_BBOOL is_so_login_required() const noexcept;
 
-    // NOTE (removed getLoginState()):
-    // Login state is inherently per-Session in PKCS#11 (multiple sessions may be
-    // logged in independently, possibly as different users). Token only verifies
-    // PIN correctness — it has no concept of "is this token currently logged in".
-    // The previous getLoginState() always returned CKU_INVALID (a stub) and was
-    // misleading API surface. Track login state on the Session class instead.
+    // NOTE (removed getLoginState()): login state is per-Session in PKCS#11.
+    // Token only verifies PIN correctness. Track login state on Session.
 
-    // IMPORTANT: createObject is a template and MUST be defined here (inline),
-    // not in token.cpp. Template member functions must be visible at the point
-    // of instantiation in every translation unit that calls them — otherwise
-    // you get "undefined reference" linker errors the moment another .cpp
-    // calls token.createObject<SomeType>(...).
-    // Locking: ObjectStore::createObject() / destroyObject() are internally
-    // synchronized (ObjectStore owns its own std::mutex), so this does not
-    // race on object_store_ itself even with a shared_lock. We still take a
-    // unique_lock here for two reasons:
-    //   1. Forward-compatibility: if Token-level state ever needs to change
-    //      alongside object creation/destruction (counters, caches, etc.),
-    //      a shared_lock would silently become unsafe.
-    //   2. Clarity: "this call mutates token-owned state" is the intent, even
-    //      though today the mutation is fully delegated to a self-locking member.
+    // WHY template methods here (not just core): create_object and find_object_by_label_and_id
+    // are templates that return typed pointers to derived HsmObject classes (e.g., PrivateKey*).
+    // Templates can't be virtual, so we implement them as thin wrappers that forward to core.
+    // This keeps the template instantiation in one place and maintains the facade pattern.
     template <typename T, typename... Args> std::pair<CK_OBJECT_HANDLE, T*> create_object(Args&&... args)
     {
-        std::unique_lock<std::shared_mutex> lock(mutex_);
-        return object_store_.template createObject<T>(std::forward<Args>(args)...);
+        return v_core_.v_create_object<T>(std::forward<Args>(args)...);
     }
 
-    /**
-     * Find an object by its label and id.
-     * @tparam T The expected type of the object (must derive from HsmObject).
-     * @param label The label to match (CKA_LABEL).
-     * @param id The id to match (CKA_ID).
-     * @return Pointer to the object if found and of type T, nullptr otherwise.
-     * @note The caller must ensure that the object is of type T; the function
-     *       does not perform a runtime type check beyond the HsmObject base.
-     */
     template <typename T> T* find_object_by_label_and_id(const std::string& label, const std::string& id)
     {
-        auto result = object_store_.find_object_if(
-            [&](HsmObject* obj)
-            {
-                // Check label and id using AttributeStore
-                AttributeStore attr_store(*obj);
-                // Get label
-                std::vector<u8> label_value;
-                CK_ULONG label_len = 0;
-                CK_RV rv = attr_store.getAttribute(CKA_LABEL, nullptr, &label_len);
-                
-                if (rv != CKR_OK)
-                {
-                    return false;
-                }
-
-                label_value.resize(label_len);
-                rv = attr_store.getAttribute(CKA_LABEL, label_value.data(), &label_len);
-                
-                if (rv != CKR_OK)
-                {
-                    return false;
-                }
-                
-                // Get id
-                std::vector<u8> id_value;
-                CK_ULONG id_len = 0;
-                rv = attr_store.getAttribute(CKA_ID, nullptr, &id_len);
-                
-                if (rv != CKR_OK)
-                {
-                    return false;
-                }
-
-                id_value.resize(id_len);
-                rv = attr_store.getAttribute(CKA_ID, id_value.data(), &id_len);
-                
-                if (rv != CKR_OK)
-                {
-                    return false;
-                }
-                
-                // Compare
-                std::string obj_label(reinterpret_cast<char*>(label_value.data()), label_len);
-                std::string obj_id(reinterpret_cast<char*>(id_value.data()), id_len);
-                if (obj_label != label || obj_id != id)
-                {
-                    return false;
-                }
-                
-                // Optionally, check the object class if we can
-                // We'll skip for now.
-                return true;
-            });
-        if (result.second)
-        {
-            // We assume the object is of type T, so we static_cast.
-            // This is unsafe if the object is not of type T, but the caller should ensure that.
-            return static_cast<T*>(result.second);
-        }
-        return nullptr;
+        return v_core_.v_find_object_by_label_and_id<T>(label, id);
     }
 
     HsmObject* get_object(CK_OBJECT_HANDLE handle);
@@ -156,61 +101,32 @@ public:
     CK_RV login(CK_USER_TYPE userType, const CK_CHAR* pin, CK_ULONG pinLen);
     CK_RV logout(CK_USER_TYPE userType);
 
-    // Session management (delegated to SlotManager, but token tracks counts)
+    // Session accounting (delegated to core).
     void increment_session_count();
     void decrement_session_count();
     void increment_rw_session_count();
     void decrement_rw_session_count();
 
-    // Retrieve the Key Encryption Key (KEK) used for wrapping/unwrapping.
-    // Returns the raw key bytes if a KEK object with label "KEK" exists,
-    // otherwise returns empty vector.
+    // WHY NOTE on getLoginState: In PKCS#11, login state is PER-SESSION, not per-token.
+    // Different sessions can have different login states. The Token only verifies PIN
+    // correctness. The Session object tracks who is logged in (if anyone). This boundary
+    // prevents the Token from holding login state it doesn't own, keeping concerns separate.
+
+    // WHY get_kek() is accessible: The KeyWrap object needs the KEK to wrap/unwrap keys.
+    // The core generates and stores the KEK; we expose it here for the rest of the system.
+    // It's read-only (const method, const return). The caller must not modify it.
     std::vector<std::uint8_t> get_kek() const;
 
 private:
-    // Internal helper: constant-time comparison of a candidate PIN against a
-    // stored PIN held in a SecureBuffer. Returns true iff lengths match AND
-    // all bytes match, without short-circuiting on the first mismatch
-    // (mitigates timing side-channels on PIN verification).
-    static bool secure_pin_equals(const SecureBuffer& stored, std::size_t stored_len, const CK_CHAR* candidate,
-                                  CK_ULONG candidate_len) noexcept;
-
-    std::string label_;
-    std::string id_; // Token identifier (CKA_ID)
-
-    // Object store for objects in this token
-    ObjectStore object_store_;
-
-    // Session counts
-    std::atomic<CK_ULONG> session_count_;
-    std::atomic<CK_ULONG> rw_session_count_;
-
-    // Token flags
-    std::atomic<CK_BBOOL> token_initialized_;
-    std::atomic<CK_BBOOL> user_pin_set_;
-    std::atomic<CK_BBOOL> so_pin_set_;
-    std::atomic<CK_BBOOL> user_login_required_;
-    std::atomic<CK_BBOOL> so_login_required_;
-
-    // PINs.
-    //
-    // user_pin_ / so_pin_ are fixed-CAPACITY (256-byte) SecureBuffers.
-    // SecureBuffer::size() returns the element COUNT (i.e. capacity == 256),
-    // NOT the number of meaningful PIN bytes currently stored. The actual
-    // stored PIN length is tracked separately in user_pin_len_ / so_pin_len_.
-    //
-    // Previously, code compared `oldLen != user_pin_.size()` (== 256), which
-    // would reject every real-world PIN (PINs are never exactly 256 bytes).
-    // All comparisons now use user_pin_len_ / so_pin_len_ instead.
-    SecureBuffer user_pin_{256};
-    SecureBuffer so_pin_{256};
-    std::size_t user_pin_len_{0};
-    std::size_t so_pin_len_{0};
-    std::mutex user_pin_mutex_;
-    std::mutex so_pin_mutex_;
-
-    // Mutex for protecting object store and session counts
-    mutable std::shared_mutex mutex_;
+    // WHY SystemHsmClock here (not injected): Tests construct the core directly with
+    // FrozenHsmClock for deterministic time. The public Token always uses the system
+    // clock. This layering lets tests mock time while production uses real time without
+    // cluttering the public interface with a clock parameter.
+    vhsm::SystemHsmClock v_clock_;
+    
+    // WHY v_core_ is the real implementation: All state, locking, object management,
+    // and PKCS#11 semantics live in the core. Token is just a thin validation + delegation layer.
+    vhsm::keystore::internal::v_TokenCore_M1 v_core_;
 };
 
 } // namespace vhsm::keystore

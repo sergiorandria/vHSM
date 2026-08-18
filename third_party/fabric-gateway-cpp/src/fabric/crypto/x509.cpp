@@ -182,6 +182,20 @@ public:
         return result;
     }
 
+    std::string getDER() const {
+        int derLen = i2d_X509(cert_, nullptr);
+        if (derLen <= 0) {
+            throw std::runtime_error("Failed to compute DER length of certificate");
+        }
+
+        std::string der(static_cast<size_t>(derLen), '\0');
+        unsigned char* pp = reinterpret_cast<unsigned char*>(der.data());
+        if (i2d_X509(cert_, &pp) != derLen) {
+            throw std::runtime_error("Failed to encode certificate to DER");
+        }
+        return der;
+    }
+
     std::vector<std::string> getSubjectAlternativeNames() const {
         std::vector<std::string> sans;
         int loc = -1;
@@ -285,6 +299,10 @@ bool X509Certificate::isValid() const {
 
 std::string X509Certificate::getPublicKeyPEM() const {
     return pimpl_->getPublicKeyPEM();
+}
+
+std::string X509Certificate::getDER() const {
+    return pimpl_->getDER();
 }
 
 std::vector<std::string> X509Certificate::getSubjectAlternativeNames() const {

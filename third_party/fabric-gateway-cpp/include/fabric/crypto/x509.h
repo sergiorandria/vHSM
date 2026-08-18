@@ -5,15 +5,13 @@
 #include <vector>
 #include <chrono>
 
-#include "crypto_class.h"
-
 namespace fabric {
 namespace crypto {
 
 /**
  * X.509 certificate parsing and validation utilities
  */
-class X509Certificate : ICryptoClass {
+class X509Certificate {
 public:
     /**
      * Parse an X.509 certificate from PEM format
@@ -73,15 +71,16 @@ public:
     std::string getPublicKeyPEM() const;
 
     /**
+     * Get the certificate in binary DER encoding
+     * @return Certificate as raw DER bytes
+     */
+    std::string getDER() const;
+
+    /**
      * Extract Subject Alternative Names (SANs)
      * @return Vector of SAN strings
      */
     std::vector<std::string> getSubjectAlternativeNames() const;
-
-    /**
-     * Inherits from ICryptoClass
-    */
-    std::string Representation() const override { return std::string(""); };
 
 private:
     class Impl;

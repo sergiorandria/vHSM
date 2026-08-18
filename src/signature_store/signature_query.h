@@ -9,10 +9,14 @@
 #include "db_connection.h"
 #include "signature_repository.h"
 #include "../ledger/ledger_client.h"
+#include "internal/signature_query_core.h"
 
 namespace vhsm::signature_store {
 namespace db {
 
+// Public facade for signature queries and verification.  Validates the
+// caller-supplied identifiers / time range and delegates all SQL and
+// ledger cross-check logic to the internal core.
 class SignatureQuery {
 public:
     explicit SignatureQuery(IDbConnection& conn, keystore::Token&);
@@ -26,32 +30,23 @@ public:
     // Local-only form: reports whether the local record exists and what its
     // anchored Fabric ledger status is.  It cannot prove tamper-evidence on
     // its own — that requires the ledger cross-check (see the overload below).
-    struct VerificationResult {
-        bool record_found = false;               // present in the local DB
-        bool ledger_cross_check_ok = false;      // ledger entry matches local row
-        std::optional<std::string> error_detail;
-        std::optional<std::string> ledger_tx_id;
-        std::optional<int64_t>     ledger_block_num;
-        std::string                ledger_status; // PENDING / COMMITTED / FAILED
-        std::optional<std::string> payload_digest;
-    };
+    using VerificationResult = internal::v_SignatureQueryVerificationResult_M1;
 
     VerificationResult verify_signature(const std::string& signature_id) const;
 
     // Live form: additionally queries the Fabric ledger via `ledger` and
     // cross-checks payload_digest / signature_b64 / key_fingerprint.  This is
     // the tamper-evident form — it does not require trusting the local DB.
-    VerificationResult verify_signature(const std::string& signature_id, vhsm::ledger::LedgerClient& ledger) const;
+    VerificationResult verify_signature(const std::string& signature_id, vhsm::ledger::LedgerClient& ledger);
 
     // Query signatures by key fingerprint.
-    std::vector<std::string> get_signature_ids_by_key_fingerprint(const std::string& key_fingerprint) const;
+    std::vector<std::string> get_signature_ids_by_key_fingerprint(const std::string& key_fingerprint);
 
     // Query signatures by time range.
-    std::vector<std::string> get_signature_ids_by_time_range(int64_t start_time, int64_t end_time) const;
+    std::vector<std::string> get_signature_ids_by_time_range(int64_t start_time, int64_t end_time);
 
 private:
-    IDbConnection& conn_;
-    SignatureRepository signature_repository_;
+    internal::v_SignatureQueryCore_M1 v_core_;
 };
 
 }  // namespace db

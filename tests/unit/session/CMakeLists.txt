@@ -15,6 +15,7 @@ add_executable(vhsm_session_test
     sign_context_test.cpp
     slot_tests.cpp
     slot_manager_tests.cpp
+    session_core_test.cpp
 )
 
 target_include_directories(vhsm_session_test

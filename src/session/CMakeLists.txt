@@ -7,6 +7,8 @@ target_sources(vhsm_session
     FindContext.cpp
     SignContext.cpp
     slot_manager.cpp
+    internal/session_manager_core.cpp
+    internal/slot_manager_core.cpp
 )
 
 target_include_directories(vhsm_session

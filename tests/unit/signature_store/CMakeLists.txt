@@ -1,11 +1,4 @@
 # Signature Store Unit Tests
-# Placeholder - add test files as they are created# Session Unit Tests
-# This CMakeLists builds the session unit test executable using GoogleTest.
-# The test target links against the `vhsm_session` library and configures
-# include directories so tests can include headers via "session/...".
-#
-# Output binary is placed under the per-directory 'build' folder used by the
-# other unit test CMake files in this repository.
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build)
 
@@ -14,6 +7,7 @@ add_executable(vhsm_signature_store_test
     sqlite_connection_tests.cpp
     sqlite_transaction_tests.cpp
     signature_repository_test.cpp
+    signature_store_core_test.cpp
 )
 
 target_include_directories(vhsm_signature_store_test
@@ -28,6 +22,8 @@ target_link_libraries(vhsm_signature_store_test
         vhsm_core
         vhsm_signature_store
         vhsm_keystore
+        vhsm_notification
+        vhsm_ledger
         GTest::gtest
         GTest::gtest_main
         sqlite3
