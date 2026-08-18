@@ -21,7 +21,7 @@ public:
 private: 
     // Private constructor to avoid 
     // duplicates instance
-    X509CertificatePool<PoolItem>();
+    X509CertificatePool();
 
     std::vector<PoolItem> x509CertificateElements; 
 
