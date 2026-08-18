@@ -59,16 +59,19 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
 install(TARGETS fabric-gateway-cpp DESTINATION lib)
 
 if(BUILD_TESTING)
-    # Smoke test: CaClient + CurlHttpClient construction
-    add_executable(fabric_gateway_cpp_smoke_test tests/test_ca_client.cpp)
-    target_include_directories(fabric_gateway_cpp_smoke_test PRIVATE ${FABRIC_SDK_INCLUDE_DIR})
-    target_link_libraries(fabric_gateway_cpp_smoke_test PRIVATE fabric-gateway-cpp)
-    add_test(NAME fabric_gateway_cpp_smoke_test COMMAND fabric_gateway_cpp_smoke_test)
-
     # Phase 1 unit tests: keygen, CSR, sign/verify round-trip, identity, wallet
     find_package(GTest REQUIRED)
     add_executable(fabric_gateway_cpp_unit_tests tests/test_crypto.cpp)
     target_include_directories(fabric_gateway_cpp_unit_tests PRIVATE ${FABRIC_SDK_INCLUDE_DIR})
     target_link_libraries(fabric_gateway_cpp_unit_tests PRIVATE fabric-gateway-cpp GTest::gtest_main)
     add_test(NAME fabric_gateway_cpp_unit_tests COMMAND fabric_gateway_cpp_unit_tests)
+
+    # Phase 2 unit + integration tests: CaClient against a scripted or real CA.
+    # The test target itself uses OpenSSL to independently verify CA tokens.
+    find_package(OpenSSL REQUIRED)
+    add_executable(fabric_gateway_cpp_ca_tests tests/test_ca_client.cpp)
+    target_include_directories(fabric_gateway_cpp_ca_tests PRIVATE ${FABRIC_SDK_INCLUDE_DIR})
+    target_compile_definitions(fabric_gateway_cpp_ca_tests PRIVATE OPENSSL_SUPPRESS_DEPRECATED)
+    target_link_libraries(fabric_gateway_cpp_ca_tests PRIVATE fabric-gateway-cpp GTest::gtest_main OpenSSL::Crypto OpenSSL::SSL)
+    add_test(NAME fabric_gateway_cpp_ca_tests COMMAND fabric_gateway_cpp_ca_tests)
 endif()

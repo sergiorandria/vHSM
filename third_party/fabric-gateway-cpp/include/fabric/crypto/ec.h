@@ -47,6 +47,16 @@ public:
     std::string sign(const std::string& data) const;
 
     /**
+     * Sign a message digest (SHA-256 output, not the message itself) using ECDSA
+     * and return a DER-encoded (ASN.1 SEQUENCE{ R, S }) signature with low-S
+     * enforced.  This matches the scheme Hyperledger Fabric uses for its
+     * transaction and registry token signatures.
+     * @param digest Digest bytes to sign (typically a SHA-256 hash)
+     * @return DER-encoded ECDSA signature bytes
+     */
+    std::string signDigest(const std::string& digest) const;
+
+    /**
      * Verify a signature
      * @param data Data that was signed
      * @param signature Hex-encoded signature

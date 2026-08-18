@@ -21,8 +21,8 @@ public:
      */
     explicit X509Certificate(const std::string& certPEM);
     
-    // Destructor
-    ~X509Certificate() = default;
+    // Destructor (out-of-line so the pimpl completes in the library TU)
+    ~X509Certificate();
 
     /**
      * Get the certificate in PEM format
