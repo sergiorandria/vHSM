@@ -252,6 +252,8 @@ private:
 // Constructor
 X509Certificate::X509Certificate(const std::string& certPEM) : pimpl_(std::make_unique<Impl>(certPEM)) {}
 
+X509Certificate::~X509Certificate() = default;
+
 // Getters
 std::string X509Certificate::getPEM() const {
     return pimpl_->getPEM();

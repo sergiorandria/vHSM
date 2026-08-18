@@ -80,13 +80,20 @@ fabric-cpp-sdk/
 - [x] Unit tests: keygen, CSR, sign/verify round-trip
 
 ### Phase 2 — Fabric CA Client (REST)
-- [ ] Define `HttpClient` interface; implement one concrete backend (libcurl or cpp-httplib)
-- [ ] `Enroll` (basic auth, parse returned cert + CA chain)
-- [ ] `Register` (token auth derived from prior enrollment)
-- [ ] `Reenroll`, `Revoke`
-- [ ] `GetCAInfo`, `GetCertificates`
-- [ ] TLS verification against CA's TLS cert (configurable trust bundle)
-- [ ] Integration test against a local `fabric-ca-server` (Docker)
+- [x] Define `HttpClient` interface; implement one concrete backend (libcurl)
+- [x] `Enroll` (basic auth, parse returned cert + CA chain)
+- [x] `Register` (token auth derived from prior enrollment)
+- [x] `Reenroll`, `Revoke`
+- [x] `GetCAInfo`, `GetCertificates`
+- [x] TLS verification against CA's TLS cert (configurable trust bundle)
+- [x] Integration test against a local `fabric-ca-server` (Docker)
+
+> **Notes on auth:** fabric-ca 1.5 accepts basic auth *only* for `enroll`.
+> `register`, `revoke`, `reenroll`, `certificates` (and identities/affiliations)
+> require a **token** signed by an already-enrolled identity:
+> `Authorization: <b64(certPEM)>.<b64(DER ECDSA-SHA256 sig)>` over
+> `method + "." + b64(uri) + "." + b64(body) + "." + b64(certPEM)` with low-S
+> enforced, exactly as fabric's BCCSP (`fabric-lib-go`) emits/verifies.
 
 ### Phase 3 — gRPC Transport Layer
 - [ ] Confirm generated stubs build for: Gateway service, Deliver service, MSP/common/peer messages

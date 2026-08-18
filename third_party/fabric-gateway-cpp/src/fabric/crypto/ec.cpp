@@ -6,6 +6,7 @@
 #include <openssl/ec.h>
 #include <openssl/err.h>
 #include <openssl/bio.h>
+#include <openssl/bn.h>
 #include <sstream>
 #include <stdexcept>
 #include <iomanip>
@@ -134,6 +135,84 @@ public:
                            ec_key_) == 1;
     }
 
+    // Signs a raw message digest (not the message itself) with ECDSA and returns
+    // a DER-encoded (ASN.1 SEQUENCE{ R, S }) signature with low-S enforced.
+    // This is the exact signature scheme Hyperledger Fabric's BCCSP uses for
+    // transaction / token signatures.
+    std::string signDigest(const std::string& digest) const {
+        if (!ec_key_) {
+            throw std::runtime_error("Invalid EC private key");
+        }
+
+        ECDSA_SIG* sig = ECDSA_do_sign(
+            reinterpret_cast<const unsigned char*>(digest.data()),
+            static_cast<int>(digest.size()),
+            ec_key_);
+        if (!sig) {
+            throw std::runtime_error("Failed to sign digest");
+        }
+
+        const BIGNUM* r = nullptr;
+        const BIGNUM* s = nullptr;
+        ECDSA_SIG_get0(sig, &r, &s);
+
+        const EC_GROUP* group = EC_KEY_get0_group(ec_key_);
+        BIGNUM* order = BN_new();
+        BIGNUM* halfOrder = BN_new();
+        BN_CTX* ctx = BN_CTX_new();
+        if (!order || !halfOrder || !ctx) {
+            BN_free(order);
+            BN_free(halfOrder);
+            BN_CTX_free(ctx);
+            ECDSA_SIG_free(sig);
+            throw std::runtime_error("Failed to allocate BIGNUM");
+        }
+
+        EC_GROUP_get_order(group, order, ctx);
+        BN_copy(halfOrder, order);
+        BN_rshift1(halfOrder, halfOrder);
+
+        // Enforce low-S (S <= N/2) as Fabric's BCCSP does on sign and verify.
+        BIGNUM* sLow = BN_dup(s);
+        if (!sLow) {
+            BN_free(order);
+            BN_free(halfOrder);
+            BN_CTX_free(ctx);
+            ECDSA_SIG_free(sig);
+            throw std::runtime_error("Failed to allocate BIGNUM");
+        }
+        if (BN_cmp(sLow, halfOrder) > 0) {
+            BN_sub(sLow, order, sLow);
+        }
+        BN_free(order);
+        BN_free(halfOrder);
+        BN_CTX_free(ctx);
+
+        // Re-encode with the low-S value as DER; ECDSA_SIG_set0 takes ownership
+        // of the dup'ed R and the (possibly replaced) S.
+        ECDSA_SIG* out = ECDSA_SIG_new();
+        if (!out || !ECDSA_SIG_set0(out, BN_dup(r), sLow)) {
+            BN_free(sLow);
+            ECDSA_SIG_free(out);
+            ECDSA_SIG_free(sig);
+            throw std::runtime_error("Failed to build ECDSA signature");
+        }
+
+        const int derLen = i2d_ECDSA_SIG(out, nullptr);
+        if (derLen <= 0) {
+            ECDSA_SIG_free(out);
+            ECDSA_SIG_free(sig);
+            throw std::runtime_error("Failed to encode ECDSA signature");
+        }
+        std::string result(static_cast<std::size_t>(derLen), '\0');
+        unsigned char* p = reinterpret_cast<unsigned char*>(result.data());
+        i2d_ECDSA_SIG(out, &p);
+
+        ECDSA_SIG_free(out);
+        ECDSA_SIG_free(sig);
+        return result;
+    }
+
 private:
     EC_KEY* ec_key_;
 };
@@ -162,6 +241,11 @@ std::string ECKeyPair::getPublicKeyPEM() const {
 // Signing
 std::string ECKeyPair::sign(const std::string& data) const {
     return pimpl_->sign(data);
+}
+
+// Raw-digest signing
+std::string ECKeyPair::signDigest(const std::string& digest) const {
+    return pimpl_->signDigest(digest);
 }
 
 // Verification
