@@ -18,7 +18,7 @@ namespace vhsm {
 // complicate SecureBuffer implementation 
 // a little bit. Current implementation uses std::uint8_t. 
 
-std::size_t SecureBuffer::page_size() noexcept {
+std::size_t SecureBuffer::v_sb_page_size() noexcept {
 #ifdef _WIN32
     static const std::size_t ps = []() -> std::size_t {
         SYSTEM_INFO si;
@@ -35,12 +35,12 @@ std::size_t SecureBuffer::page_size() noexcept {
     return ps;
 }
 
-std::size_t SecureBuffer::round_up_to_page(std::size_t n) noexcept {
-    const std::size_t ps = page_size();
+std::size_t SecureBuffer::v_sb_round_up_to_page(std::size_t n) noexcept {
+    const std::size_t ps = v_sb_page_size();
     return ((n + ps - 1) / ps) * ps;
 }
 
-bool SecureBuffer::lock_pages(void* addr, std::size_t len) {
+bool SecureBuffer::v_sb_lock_pages(void* addr, std::size_t len) {
 #ifdef _WIN32
     if (!VirtualLock(addr, len)) {
         throw std::runtime_error(
@@ -62,7 +62,7 @@ bool SecureBuffer::lock_pages(void* addr, std::size_t len) {
     return true;
 }
 
-void SecureBuffer::unlock_pages(void* addr, std::size_t len) noexcept {
+void SecureBuffer::v_sb_unlock_pages(void* addr, std::size_t len) noexcept {
 #ifdef _WIN32
     VirtualUnlock(addr, len);   
 #else
@@ -70,7 +70,7 @@ void SecureBuffer::unlock_pages(void* addr, std::size_t len) noexcept {
 #endif
 }
 
-void SecureBuffer::secure_zero(void* addr, std::size_t len) noexcept {
+void SecureBuffer::v_sb_secure_zero(void* addr, std::size_t len) noexcept {
     if (addr == nullptr || len == 0) return;
 #ifdef _WIN32
     SecureZeroMemory(addr, len);
@@ -92,8 +92,8 @@ SecureBuffer::SecureBuffer(std::size_t size) {
         throw std::runtime_error("SecureBuffer: size must be > 0");
     }
 
-    const std::size_t ps = page_size();
-    const std::size_t data_pages = round_up_to_page(size);
+    const std::size_t ps = v_sb_page_size();
+    const std::size_t data_pages = v_sb_round_up_to_page(size);
     
     // Total layout: guard | data pages | guard
     alloc_size_ = ps + data_pages + ps;
@@ -146,7 +146,7 @@ SecureBuffer::SecureBuffer(std::size_t size) {
     size_ = size;
  
     try {
-        if (!lock_pages(data_, data_pages)) {
+        if (!v_sb_lock_pages(data_, data_pages)) {
             
         }
     } catch (...) {
@@ -174,25 +174,25 @@ SecureBuffer::SecureBuffer(std::size_t size) {
 }
 
 SecureBuffer::~SecureBuffer() noexcept {
-    release();
+    v_sb_release();
 }
 
-void SecureBuffer::release() noexcept {
+void SecureBuffer::v_sb_release() noexcept {
     if (alloc_base_ == nullptr) {
         return;
     }
 
-    const std::size_t ps = page_size();
+    const std::size_t ps = v_sb_page_size();
     const std::size_t data_pages = alloc_size_ - 2 * ps;
     u8* base = static_cast<u8*>(alloc_base_);
 
     // Wipe the data region first, while it's still mapped with RW.
     if (data_ != nullptr) {
-        secure_zero(data_, data_pages);
+        v_sb_secure_zero(data_, data_pages);
     }
 
     // Unlock pages (best-effort).
-    unlock_pages(data_, data_pages);
+    v_sb_unlock_pages(data_, data_pages);
 
     // Restore guard page permissions so the OS can reclaim them cleanly.
 #ifdef _WIN32
@@ -228,7 +228,7 @@ SecureBuffer::SecureBuffer(SecureBuffer&& other) noexcept
 
 SecureBuffer& SecureBuffer::operator=(SecureBuffer&& other) noexcept {
     if (this != &other) {
-        release();                       
+        v_sb_release();                       
         data_       = other.data_;
         size_       = other.size_;
         alloc_base_ = other.alloc_base_;
@@ -245,13 +245,36 @@ void SecureBuffer::read(std::size_t offset,
                         u8* dst,
                         std::size_t len) const
 {
-    if (offset + len > size_) {
+    // Zero-length copies are a no-op; this also avoids passing a null
+    // pointer to memcpy (undefined behaviour even for len == 0).
+    if (len == 0) {
+        return;
+    }
+    if (dst == nullptr) {
+        throw std::invalid_argument("SecureBuffer::read: dst is null");
+    }
+    // Bounds check written to avoid unsigned overflow in (offset + len):
+    // if offset > size_ then size_ - offset would itself underflow.
+    if (offset > size_ || len > size_ - offset) {
         throw std::out_of_range(
             "SecureBuffer::read: offset=" + std::to_string(offset) +
             " len="    + std::to_string(len) +
             " size="   + std::to_string(size_));
     }
 
+    // Internal helper after validation.
+    __v_sb_read(offset, dst, len);
+}
+
+__attribute__((visibility("hidden")))
+__attribute__((noinline))
+void SecureBuffer::__v_sb_write(std::size_t offset, const u8* src, std::size_t len) {
+    ::memcpy(data_ + offset, src, len);
+}
+
+__attribute__((visibility("hidden")))
+__attribute__((noinline))
+void SecureBuffer::__v_sb_read(std::size_t offset, u8* dst, std::size_t len) const {
     ::memcpy(dst, data_ + offset, len);
 }
 
@@ -259,14 +282,24 @@ void SecureBuffer::write(std::size_t    offset,
                         const u8* src,
                         std::size_t    len)
 {
-    if (offset + len > size_) {
+    // Zero-length copies are a no-op; see read() for the null/memcpy rationale.
+    if (len == 0) {
+        return;
+    }
+    if (src == nullptr) {
+        throw std::invalid_argument("SecureBuffer::write: src is null");
+    }
+    // Bounds check written to avoid unsigned overflow in (offset + len).
+    if (offset > size_ || len > size_ - offset) {
         throw std::out_of_range(
             "SecureBuffer::write: offset=" + std::to_string(offset) +
             " len="    + std::to_string(len) +
             " size="   + std::to_string(size_));
     }
 
-    ::memcpy(data_ + offset, src, len);
+    // Internal helper after validation. 
+    // Lower level layer. 
+    __v_sb_write(offset, src, len);
 }
 
 bool SecureBuffer::equals(const SecureBuffer& other) const noexcept {
@@ -317,6 +350,6 @@ bool SecureBuffer::operator!=(const SecureBuffer& other) const noexcept {
 // Zeroize the buffer contents
 void SecureBuffer::wipe() noexcept {
     if (data_ != nullptr)
-        secure_zero(data_, size_);
+        v_sb_secure_zero(data_, size_);
 }
 }

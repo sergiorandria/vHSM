@@ -167,6 +167,13 @@ add_compile_definitions(
 
 enable_testing()  # Enable CTest for the tests/ subdirectory
 
+# Fabric Gateway C++ SDK (gRPC transport + Gateway client).  Pulled in when the
+# ledger integration is built (controlled by the VHSM_LEDGER option below).
+option(VHSM_LEDGER "Build the Fabric ledger signature anchor integration" ON)
+if(VHSM_LEDGER)
+    add_subdirectory(third_party/fabric-gateway-cpp)
+endif()
+
 add_subdirectory(src)
 add_subdirectory(tests)
 # add_subdirectory(tools)

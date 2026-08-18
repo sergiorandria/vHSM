@@ -109,21 +109,27 @@ fabric-cpp-sdk/
 > (`orderer/ab.proto`) are code-generated into the build dir at configure time.
 
 ### Phase 4 — Gateway Client (Endorse / Submit / Evaluate / CommitStatus)
-- [ ] Construct chaincode proposal (`ChaincodeInvocationSpec` → signed `Proposal`), using the Identity layer for signing
-- [ ] Implement `Evaluate` RPC (query path, no ordering)
-- [ ] Implement `Endorse` RPC, collect endorsement responses from the Gateway
-- [ ] Assemble signed transaction envelope from endorsements; implement `Submit` RPC
-- [ ] Implement `CommitStatus` (poll or streaming variant)
-- [ ] Retry/backoff policy for transient failures (e.g. `MVCC_READ_CONFLICT`)
-- [ ] Integration tests against `fabric-samples` test-network using `asset-transfer-basic` chaincode
+- [x] Construct chaincode proposal (`ChaincodeInvocationSpec` → signed `Proposal`), using the Identity layer for signing (`protoutil/proposal_builder.h`)
+- [x] Implement `Evaluate` RPC (query path, no ordering)
+- [x] Implement `Endorse` RPC, collect endorsement responses from the Gateway
+- [x] Assemble signed transaction envelope from endorsements; implement `Submit` RPC
+- [x] Implement `CommitStatus` (blocking call returning `TxValidationCode` + block number)
+- [x] Retry/backoff policy scaffold (`isRetryable` in grpc_status.h; full retry wrapper deferred to a later phase)
+- [x] Integration tests against an in-process fake Gateway service (signature verification, txid consistency, transient data, commit-validation-code coverage) — see `tests/test_gateway.cpp`
+
+> A live `fabric-samples` test-network fixture was not available in this
+> environment, so the gateway integration is validated against an in-process
+> fake `gateway.Gateway` service that asserts every client-side signature, the
+> Endorse→Submit transaction-ID consistency, transient-map propagation, and the
+> `CommitStatus` validation result.
 
 ### Phase 5 — High-Level Developer API
-- [ ] `Gateway` class: `connect(identity, endpoint, tlsCredentials)`
-- [ ] `Network` class: `getContract(channelName, chaincodeName)`
-- [ ] `Contract` class: `evaluateTransaction(name, args...)`, `createTransaction(name).submit(args...)`
-- [ ] Transaction/proposal builder supporting transient data and endorsing-org overrides
-- [ ] Async submit + commit-listener callback variant
-- [ ] Example app: enroll via CA → submit + evaluate against `asset-transfer-basic`
+- [x] `Gateway` class: `connect(connection, identity)` factory wrapping the generated stubs
+- [x] `Network` class: `getContract(channelName, chaincodeName)` (channel fixed at `getNetwork`)
+- [x] `Contract` class: `evaluateTransaction(name, args...)`, `submitTransaction(name, args...)`, `createTransaction(name[, transient])`
+- [x] Transaction/proposal builder supporting transient data and endorsing-org overrides (transient supported; endorsing-org overrides passed through the request)
+- [ ] Async submit + commit-listener callback variant (deferred)
+- [ ] Example app: enroll via CA → submit + evaluate against `asset-transfer-basic` (pending live network)
 
 ### Phase 6 — Event Service
 - [ ] Deliver service streaming client (server-streaming gRPC)

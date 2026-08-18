@@ -149,5 +149,50 @@ TEST(SecureBufferTest, ReadWriteBoundsChecking) {
     EXPECT_THROW(buf.read(5, read_data, 1), std::out_of_range); // 5+1 > 5
 }
 
+TEST(SecureBufferTest, OverflowBoundsCheck) {
+    // The naive (offset + len > size_) check wraps on huge offsets. The fixed
+    // check (offset > size_ || len > size_ - offset) must reject it.
+    SecureBuffer buf(8);
+
+    // offset near SIZE_MAX makes (offset + len) wrap to a small value, which
+    // the naive check would wrongly accept. len == 1 keeps the sum small.
+    const std::size_t huge = static_cast<std::size_t>(-1);
+    uint8_t dummy = 0;
+
+    EXPECT_THROW(buf.read(huge, &dummy, 1), std::out_of_range);
+    EXPECT_THROW(buf.write(huge, &dummy, 1), std::out_of_range);
+
+    // Also reject a non-wrapping but out-of-range offset.
+    EXPECT_THROW(buf.read(8, &dummy, 1), std::out_of_range);
+    EXPECT_THROW(buf.write(8, &dummy, 1), std::out_of_range);
+}
+
+TEST(SecureBufferTest, ZeroLengthIsNoOp) {
+    // len == 0 must not dereference a null pointer and must not throw.
+    SecureBuffer buf(4);
+    uint8_t src[4] = {1, 2, 3, 4};
+    buf.write(0, src, 4);
+
+    EXPECT_NO_THROW(buf.write(0, nullptr, 0));
+    EXPECT_NO_THROW(buf.read(0, nullptr, 0));
+
+    uint8_t dst[4] = {0};
+    EXPECT_NO_THROW(buf.read(0, dst, 0));
+    // dst must be untouched.
+    EXPECT_EQ(dst[0], 0);
+}
+
+TEST(SecureBufferTest, NullPointerRejected) {
+    SecureBuffer buf(4);
+    uint8_t value = 0xAB;
+
+    // Non-zero length with a null pointer must be rejected, not passed to memcpy.
+    EXPECT_THROW(buf.write(0, nullptr, 4), std::invalid_argument);
+    EXPECT_THROW(buf.read(0, nullptr, 4), std::invalid_argument);
+    EXPECT_THROW(buf.write(0, nullptr, 1), std::invalid_argument);
+    EXPECT_THROW(buf.read(0, nullptr, 1), std::invalid_argument);
+    (void)value;
+}
+
 } // namespace test
 } // namespace vhsm

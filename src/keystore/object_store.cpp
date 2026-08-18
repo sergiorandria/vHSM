@@ -1,112 +1,86 @@
 #include "object_store.h"
 
-namespace vhsm::keystore {
+namespace vhsm::keystore::internal {
 
-ObjectStore::ObjectStore() : nextIndex_(0) {
-    // Pre-allocate some space to avoid frequent reallocations
-    table_.reserve(1024);
+v_ObjectStore_M1::v_ObjectStore_M1() : v_next_index_(0) {
 }
 
-ObjectStore::~ObjectStore() {
-    // All objects will be automatically destroyed by unique_ptr
+v_ObjectStore_M1::~v_ObjectStore_M1() {
 }
 
-uint32_t ObjectStore::extractIndex(CK_OBJECT_HANDLE handle) {
-    // Lower 24 bits are the index
-    return handle & 0xFFFFFF;
+uint32_t v_ObjectStore_M1::v_extract_index(CK_OBJECT_HANDLE handle) {
+    return static_cast<uint32_t>((handle >> 32) & 0xFFFFFFFF);
 }
 
-uint32_t ObjectStore::extractVersion(CK_OBJECT_HANDLE handle) {
-    // Upper 8 bits are the version
-    return (handle >> 24) & 0xFF;
+uint32_t v_ObjectStore_M1::v_extract_version(CK_OBJECT_HANDLE handle) {
+    return static_cast<uint32_t>(handle & 0xFFFFFFFF);
 }
 
-CK_OBJECT_HANDLE ObjectStore::composeHandle(uint32_t index, uint32_t version) {
-    // Combine index (lower 24 bits) and version (upper 8 bits)
-    return (static_cast<CK_OBJECT_HANDLE>(version) << 24) | (index & 0xFFFFFF);
+CK_OBJECT_HANDLE v_ObjectStore_M1::v_compose_handle(uint32_t index, uint32_t version) {
+    return (static_cast<CK_OBJECT_HANDLE>(index) << 32) | version;
 }
 
-HsmObject* ObjectStore::getObject(CK_OBJECT_HANDLE handle) {
-    if (handle == CK_INVALID_HANDLE) {
+HsmObject* v_ObjectStore_M1::v_get_object(CK_OBJECT_HANDLE handle) {
+    std::lock_guard<std::mutex> lock(v_mutex_);
+
+    uint32_t index = v_extract_index(handle);
+    uint32_t version = v_extract_version(handle);
+
+    if (index >= v_table_.size() || v_table_[index].v_is_free) {
         return nullptr;
     }
 
-    uint32_t index = extractIndex(handle);
-    uint32_t version = extractVersion(handle);
-
-    // Check bounds
-    if (index >= table_.size()) {
+    // Version mismatch means the handle was invalidated (reuse attack guard).
+    if (v_table_[index].v_version.load() != version) {
         return nullptr;
     }
 
-    // Check if the slot is free or version doesn't match
-    if (table_[index].isFree || table_[index].version.load() != version) {
-        return nullptr;
-    }
-
-    return table_[index].object.get();
+    return v_table_[index].v_object.get();
 }
 
-const HsmObject* ObjectStore::getObject(CK_OBJECT_HANDLE handle) const {
-    // Const version delegates to non-const version
-    return const_cast<ObjectStore*>(this)->getObject(handle);
+const HsmObject* v_ObjectStore_M1::v_get_object(CK_OBJECT_HANDLE handle) const {
+    return const_cast<v_ObjectStore_M1*>(this)->v_get_object(handle);
 }
 
-bool ObjectStore::destroyObject(CK_OBJECT_HANDLE handle) {
-    if (handle == CK_INVALID_HANDLE) {
+bool v_ObjectStore_M1::v_destroy_object(CK_OBJECT_HANDLE handle) {
+    std::lock_guard<std::mutex> lock(v_mutex_);
+
+    uint32_t index = v_extract_index(handle);
+    uint32_t version = v_extract_version(handle);
+
+    if (index >= v_table_.size() || v_table_[index].v_is_free) {
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    uint32_t index = extractIndex(handle);
-    uint32_t version = extractVersion(handle);
-
-    // Check bounds
-    if (index >= table_.size()) {
+    if (v_table_[index].v_version.load() != version) {
         return false;
     }
 
-    // Check if the slot is free or version doesn't match
-    if (table_[index].isFree || table_[index].version.load() != version) {
-        return false;
-    }
-
-    // Mark as free and destroy the object
-    table_[index].isFree = true;
-    table_[index].object.reset();  // This will call the object's destructor
-    // Note: We don't increment version here to keep it simple, but we could
-    // to prevent handle reuse immediately
-
+    v_table_[index].v_object.reset();
+    v_table_[index].v_is_free = true;
     return true;
 }
 
-size_t ObjectStore::getObjectCount() const {
-    std::lock_guard<std::mutex> lock(mutex_);
+size_t v_ObjectStore_M1::v_get_object_count() const {
+    std::lock_guard<std::mutex> lock(v_mutex_);
     size_t count = 0;
-    for (const auto& entry : table_) {
-        if (!entry.isFree) {
+    for (const auto& entry : v_table_) {
+        if (!entry.v_is_free && entry.v_object) {
             ++count;
         }
     }
     return count;
 }
 
-bool ObjectStore::isValidHandle(CK_OBJECT_HANDLE handle) const {
-    if (handle == CK_INVALID_HANDLE) {
+bool v_ObjectStore_M1::v_is_valid_handle(CK_OBJECT_HANDLE handle) const {
+    std::lock_guard<std::mutex> lock(v_mutex_);
+    uint32_t index = v_extract_index(handle);
+    uint32_t version = v_extract_version(handle);
+
+    if (index >= v_table_.size() || v_table_[index].v_is_free) {
         return false;
     }
-
-    uint32_t index = extractIndex(handle);
-    uint32_t version = extractVersion(handle);
-
-    // Check bounds
-    if (index >= table_.size()) {
-        return false;
-    }
-
-    // Check if the slot is free or version doesn't match
-    return !table_[index].isFree && (table_[index].version.load() == version);
+    return v_table_[index].v_version.load() == version;
 }
 
-} // namespace vhsm::keystore
+} // namespace vhsm::keystore::internal

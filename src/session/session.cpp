@@ -139,11 +139,11 @@ CK_RV Session::finalizeOperation() {
     return CKR_OK;
 }
 
-vhsm::keystore::ObjectStore& Session::getObjectStore() noexcept {
+vhsm::keystore::internal::v_ObjectStore_M1& Session::getObjectStore() noexcept {
     return objectStore_;
 }
 
-const vhsm::keystore::ObjectStore& Session::getObjectStore() const noexcept {
+const vhsm::keystore::internal::v_ObjectStore_M1& Session::getObjectStore() const noexcept {
     return objectStore_;
 }
 

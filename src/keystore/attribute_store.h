@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace vhsm::keystore {
+namespace vhsm::keystore::internal {
 
 // PKCS#11 Attribute Types (subset needed for HSM object management)
 constexpr CK_ULONG CKA_CLASS            = 0x00000000;
@@ -33,58 +33,90 @@ constexpr CK_ULONG CKO_DOMAIN_PARAMETERS= 0x00000006;
 constexpr CK_ULONG CKO_OTHER            = 0x00000010;
 
 /**
- * AttributeStore manages PKCS#11 attributes for HSM objects.
- * Handles get/set operations with enforcement of special attributes:
- * - CKA_SENSITIVE: When true, object becomes non-copyable
- * - CKA_EXTRACTABLE: When false, prevents key extraction
- * - Read-only attributes: CKA_TOKEN, CKA_PRIVATE (after initialization)
+ * v_AttributeStore_M1 manages PKCS#11 attributes for HSM objects.
+ * Handles get/set operations with enforcement of special attributes.
+ * See attribute_store.cpp for the full contract.
  *
- * Object-backed attributes (CKA_CLASS, CKA_TOKEN, CKA_PRIVATE,
- * CKA_SENSITIVE, CKA_EXTRACTABLE, CKA_ID) are read from dedicated HsmObject
- * fields; all other attributes — CKA_LABEL, CKA_VALUE, CKA_KEY_TYPE, key
- * parameters, ... — are persisted in the object's own attribute map, so
- * they survive across AttributeStore instantiations.
+ * WHY attribute store separate from object: Attributes are metadata (labels, IDs, 
+ * key sizes, etc.). HSM objects already hold id_ and attrs_. This class interprets
+ * PKCS#11 semantics (which attributes are read-only, how to serialize/deserialize).
+ * It's a bridge between the C API (CK_ATTRIBUTE) and C++ objects.
+ *
+ * WHY takes HsmObject& reference (not owned): The store doesn't own the object.
+ * It's constructed per-session to read/write attributes on an object that exists
+ * elsewhere (owned by the Token/ObjectStore).
  */
-class AttributeStore {
+class v_AttributeStore_M1 {
 public:
-    explicit AttributeStore(HsmObject& object);
+    /**
+     * @brief Constructor binds this store to an object for attribute operations.
+     * @param object Reference to the HsmObject to manage attributes for.
+     *
+     * WHY take reference: The object already exists (owned elsewhere). We're just
+     * reading/writing its attribute storage during a session. Taking a reference
+     * makes this explicit (we don't own the object).
+     */
+    explicit v_AttributeStore_M1(HsmObject& object);
 
     /**
-     * Get an attribute value.
-     * @param type  Attribute type (CKA_*)
-     * @param pValue Pointer to buffer to receive value (can be null to get size)
-     * @param pulValueLen IN/OUT: pointer to length of pValue buffer
-     * @return CKR_OK on success, or appropriate error code
+     * @brief Retrieve an attribute value from the object.
+     * @param type CKA_* attribute type identifier.
+     * @param pValue [out] Buffer to write the attribute value.
+     * @param pulValueLen [in/out] Buffer size; updated with actual size.
+     * @return CKR_OK if successful, CKR_* error codes otherwise.
+     *
+     * WHY CK_RV return: Matches PKCS#11 C API convention. Callers expect
+     * error codes like CKR_ATTRIBUTE_TYPE_INVALID, CKR_BUFFER_TOO_SMALL.
      */
-    CK_RV getAttribute(CK_ATTRIBUTE_TYPE type, CK_VOID_PTR pValue, CK_ULONG_PTR pulValueLen);
+    CK_RV v_get_attribute(CK_ATTRIBUTE_TYPE type, CK_VOID_PTR pValue, CK_ULONG_PTR pulValueLen);
 
     /**
-     * Set an attribute value.
-     * Enforces constraints:
-     * - CKA_SENSITIVE: Can only be set to false if currently false (read-only after set to true)
-     * - CKA_EXTRACTABLE: Can only be set to false if currently true (read-only after set to false)
-     * - Certain attributes are read-only after object initialization (CKA_TOKEN, CKA_PRIVATE)
-     * @param pAttr  Pointer to CK_ATTRIBUTE containing type and value
-     * @return CKR_OK on success, or appropriate error code
+     * @brief Set an attribute value on the object.
+     * @param pAttr Pointer to CK_ATTRIBUTE struct with type and value.
+     * @return CKR_OK or error code.
+     *
+     * WHY take CK_ATTRIBUTE_PTR: This is the C API form. v_AttributeStore_M1
+     * is a bridge; using the PKCS#11 struct directly makes it clear.
      */
-    CK_RV setAttribute(CK_ATTRIBUTE_PTR pAttr);
+    CK_RV v_set_attribute(CK_ATTRIBUTE_PTR pAttr);
 
     /**
-     * Initialize default attributes for a new object.
-     * Sets CKA_CLASS based on object type, and reasonable defaults for other attributes.
+     * @brief Initialize default attributes for a newly-created object.
+     * Called by the Token after creating an object to set mandatory attributes.
      */
-    void initializeDefaultAttributes();
+    void v_initialize_default_attributes();
 
 private:
-    HsmObject& object_;
+    // WHY reference to the object: This attribute store is transient (per-session).
+    // The object lives in the ObjectStore (owned by Token). We just read/write its
+    // attributes, so a reference is enough (no ownership).
+    HsmObject& v_object_;
 
-    // Helper to check if an attribute is read-only for this object
-    bool isReadOnly(CK_ATTRIBUTE_TYPE type) const;
+    /**
+     * @brief Check if an attribute is read-only (can't be modified after creation).
+     * @param type CKA_* attribute type.
+     * @return true if the attribute is read-only per PKCS#11.
+     *
+     * WHY separate method: Read-only enforcement is centralized here. When a caller
+     * tries to set a read-only attribute, we return CKR_ATTRIBUTE_READ_ONLY.
+     * Examples: CKA_CLASS (object type can't change), CKA_KEY_SIZE (key size is immutable).
+     */
+    bool v_is_read_only(CK_ATTRIBUTE_TYPE type) const;
 
-    // Helper to validate attribute value against constraints
-    CK_RV validateAttribute(CK_ATTRIBUTE_TYPE type, CK_VOID_PTR pValue, CK_ULONG ulValueLen) const;
+    /**
+     * @brief Validate an attribute value before storing it.
+     * @param type CKA_* type.
+     * @param pValue Pointer to the value.
+     * @param ulValueLen Length of the value.
+     * @return CKR_OK or error code if validation fails.
+     *
+     * WHY centralized validation: Different attributes have different rules (e.g.,
+     * CKA_LABEL must be a string, CKA_SENSITIVE must be a boolean). Validation ensures
+     * only sensible values are stored. Prevents type mismatches and injection attacks.
+     */
+    CK_RV v_validate_attribute(CK_ATTRIBUTE_TYPE type, CK_VOID_PTR pValue, CK_ULONG ulValueLen) const;
 };
 
-} // namespace vhsm::keystore
+} // namespace vhsm::keystore::internal
 
 #endif // VHSM_KEYSTORE_ATTRIBUTE_STORE_H

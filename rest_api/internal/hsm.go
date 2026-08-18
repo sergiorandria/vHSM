@@ -2,6 +2,7 @@ package internal
 
 import (
 	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"log"
 	"strings"
@@ -139,38 +140,92 @@ func (h *HSMService) Encrypt(plaintext []byte) (iv []byte, ciphertext []byte, er
 	return iv, ciphertext, nil
 }
 
-// signHash signs an already-computed SHA256 digest (given as hex) using the
-// long-lived HSM session. The caller is responsible for ensuring hashHex is
-// the exact hash that should be reported alongside the signature, so the
-// signed value and the displayed hash are provably the same bytes.
-// Ajoutez cette méthode à votre struct HSMService dans hsm.go
+// Sign signs the provided data using the HSM private key identified by
+// h.signLabel.  The signing mechanism is auto-detected: CKM_SHA256_RSA_PKCS
+// for RSA keys, CKM_ECDSA_SHA256 for EC keys, determined by reading CKA_KEY_TYPE.
 func (h *HSMService) Sign(data []byte) ([]byte, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// 1. Ouvrir session
+	// 1. Open a session
 	session, err := h.ctx.OpenSession(h.slot, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("session open failed: %w", err)
 	}
 	defer h.ctx.CloseSession(session)
-	h.ctx.Login(session, pkcs11.CKU_USER, h.pin)
+
+	if err := h.ctx.Login(session, pkcs11.CKU_USER, h.pin); err != nil {
+		return nil, fmt.Errorf("login failed: %w", err)
+	}
 	defer h.ctx.Logout(session)
 
-	// 2. Trouver la clé privée (Attention : utiliser CKO_PRIVATE_KEY)
+	// 2. Find the private key by label
 	template := []*pkcs11.Attribute{
 		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PRIVATE_KEY),
 		pkcs11.NewAttribute(pkcs11.CKA_LABEL, h.signLabel),
 	}
-	h.ctx.FindObjectsInit(session, template)
-	objs, _, _ := h.ctx.FindObjects(session, 1)
-	h.ctx.FindObjectsFinal(session)
+	if err := h.ctx.FindObjectsInit(session, template); err != nil {
+		return nil, fmt.Errorf("FindObjectsInit failed: %w", err)
+	}
+	objs, moreExist, err := h.ctx.FindObjects(session, 1)
+	if ferr := h.ctx.FindObjectsFinal(session); ferr != nil {
+		return nil, fmt.Errorf("FindObjectsFinal failed: %w", ferr)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("FindObjects failed: %w", err)
+	}
 	if len(objs) == 0 {
-		return nil, fmt.Errorf("private key not found")
+		return nil, fmt.Errorf("private key with label %q not found", h.signLabel)
+	}
+	if moreExist {
+		return nil, fmt.Errorf("multiple private keys match label %q; expected exactly one", h.signLabel)
 	}
 
-	// 3. Signer (CKM_SHA256_RSA_PKCS ou CKM_ECDSA selon votre clé)
-	mech := []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_SHA256_RSA_PKCS, nil)}
-	h.ctx.SignInit(session, mech, objs[0])
-	return h.ctx.Sign(session, data)
+	// 3. Detect the key type to select the correct signing mechanism (RSA vs ECDSA)
+	keyTypeAttrs, err := h.ctx.GetAttributeValue(session, objs[0],
+		[]*pkcs11.Attribute{pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, nil)})
+	if err != nil {
+		return nil, fmt.Errorf("GetAttributeValue (CKA_KEY_TYPE) failed: %w", err)
+	}
+	if len(keyTypeAttrs) == 0 || len(keyTypeAttrs[0].Value) == 0 {
+		return nil, fmt.Errorf("CKA_KEY_TYPE attribute not returned for key %q", h.signLabel)
+	}
+
+	// CKA_KEY_TYPE is a CK_ULONG; decode using native byte order (little-endian
+	// on x86_64 Linux, matching how the pkcs11 library encodes uintToBytes).
+	val := keyTypeAttrs[0].Value
+	var keyType uint
+	switch len(val) {
+	case 8:
+		keyType = uint(binary.LittleEndian.Uint64(val))
+	case 4:
+		keyType = uint(binary.LittleEndian.Uint32(val))
+	case 2:
+		keyType = uint(binary.LittleEndian.Uint16(val))
+	case 1:
+		keyType = uint(val[0])
+	default:
+		return nil, fmt.Errorf("unexpected CKA_KEY_TYPE size: %d bytes", len(val))
+	}
+
+	// CKK_RSA = 0x00000000, CKK_EC = 0x00000003 (per PKCS#11, as defined in miekg/pkcs11)
+	var mech *pkcs11.Mechanism
+	switch keyType {
+	case pkcs11.CKK_RSA:
+		mech = pkcs11.NewMechanism(pkcs11.CKM_SHA256_RSA_PKCS, nil)
+	case pkcs11.CKK_EC:
+		mech = pkcs11.NewMechanism(pkcs11.CKM_ECDSA_SHA256, nil)
+	default:
+		return nil, fmt.Errorf("unsupported key type 0x%04X for key %q (expected RSA or EC)", keyType, h.signLabel)
+	}
+
+	// 4. Sign the data
+	if err := h.ctx.SignInit(session, []*pkcs11.Mechanism{mech}, objs[0]); err != nil {
+		return nil, fmt.Errorf("SignInit failed: %w", err)
+	}
+	sig, err := h.ctx.Sign(session, data)
+	if err != nil {
+		return nil, fmt.Errorf("Sign failed: %w", err)
+	}
+	return sig, nil
 }

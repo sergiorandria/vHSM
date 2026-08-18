@@ -5,6 +5,7 @@ target_sources(vhsm_keystore
     hsm_object.cpp
     attribute_store.cpp
     object_store.cpp
+    internal/token_core.cpp
     key_wrap.cpp
     key_fingerprint.cpp
     token.cpp 

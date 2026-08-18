@@ -19,7 +19,7 @@ namespace vhsm::utils {
 [[nodiscard]]
 std::string uuid_v4();
 
-// Base64  (RFC 4648 §4 — standard alphabet, with padding)
+/// Base64  (RFC 4648 §4 — standard alphabet, with padding)
 /// Encode arbitrary bytes to standard Base64.
 [[nodiscard]]
 std::string base64_encode(std::span<const std::byte> data);

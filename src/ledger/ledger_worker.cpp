@@ -43,18 +43,19 @@ void LedgerWorker::drain_and_stop() {
         // For simplicity, we'll just try once and if it fails, we drop it and notify.
         auto entry = ledger_client_.submit_record(record);
 
-        // So technically this is just bullshit, 
-        // ledger entry should be immutable.
-
         if (!entry) {
-            // Notify about the failure
-            // We'll create a notification event for LEDGER_COMMIT_FAILED
-            // We need to create a NotificationEvent and publish it.
-            // We'll skip the details for now, but we can call:
-            // notification_bus_.publish(notification::NotificationEvent{ ... });
-            // Since we don't have the full notification event structure here, we'll leave a comment.
-            // In a real implementation, we would create the event and publish it.
-            std::cerr << "Failed to submit record during shutdown: " << record.record_id << std::endl;
+            // Notify about the failure during shutdown drain.
+            vhsm::notification::NotificationEvent event;
+            event.type = vhsm::notification::NotificationEvent::EventType::LEDGER_COMMIT_FAILED;
+            event.severity = vhsm::notification::NotificationEvent::Severity::CRITICAL;
+            event.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            event.source = "LedgerWorker";
+            event.actor = "system";
+            event.summary = "Failed to submit record during shutdown drain: " + record.record_id;
+            event.detail_json = "{}";
+            event.hsm_instance = "";
+            notification_bus_.publish(event);
         }
     }
 }
@@ -102,11 +103,19 @@ void LedgerWorker::worker_loop() {
         }
 
         if (!submitted) {
-            // After max retries, notify about the failure
-            // We'll create a notification event for LEDGER_COMMIT_FAILED
-            // For now, we'll just log an error.
-            std::cerr << "Failed to submit record after " << MAX_RETRIES << " retries: " << record.record_id << std::endl;
-            // TODO: Publish a notification event for LEDGER_COMMIT_FAILED
+            // After max retries, notify about the failure.
+            vhsm::notification::NotificationEvent event;
+            event.type = vhsm::notification::NotificationEvent::EventType::LEDGER_COMMIT_FAILED;
+            event.severity = vhsm::notification::NotificationEvent::Severity::CRITICAL;
+            event.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            event.source = "LedgerWorker";
+            event.actor = "system";
+            event.summary = "Failed to submit record after " + std::to_string(MAX_RETRIES) +
+                            " retries: " + record.record_id;
+            event.detail_json = "{}";
+            event.hsm_instance = "";
+            notification_bus_.publish(event);
         }
     }
 }

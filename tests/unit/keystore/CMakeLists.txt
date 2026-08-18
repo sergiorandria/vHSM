@@ -8,6 +8,7 @@ add_executable(vhsm_keystore_test
     key_wrap_test.cpp
     object_store_test.cpp
     key_fingerprint_test.cpp
+    token_core_test.cpp
 )
 
 # Include the project root so tests can include headers as <keystore/...>

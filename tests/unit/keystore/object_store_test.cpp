@@ -3,82 +3,73 @@
 #include "../../../src/keystore/object_store.h"
 
 using namespace vhsm::keystore;
+using namespace vhsm::keystore::internal;
 
-TEST(ObjectStore, CreateAndGetObject) {
-    ObjectStore store;
+TEST(v_ObjectStore_M1, CreateAndGetObject) {
+    v_ObjectStore_M1 store;
 
-    auto [handle, objPtr] = store.createObject<HsmObject>(ObjectType::SECRET_KEY);
+    auto [handle, objPtr] = store.v_create_object<HsmObject>(ObjectType::SECRET_KEY);
     EXPECT_NE(handle, CK_INVALID_HANDLE);
     EXPECT_NE(objPtr, nullptr);
 
-    // Retrieve the object
-    HsmObject* retrieved = store.getObject(handle);
+    HsmObject* retrieved = store.v_get_object(handle);
     EXPECT_EQ(retrieved, objPtr);
     EXPECT_NE(retrieved, nullptr);
 
-    // Check that the object is of the correct type
     EXPECT_EQ(retrieved->getType(), ObjectType::SECRET_KEY);
 }
 
-TEST(ObjectStore, DestroyObject) {
-    ObjectStore store;
+TEST(v_ObjectStore_M1, DestroyObject) {
+    v_ObjectStore_M1 store;
 
-    auto [handle, objPtr] = store.createObject<HsmObject>(ObjectType::SECRET_KEY);
+    auto [handle, objPtr] = store.v_create_object<HsmObject>(ObjectType::SECRET_KEY);
     EXPECT_NE(handle, CK_INVALID_HANDLE);
 
-    // Destroy the object
-    bool destroyed = store.destroyObject(handle);
+    bool destroyed = store.v_destroy_object(handle);
     EXPECT_TRUE(destroyed);
 
-    // After destruction, getObject should return nullptr
-    HsmObject* retrieved = store.getObject(handle);
+    HsmObject* retrieved = store.v_get_object(handle);
     EXPECT_EQ(retrieved, nullptr);
 
-    // Handle should now be invalid
-    EXPECT_FALSE(store.isValidHandle(handle));
+    EXPECT_FALSE(store.v_is_valid_handle(handle));
 }
 
-TEST(ObjectStore, GetObjectCount) {
-    ObjectStore store;
-    EXPECT_EQ(store.getObjectCount(), 0u);
+TEST(v_ObjectStore_M1, GetObjectCount) {
+    v_ObjectStore_M1 store;
+    EXPECT_EQ(store.v_get_object_count(), 0u);
 
-    auto [handle1, obj1] = store.createObject<HsmObject>(ObjectType::SECRET_KEY);
-    EXPECT_EQ(store.getObjectCount(), 1u);
+    auto [handle1, obj1] = store.v_create_object<HsmObject>(ObjectType::SECRET_KEY);
+    EXPECT_EQ(store.v_get_object_count(), 1u);
 
-    auto [handle2, obj2] = store.createObject<HsmObject>(ObjectType::PUBLIC_KEY);
-    EXPECT_EQ(store.getObjectCount(), 2u);
+    auto [handle2, obj2] = store.v_create_object<HsmObject>(ObjectType::PUBLIC_KEY);
+    EXPECT_EQ(store.v_get_object_count(), 2u);
 
-    // Destroy one object
-    store.destroyObject(handle1);
-    EXPECT_EQ(store.getObjectCount(), 1u);
+    store.v_destroy_object(handle1);
+    EXPECT_EQ(store.v_get_object_count(), 1u);
 
-    // Destroy the other
-    store.destroyObject(handle2);
-    EXPECT_EQ(store.getObjectCount(), 0u);
+    store.v_destroy_object(handle2);
+    EXPECT_EQ(store.v_get_object_count(), 0u);
 }
 
-TEST(ObjectStore, IsValidHandle) {
-    ObjectStore store;
+TEST(v_ObjectStore_M1, IsValidHandle) {
+    v_ObjectStore_M1 store;
 
-    // Invalid handle (0) should be invalid
-    EXPECT_FALSE(store.isValidHandle(CK_INVALID_HANDLE));
+    EXPECT_FALSE(store.v_is_valid_handle(CK_INVALID_HANDLE));
 
-    auto [handle, objPtr] = store.createObject<HsmObject>(ObjectType::SECRET_KEY);
-    EXPECT_TRUE(store.isValidHandle(handle));
+    auto [handle, objPtr] = store.v_create_object<HsmObject>(ObjectType::SECRET_KEY);
+    EXPECT_TRUE(store.v_is_valid_handle(handle));
 
-    // Destroy the object
-    store.destroyObject(handle);
-    EXPECT_FALSE(store.isValidHandle(handle));
+    store.v_destroy_object(handle);
+    EXPECT_FALSE(store.v_is_valid_handle(handle));
 }
 
-TEST(ObjectStore, CreateObjectWithArgs) {
-    ObjectStore store;
+TEST(v_ObjectStore_M1, CreateObjectWithArgs) {
+    v_ObjectStore_M1 store;
 
-    // Create an object with sensitive=true, extractable=false
-    auto [handle, objPtr] = store.createObject<HsmObject>(ObjectType::SECRET_KEY, true, false);
+    auto [handle, objPtr] = store.v_create_object<HsmObject>(ObjectType::SECRET_KEY, true, false);
     EXPECT_NE(handle, CK_INVALID_HANDLE);
 
-    HsmObject* retrieved = store.getObject(handle);
+    HsmObject* retrieved = store.v_get_object(handle);
     EXPECT_NE(retrieved, nullptr);
     EXPECT_EQ(retrieved->getType(), ObjectType::SECRET_KEY);
     EXPECT_TRUE(retrieved->isSensitive());

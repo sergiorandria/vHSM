@@ -4,11 +4,12 @@ target_sources(vhsm_crypto
     PRIVATE
     rsa.cpp
     ecc.cpp
+    crypto_engine.cpp
     aes_gcm.cpp
     ctr_drbg_aes256.cpp
     SecureRNG.cpp
     aes_ecb.cpp
-    gentry_ideal_lattice.cpp 
+    gentry_ideal_lattice.cpp
     gentry_polynomial.cpp
 )
 

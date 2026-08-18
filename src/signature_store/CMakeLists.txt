@@ -12,6 +12,13 @@ target_sources(vhsm_signature_store
     db_hmac_key.cpp
     row_integrity.cpp
     signature_repository.cpp
+    ../audit/audit_log.cpp
+    signature_dispatcher.cpp
+    signature_query.cpp
+    verification_service.cpp
+    internal/signature_dispatcher_core.cpp
+    internal/signature_query_core.cpp
+    internal/verification_service_core.cpp
 )
 
 target_include_directories(vhsm_signature_store
@@ -23,5 +30,7 @@ target_link_libraries(vhsm_signature_store
     vhsm_core
     vhsm_crypto
     vhsm_keystore
+    vhsm_notification
+    vhsm_ledger
     OpenSSL::SSL
 )

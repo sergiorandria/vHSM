@@ -7,6 +7,7 @@ add_executable(vhsm_crypto_test
     rsa_test.cpp
     aes_gcm_test.cpp
     ecc_test.cpp
+    crypto_engine_test.cpp
     ctr_drbg_aes256_test.cpp
     mdctxguard_test.cpp
     cipherctxguard_test.cpp

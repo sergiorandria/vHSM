@@ -124,7 +124,10 @@ std::unique_ptr<Identity> FileSystemWallet::get(const std::string& label) {
     long certLen = ftell(certFp);
     fseek(certFp, 0, SEEK_SET);
     std::string cert(certLen, '\0');
-    fread(&cert[0], 1, certLen, certFp);
+    if (fread(&cert[0], 1, certLen, certFp) != static_cast<size_t>(certLen)) {
+        fclose(certFp);
+        return nullptr;
+    }
     fclose(certFp);
 
     FILE* keyFp = fopen(keyFile.c_str(), "r");
@@ -135,7 +138,10 @@ std::unique_ptr<Identity> FileSystemWallet::get(const std::string& label) {
     long keyLen = ftell(keyFp);
     fseek(keyFp, 0, SEEK_SET);
     std::string key(keyLen, '\0');
-    fread(&key[0], 1, keyLen, keyFp);
+    if (fread(&key[0], 1, keyLen, keyFp) != static_cast<size_t>(keyLen)) {
+        fclose(keyFp);
+        return nullptr;
+    }
     fclose(keyFp);
 
     FILE* mspFp = fopen(mspFile.c_str(), "r");
@@ -146,7 +152,10 @@ std::unique_ptr<Identity> FileSystemWallet::get(const std::string& label) {
     long mspLen = ftell(mspFp);
     fseek(mspFp, 0, SEEK_SET);
     std::string msp(mspLen, '\0');
-    fread(&msp[0], 1, mspLen, mspFp);
+    if (fread(&msp[0], 1, mspLen, mspFp) != static_cast<size_t>(mspLen)) {
+        fclose(mspFp);
+        return nullptr;
+    }
     fclose(mspFp);
 
     return std::make_unique<Identity>(msp, cert, key);

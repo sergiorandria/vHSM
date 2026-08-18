@@ -1,10 +1,32 @@
-#ifndef VHSM_PKCS11_TYPES_H
-#define VHSM_PKCS11_TYPES_H
-
 /*
  * pkcs11_types.h
  *
  * The public PKCS#11 (v3.0) ABI surface used by the vHSM PKCS#11 module.
+ *
+ * WHY this header exists: The PKCS#11 standard defines a C ABI (structs, constants, function
+ * pointers). Applications link against this ABI, not the implementation. This header declares
+ * all types, constants, and the function pointer table (CK_FUNCTION_LIST). The implementation
+ * lives in function_list.cpp (which exports C symbols) and p11_*.cpp files (which implement
+ * each C function).
+ *
+ * WHY scalar types are in ../core/types.h: CK_ULONG, CK_BYTE, CK_UTF8CHAR, etc. are base types
+ * used by multiple modules (core, keystore, crypto). Defining them once (in core/types.h) avoids
+ * duplication and ensures consistency.
+ *
+ * WHY constants use inline constexpr (not macros): PKCS#11 traditionally uses #define macros
+ * (e.g., #define CKO_PRIVATE_KEY 0x03). But macros pollute the namespace and can't be scoped.
+ * vHSM uses inline constexpr variables in the global namespace instead:
+ *   inline constexpr CK_ULONG CKO_PRIVATE_KEY = 0x00000003UL;
+ * This is cleaner (can be namespaced if needed) and the compiler can optimize them away.
+ * However, we avoid C++ namespaces for CKO_/CKK_/CKA_ constants to match PKCS#11 conventions
+ * (other code may have vhsm::keystore::CKO_PRIVATE_KEY, so we don't shadow them).
+ *
+ * WHY CK_FUNCTION_LIST is a struct of function pointers: PKCS#11 spec defines this pattern.
+ * Applications get a pointer to CK_FUNCTION_LIST, then call functions through it:
+ *   CK_FUNCTION_LIST_PTR pFL;
+ *   C_GetFunctionList(&pFL);
+ *   pFL->C_Sign(...);  // Call through the pointer
+ * This allows the library to export multiple implementations (e.g., FIPS and non-FIPS).
  *
  * The scalar base types (CK_ULONG, CK_BYTE, ...) and a first batch of
  * constants are shared with the rest of the project via "../core/types.h".
@@ -12,17 +34,13 @@
  * the CK_* structures, the remaining constants and the CK_FUNCTION_LIST
  * function pointer table.
  *
- * Attribute/object-class/key-type constants deliberately use C++ inline
- * constexpr variables in the global namespace instead of preprocessor
- * macros: the keystore layer already exposes identically-named constexpr
- * constants inside namespace vhsm::keystore, and macros with the same name
- * would corrupt those declarations when both headers are included by the
- * same translation unit.
- *
  * This header is C++-only (it builds on "../core/types.h"), matching the
  * rest of the project. The exported C symbol entry points live in the
  * function_list.cpp translation unit and are declared `extern "C"` there.
  */
+
+#ifndef VHSM_PKCS11_TYPES_H
+#define VHSM_PKCS11_TYPES_H
 
 #include "../core/types.h"
 
@@ -31,14 +49,26 @@
 // ---------------------------------------------------------------------------
 // Miscellaneous standard values
 // ---------------------------------------------------------------------------
+// WHY CK_UNAVAILABLE_INFORMATION: PKCS#11 uses this special value (~0UL) to indicate
+// "information not available" (e.g., ulFreePublicMemory when not supported). Defined
+// as a macro for C compatibility; also used as a placeholder in token info.
 #define CK_UNAVAILABLE_INFORMATION       (~(CK_ULONG)0)
+
+// WHY CK_EFFECTIVELY_INFINITE: Represents unlimited capacity (e.g., max session count).
+// Set to 0UL by convention; callers interpret 0 as "unlimited".
 #define CK_EFFECTIVELY_INFINITE          0UL
 
+// WHY CK_INVALID_HANDLE: All PKCS#11 handles (slot, session, object) use CK_ULONG.
+// 0 is reserved to mean "invalid" (CK_INVALID_HANDLE). Valid handles are >0.
 inline constexpr CK_ULONG CK_INVALID_HANDLE = 0UL;
 
 // ---------------------------------------------------------------------------
 // CK_C_INITIALIZE_ARGS
 // ---------------------------------------------------------------------------
+// WHY CK_C_INITIALIZE_ARGS: Passed to C_Initialize to configure the library.
+// Includes function pointers for mutex operations (if the application wants to
+// provide threading support). vHSM uses the OS mutexes (pthread); the C++ layer
+// handles locking. Most applications pass NULL for pInitArgs (use library defaults).
 typedef struct CK_C_INITIALIZE_ARGS {
     CK_VOID_PTR CreateMutex;
     CK_VOID_PTR DestroyMutex;
@@ -56,6 +86,9 @@ typedef CK_C_INITIALIZE_ARGS *CK_C_INITIALIZE_ARGS_PTR;
 // ---------------------------------------------------------------------------
 // CK_VERSION / CK_INFO / CK_SLOT_INFO / CK_TOKEN_INFO
 // ---------------------------------------------------------------------------
+// WHY CK_VERSION: Major.minor version pair (e.g., 3.0 for PKCS#11 v3.0).
+// Used in CK_INFO (library version), CK_SLOT_INFO (hardware/firmware version),
+// and CK_TOKEN_INFO. Each field is a single byte.
 typedef struct CK_VERSION {
     CK_BYTE major;
     CK_BYTE minor;
@@ -63,6 +96,9 @@ typedef struct CK_VERSION {
 
 typedef CK_VERSION *CK_VERSION_PTR;
 
+// WHY CK_INFO: Library metadata. Returned by C_GetInfo. Includes PKCS#11 version
+// (cryptokiVersion), library name (manufacturerID), description, and library version.
+// Applications use this to verify compatibility before using the library.
 typedef struct CK_INFO {
     CK_VERSION cryptokiVersion;
     CK_UTF8CHAR manufacturerID[32];
@@ -73,6 +109,9 @@ typedef struct CK_INFO {
 
 typedef CK_INFO *CK_INFO_PTR;
 
+// WHY CK_SLOT_INFO: Slot metadata. Returned by C_GetSlotInfo. A slot is a logical
+// card reader. vHSM presents one slot (slotID=0). Applications query slot info
+// to check if a token is present, hardware version, firmware version, etc.
 typedef struct CK_SLOT_INFO {
     CK_UTF8CHAR slotDescription[64];
     CK_UTF8CHAR manufacturerID[32];
@@ -83,6 +122,10 @@ typedef struct CK_SLOT_INFO {
 
 typedef CK_SLOT_INFO *CK_SLOT_INFO_PTR;
 
+// WHY CK_TOKEN_INFO: Token (card) metadata. Returned by C_GetTokenInfo. Includes
+// token label, manufacturer, model, serial, flags (logged-in state, PIN locked, etc.),
+// memory statistics, hardware/firmware version, and UTC time (if clock is on token).
+// Applications use this to determine token capabilities and state.
 typedef struct CK_TOKEN_INFO {
     CK_UTF8CHAR label[32];
     CK_UTF8CHAR manufacturerID[32];
@@ -105,6 +148,12 @@ typedef struct CK_TOKEN_INFO {
 } CK_TOKEN_INFO;
 
 typedef CK_TOKEN_INFO *CK_TOKEN_INFO_PTR;
+
+// WHY token flags (CKF_RNG, CKF_LOGIN_REQUIRED, etc.): Communicate capabilities
+// and state. CKF_LOGIN_REQUIRED means a PIN is needed. CKF_USER_PIN_INITIALIZED
+// means the user PIN has been set. CKF_USER_PIN_LOCKED means PIN is locked
+// (too many failed attempts). Applications use these to adapt (e.g., prompt for PIN
+// if CKF_LOGIN_REQUIRED and not yet logged in).
 
 // Token flags
 #define CKF_RNG                          0x00000001UL
@@ -130,6 +179,10 @@ typedef CK_TOKEN_INFO *CK_TOKEN_INFO_PTR;
 // ---------------------------------------------------------------------------
 // CK_MECHANISM / CK_MECHANISM_INFO
 // ---------------------------------------------------------------------------
+// WHY CK_MECHANISM: Specifies an algorithm and optional parameters for an operation.
+// mechanism: the algorithm (e.g., CKM_SHA256_RSA_PKCS for RSA-SHA256 signing).
+// pParameter: optional algorithm-specific parameters (e.g., RSA-PSS salt, AES-GCM IV).
+// ulParameterLen: length of pParameter (0 if no parameters).
 typedef struct CK_MECHANISM {
     CK_MECHANISM_TYPE mechanism;
     CK_VOID_PTR pParameter;
@@ -138,6 +191,9 @@ typedef struct CK_MECHANISM {
 
 typedef CK_MECHANISM *CK_MECHANISM_PTR;
 
+// WHY CK_MECHANISM_INFO: Capabilities of a mechanism. Returned by C_GetMechanismInfo.
+// ulMinKeySize, ulMaxKeySize: valid key size range (e.g., RSA: 512-4096 bits).
+// flags: what operations are supported (CKF_SIGN, CKF_VERIFY, CKF_ENCRYPT, etc.).
 typedef struct CK_MECHANISM_INFO {
     CK_ULONG ulMinKeySize;
     CK_ULONG ulMaxKeySize;
@@ -145,6 +201,11 @@ typedef struct CK_MECHANISM_INFO {
 } CK_MECHANISM_INFO;
 
 typedef CK_MECHANISM_INFO *CK_MECHANISM_INFO_PTR;
+
+// WHY mechanism capability flags (CKF_ENCRYPT, CKF_SIGN, etc.): Applications query
+// mechanism info to check if a capability is supported. For example, if an application
+// needs CKM_SHA256_RSA_PKCS for signing but the library doesn't support it, it can try
+// an alternative (e.g., CKM_SHA512_RSA_PKCS).
 
 // Mechanism capability flags
 #define CKF_ENCRYPT             0x00000100UL
@@ -173,6 +234,11 @@ typedef CK_MECHANISM_INFO *CK_MECHANISM_INFO_PTR;
 // Object classes (globally-scoped inline constexpr, not macros — see header
 // comment).
 // ---------------------------------------------------------------------------
+// WHY object classes: PKCS#11 organizes objects by type. CKO_PRIVATE_KEY is a private
+// key. CKO_PUBLIC_KEY is a public key. CKO_CERTIFICATE is a certificate. CKO_DATA is
+// arbitrary data. The class determines which operations are valid (e.g., CKO_PRIVATE_KEY
+// can be used to sign; CKO_PUBLIC_KEY can verify). vHSM supports PRIVATE_KEY, PUBLIC_KEY,
+// and CERTIFICATE.
 inline constexpr CK_ULONG CKO_DATA             = 0x00000000UL;
 inline constexpr CK_ULONG CKO_CERTIFICATE      = 0x00000001UL;
 inline constexpr CK_ULONG CKO_PUBLIC_KEY       = 0x00000002UL;
@@ -187,6 +253,10 @@ inline constexpr CK_ULONG CKO_VENDOR_DEFINED   = 0x80000000UL;
 // ---------------------------------------------------------------------------
 // Key types
 // ---------------------------------------------------------------------------
+// WHY key types (CKK_RSA, CKK_EC, CKK_AES): Specify the algorithm of a key.
+// CKK_RSA = RSA key. CKK_EC = Elliptic curve key. CKK_AES = AES symmetric key.
+// vHSM supports RSA and EC for signing/verification, AES for (potential) encryption.
+// The key type determines which operations are valid (e.g., RSA can sign with PKCS or PSS).
 inline constexpr CK_ULONG CKK_RSA              = 0x00000000UL;
 inline constexpr CK_ULONG CKK_DSA              = 0x00000001UL;
 inline constexpr CK_ULONG CKK_DH               = 0x00000002UL;
@@ -214,6 +284,11 @@ inline constexpr CK_ULONG CKK_VENDOR_DEFINED   = 0x80000000UL;
 // ---------------------------------------------------------------------------
 // Attribute types
 // ---------------------------------------------------------------------------
+// WHY attribute types (CKA_LABEL, CKA_ID, CKA_SIGN, etc.): Objects are described by
+// attributes. CKA_LABEL is the human-readable name. CKA_ID is a unique identifier within
+// a token. CKA_SIGN indicates if the key can be used for signing. CKA_PRIVATE indicates
+// if the object is private (session or token private) or public. vHSM validates attributes
+// on object creation (C_CreateObject) and supports querying them (C_GetAttributeValue).
 inline constexpr CK_ULONG CKA_CLASS            = 0x00000000UL;
 inline constexpr CK_ULONG CKA_TOKEN            = 0x00000001UL;
 inline constexpr CK_ULONG CKA_PRIVATE          = 0x00000002UL;
@@ -278,6 +353,11 @@ inline constexpr CK_ULONG CKA_VENDOR_DEFINED   = 0x80000000UL;
 // ---------------------------------------------------------------------------
 // Remaining return codes
 // ---------------------------------------------------------------------------
+// WHY error codes (CKR_*): Each C function returns a CK_RV (return value). The standard
+// defines error codes like CKR_OK (success), CKR_ARGUMENTS_BAD (invalid args),
+// CKR_SIGNATURE_INVALID (verify failed). The C++ implementation throws exceptions; the
+// C wrapper converts exceptions to error codes before returning. This preserves the
+// PKCS#11 error model for C applications.
 #define CKR_CRYPTOKI_NOT_INITIALIZED     ((CK_RV) 0x000000D0UL)
 #define CKR_CRYPTOKI_ALREADY_INITIALIZED ((CK_RV) 0x000000D1UL)
 #define CKR_FUNCTION_NOT_PARALLEL        ((CK_RV) 0x000000D2UL)
@@ -292,6 +372,13 @@ inline constexpr CK_ULONG CKA_VENDOR_DEFINED   = 0x80000000UL;
 // ---------------------------------------------------------------------------
 // PKCS#11 v3.0 mechanism types (additional to the subset in core/types.h)
 // ---------------------------------------------------------------------------
+// WHY mechanism types (CKM_RSA_PKCS, CKM_SHA256_RSA_PKCS, CKM_ECDSA_SHA256, etc.):
+// The mechanism tells the library what algorithm to use and how to process data.
+// CKM_RSA_PKCS: RSA signature with PKCS#1 v1.5 padding (RSA-PKCS).
+// CKM_SHA256_RSA_PKCS: RSA signature with SHA256 digest and PKCS#1 v1.5 padding.
+// CKM_RSA_PKCS_PSS: RSA-PSS padding (with configurable salt length).
+// CKM_ECDSA_SHA256: ECDSA with SHA256.
+// vHSM advertises these mechanisms; applications select which to use.
 #define CKM_RSA_PKCS_KEY_PAIR_GEN  0x00000000UL
 #define CKM_RSA_PKCS               0x00000001UL
 #define CKM_RSA_X_509              0x00000003UL
@@ -327,6 +414,10 @@ inline constexpr CK_ULONG CKA_VENDOR_DEFINED   = 0x80000000UL;
 // ---------------------------------------------------------------------------
 // CK_GCM_PARAMS (used by CKM_AES_GCM)
 // ---------------------------------------------------------------------------
+// WHY CK_GCM_PARAMS: AES-GCM (authenticated encryption) requires IV (Initialization Vector),
+// optional AAD (Additional Authenticated Data), and tag length. This struct packages them.
+// pIv: pointer to IV bytes. pAAD: optional pointer to AAD bytes. ulTagBits: tag length in bits.
+// Not implemented in vHSM (signing-focused); provided for PKCS#11 compliance skeleton.
 typedef struct CK_GCM_PARAMS {
     CK_BYTE_PTR pIv;
     CK_ULONG ulIvLen;
@@ -341,6 +432,9 @@ typedef CK_GCM_PARAMS *CK_GCM_PARAMS_PTR;
 // ---------------------------------------------------------------------------
 // C/C++ POD pointer aliases
 // ---------------------------------------------------------------------------
+// WHY pointer typedefs (CK_SLOT_ID_PTR, etc.): PKCS#11 convention for C compatibility.
+// CK_SLOT_ID_PTR = pointer to CK_SLOT_ID. These are used for output parameters (e.g.,
+// C_GetSlotList returns an array of slot IDs via a pointer). Wrapper convenience.
 typedef CK_SLOT_ID *CK_SLOT_ID_PTR;
 typedef CK_MECHANISM_TYPE *CK_MECHANISM_TYPE_PTR;
 typedef CK_BYTE *CK_BYTE_PTR;
@@ -350,10 +444,22 @@ typedef CK_UTF8CHAR *CK_UTF8CHAR_PTR;
 // CK_FUNCTION_LIST: function pointer table
 // (the struct type itself is defined after the per-function typedefs)
 // ---------------------------------------------------------------------------
+// WHY CK_FUNCTION_LIST: The standard way for PKCS#11 libraries to export functions.
+// Applications call C_GetFunctionList() to get a pointer to this table, then invoke
+// functions through it:
+//   CK_FUNCTION_LIST_PTR pFL = NULL;
+//   C_GetFunctionList(&pFL);
+//   pFL->C_Initialize(NULL);
+// This pattern allows the library to provide multiple implementations (e.g., FIPS vs non-FIPS)
+// or thread-safe vs non-thread-safe variants. vHSM provides one standard implementation.
 typedef struct CK_FUNCTION_LIST CK_FUNCTION_LIST;
 typedef CK_FUNCTION_LIST *CK_FUNCTION_LIST_PTR;
 typedef CK_FUNCTION_LIST_PTR *CK_FUNCTION_LIST_PTR_PTR;
 
+// WHY individual function pointer typedefs (CK_C_Initialize, CK_C_Finalize, etc.):
+// Each C function is represented by a typedef. These are used in the CK_FUNCTION_LIST
+// struct to define the table of function pointers. Typedefs ensure type safety: if
+// the implementation has the wrong signature, the compiler catches it.
 typedef CK_RV (*CK_C_Initialize)(CK_VOID_PTR pInitArgs);
 typedef CK_RV (*CK_C_Finalize)(CK_VOID_PTR pReserved);
 typedef CK_RV (*CK_C_GetInfo)(CK_INFO_PTR pInfo);
@@ -423,6 +529,10 @@ typedef CK_RV (*CK_C_GetFunctionStatus)(CK_SESSION_HANDLE hSession);
 typedef CK_RV (*CK_C_CancelFunction)(CK_SESSION_HANDLE hSession);
 typedef CK_RV (*CK_C_WaitForSlotEvent)(CK_FLAGS flags, CK_SLOT_ID_PTR pSlot, CK_VOID_PTR pReserved);
 
+// WHY CK_FUNCTION_LIST struct: Aggregates all function pointers. The version field
+// indicates which set of functions are available (for binary compatibility). Applications
+// should check version and only call functions they know about. The struct members are
+// named identically to the C symbols (C_Initialize, C_Sign, etc.) for consistency.
 struct CK_FUNCTION_LIST {
     CK_VERSION version;
     CK_C_Initialize C_Initialize;
