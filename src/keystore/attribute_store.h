@@ -38,6 +38,12 @@ constexpr CK_ULONG CKO_OTHER            = 0x00000010;
  * - CKA_SENSITIVE: When true, object becomes non-copyable
  * - CKA_EXTRACTABLE: When false, prevents key extraction
  * - Read-only attributes: CKA_TOKEN, CKA_PRIVATE (after initialization)
+ *
+ * Object-backed attributes (CKA_CLASS, CKA_TOKEN, CKA_PRIVATE,
+ * CKA_SENSITIVE, CKA_EXTRACTABLE, CKA_ID) are read from dedicated HsmObject
+ * fields; all other attributes — CKA_LABEL, CKA_VALUE, CKA_KEY_TYPE, key
+ * parameters, ... — are persisted in the object's own attribute map, so
+ * they survive across AttributeStore instantiations.
  */
 class AttributeStore {
 public:
@@ -71,12 +77,6 @@ public:
 
 private:
     HsmObject& object_;
-    
-    // Holds blob attributes that have no dedicated field in HsmObject
-    // (CKA_LABEL, CKA_VALUE). Key = CKA_* constant, value = raw bytes.
-    // Maybe a hardened data structure is preferred here.
-    std::unordered_map<CK_ATTRIBUTE_TYPE, std::vector<u8>> extraAttrs_;
-
 
     // Helper to check if an attribute is read-only for this object
     bool isReadOnly(CK_ATTRIBUTE_TYPE type) const;

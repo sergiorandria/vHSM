@@ -9,6 +9,7 @@
 #include <vector>
 #include <memory>
 #include <span>
+#include <unordered_map>
 
 namespace vhsm::keystore {
 enum class ObjectType : u8 {
@@ -26,7 +27,8 @@ enum class ObjectType : u8 {
 // primitive types of the keystore
 class HsmObject {
 public:
-    HsmObject(ObjectType type, bool sensitive = false, bool extractable = true);
+    HsmObject(ObjectType type, bool sensitive = false, bool extractable = true,
+              bool token = false, bool priv = false);
 
     virtual ~HsmObject() noexcept;
 
@@ -41,6 +43,15 @@ public:
     ObjectType getType()      const noexcept;
     bool       isSensitive()  const noexcept;
     bool       isExtractable() const noexcept;
+    bool       isToken()      const noexcept;
+    bool       isPrivate()    const noexcept;
+
+    // Persistent generic attribute access.  Arbitrary CKA_* attributes a
+    // PKCS#11 application sets are kept on the object itself so they survive
+    // across AttributeStore instantiations.  AttributeStore is a friend and
+    // manipulates attrs_ directly.
+    [[nodiscard]] const std::vector<u8>* findAttribute(CK_ATTRIBUTE_TYPE type) const noexcept;
+    void setAttribute(CK_ATTRIBUTE_TYPE type, const u8* data, std::size_t len);
 
     // Returns a memory view, caller must not outlive this object.
     std::span<const u8> getId() const noexcept;
@@ -57,8 +68,12 @@ protected:
     ObjectType  type_;
     bool        sensitive_;
     bool        extractable_;
+    bool        token_;
+    bool        private_;
     SecureBuffer id_;
     bool        idSet_;
+
+    std::unordered_map<CK_ATTRIBUTE_TYPE, std::vector<u8>> attrs_;
 
     friend class AttributeStore;
 };
