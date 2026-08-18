@@ -12,6 +12,7 @@
 #include "../notification/notification_bus.h"
 #include "../notification/notification_event.h"
 #include "../audit/audit_log.h"
+#include "../ledger/ledger_worker.h"
 
 namespace vhsm::signature_store {
 namespace db {
@@ -22,12 +23,15 @@ public:
         IDbConnection& conn,
         vhsm::keystore::Token& token,
         vhsm::notification::NotificationBus& notification_bus,
-        vhsm::audit::AuditLog& audit_log);
+        vhsm::audit::AuditLog& audit_log,
+        vhsm::ledger::LedgerWorker* ledger_worker = nullptr);
 
     // Dispatch a signature operation result.
     // This method builds a SignatureRecord from the SignResult and context,
     // persists it to the DB, logs it to the audit log, publishes a notification,
-    // and asynchronously submits it to Rekor.
+    // and asynchronously submits it to the Hyperledger Fabric ledger via the
+    // ledger worker.  When the ledger worker reports success, the record's
+    // ledger_* fields are filled in and ledger_status becomes 'COMMITTED'.
     void dispatch(
         const vhsm::crypto::SignResult& sign_result,
         int64_t created_at,
@@ -47,6 +51,7 @@ private:
     SignatureRepository signature_repository_;
     vhsm::notification::NotificationBus& notification_bus_;
     vhsm::audit::AuditLog& audit_log_;
+    vhsm::ledger::LedgerWorker* ledger_worker_;  // optional; null disables anchoring
 };
 
 }  // namespace db

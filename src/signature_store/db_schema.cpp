@@ -6,9 +6,21 @@
 #include <chrono>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace vhsm::signature_store {
 namespace db {
+
+namespace {
+std::string join(const std::vector<std::string>& parts, const std::string& sep) {
+    std::string out;
+    for (std::size_t i = 0; i < parts.size(); ++i) {
+        if (i != 0) out += sep;
+        out += parts[i];
+    }
+    return out;
+}
+} // namespace
 
 DbSchema::DbSchema(IDbConnection& conn) : conn_(conn) {}
 
@@ -16,8 +28,8 @@ DbSchema::DbSchema(IDbConnection& conn) : conn_(conn) {}
 //
 // We generate SQL at runtime rather than embedding static strings so that
 // future backends can override individual fragments if needed.
-// The column order MUST stay stable — row_integrity.cpp constructs the HMAC
-// input by concatenating column values in this exact order
+// The column order MUST stay stable — signature_repository.cpp and
+// verification_service.cpp address columns by their position in this order.
 std::string DbSchema::sql_create_db_meta() const {
     return R"SQL(
 CREATE TABLE IF NOT EXISTS db_meta (
@@ -29,7 +41,7 @@ CREATE TABLE IF NOT EXISTS db_meta (
 
 std::string DbSchema::sql_create_signature_records() const {
     // Column ordering is canonical — do not reorder.
-    // No integrity_hmac column — ledger provides tamper evidence.
+    // No integrity_hmac column — the Fabric ledger provides tamper evidence.
     return R"SQL(
 CREATE TABLE IF NOT EXISTS signature_records (
     id                TEXT    NOT NULL PRIMARY KEY,
@@ -64,8 +76,8 @@ CREATE TABLE IF NOT EXISTS signature_verifications (
     verifier_session TEXT    NOT NULL,
     outcome          TEXT    NOT NULL
         CHECK(outcome IN ('VALID','INVALID','KEY_NOT_FOUND','ERROR')),
-    rekor_outcome    TEXT
-        CHECK(rekor_outcome IN ('PROOF_OK','PROOF_FAILED','NOT_CHECKED')),
+    ledger_outcome   TEXT
+        CHECK(ledger_outcome IN ('MATCH','MISMATCH','NOT_FOUND','NOT_CHECKED')),
     error_detail     TEXT
 );
 )SQL";
@@ -105,23 +117,6 @@ CREATE TABLE IF NOT EXISTS notification_log (
 )SQL";
 }
 
-std::string DbSchema::sql_create_key_rekor_registry() const {
-    return R"SQL(
-CREATE TABLE IF NOT EXISTS key_rekor_registry (
-    id               TEXT    NOT NULL PRIMARY KEY,
-    key_fingerprint  TEXT    NOT NULL,
-    event_type       TEXT    NOT NULL
-        CHECK(event_type IN ('CREATED','RETIRED')),
-    occurred_at      INTEGER NOT NULL,
-    rekor_entry_uuid TEXT,
-    rekor_log_index  INTEGER,
-    rekor_status     TEXT    NOT NULL DEFAULT 'PENDING'
-        CHECK(rekor_status IN ('PENDING','COMMITTED','FAILED')),
-    integrity_hmac   TEXT    NOT NULL
-);
-)SQL";
-}
-
 std::string DbSchema::sql_create_indexes() const {
     return R"SQL(
 CREATE INDEX IF NOT EXISTS idx_sig_key_id
@@ -141,9 +136,6 @@ CREATE INDEX IF NOT EXISTS idx_sig_ledger_tx_id
 
 CREATE INDEX IF NOT EXISTS idx_sig_ledger_status
     ON signature_records(ledger_status);
-
-CREATE INDEX IF NOT EXISTS idx_krr_fingerprint
-    ON key_rekor_registry(key_fingerprint);
 
 CREATE INDEX IF NOT EXISTS idx_nlog_event_id
     ON notification_log(event_id);
@@ -169,6 +161,18 @@ bool DbSchema::table_exists(const std::string& table_name) {
     return count.value_or(0) > 0;
 }
 
+bool DbSchema::column_exists(const std::string& table_name, const std::string& column_name) {
+    // Requires SQLite >= 3.16 (table-valued pragma function).
+    auto rs = conn_.query(
+        "SELECT COUNT(*) FROM pragma_table_info(?) WHERE name=?;",
+        { table_name, column_name });
+    if (rs.empty()) {
+        return false;
+    }
+    auto count = rs.get<i64>(rs.rows_[0], 0);
+    return count.value_or(0) > 0;
+}
+
 void DbSchema::set_meta(const std::string& key, const std::string& value) {
     conn_.exec(
         "INSERT INTO db_meta(key, value) VALUES(?, ?) "
@@ -183,7 +187,7 @@ std::string DbSchema::get_meta(const std::string& key) {
     if (rs.empty() || rs.rows_.empty()) {
         return "";
     }
-    
+
     auto val = rs.get<std::string>(rs.rows_[0], 0);
     return val.value_or("");
 }
@@ -201,12 +205,7 @@ void DbSchema::bootstrap() {
 
     if (version == kCurrentSchemaVersion) {
         // Schema is already at the target version — nothing to do.
-        //return;
-        throw DbError(DbError::Kind::SchemaError,
-                      "DB schema version " + std::to_string(version) +
-                      " is already at the current version " +
-                      std::to_string(kCurrentSchemaVersion) +
-                      ". No bootstrap needed.");
+        return;
     }
 
     if (version > kCurrentSchemaVersion) {
@@ -230,9 +229,6 @@ void DbSchema::bootstrap() {
             // Notification tables.
             tx.exec(sql_create_notification_subscribers());
             tx.exec(sql_create_notification_log());
-
-            // Rekor key lifecycle table.
-            tx.exec(sql_create_key_rekor_registry());
 
             // Indexes.
             // Execute each statement individually — SQLite does not support
@@ -262,7 +258,7 @@ void DbSchema::bootstrap() {
             tx.exec("INSERT INTO db_meta(key,value) VALUES(?,?);",
                     { std::string(meta_key::kCreatedAt),
                       std::to_string(now_ms) });
-            // hmac_key_wrapped is a placeholder until db_hmac_key.cpp fills it in.
+            // hmac_key_wrapped is a legacy placeholder; no HMAC scheme is used.
             tx.exec("INSERT INTO db_meta(key,value) VALUES(?,?);",
                     { std::string(meta_key::kHmacKeyWrapped),
                       "UNSET" });
@@ -288,111 +284,36 @@ int DbSchema::migrate() {
                       ", binary at v" + std::to_string(kCurrentSchemaVersion) + ").");
     }
 
-    // Each step is its own transaction so failures are isolated.
-    int current = from_version;
-
-    if (current == 1) {
-        migrate_v1_to_v2();
-        ++current;
-    }
-
-    if (current == 2) {
-        migrate_v2_to_v3();
-        ++current;
-    }
-
-    if (current == 3) {
-        migrate_v3_to_v4();
-        ++current;
-    }
-
-    // Add future migrations here:
-    // if (current == 4) { migrate_v4_to_v5(); ++current; }
+    // Versions 1, 2 and 3 were the Rekor-era schemas.  The Fabric-ledger schema
+    // (v4) replaces them in a single, deterministic transformation that maps
+    // any legacy Rekor columns onto the ledger columns when present, and drops
+    // integrity_hmac and the key lifecycle (key_rekor_registry) table.
+    migrate_legacy_to_v4();
 
     return from_version;
 }
 
-// Migration v1 → v2
+// Migration (any pre-v4) → v4
 //
-// What changed in v2:
-//   - signature_records gains 4 Rekor columns (rekor_entry_uuid,
-//     rekor_log_index, rekor_set_b64, rekor_status)
-//   - signature_verifications gains rekor_outcome column
-//   - key_rekor_registry table is new
-//   - Two new indexes on signature_records
-//   - One new index on key_rekor_registry
-// Will be removed in future update when Rekor integration is complete and stable.
+// v4 converts the Rekor-era schema to the Hyperledger Fabric ledger schema:
+//   - signature_records: rekor_* columns → ledger_* columns, integrity_hmac
+//     dropped
+//   - signature_verifications: rekor_outcome → ledger_outcome
+//   - key_rekor_registry table is dropped
+//   - index set rebuilt for the ledger columns
+//
+// The transformation is implemented as "create new table → copy (mapping
+// legacy columns when present) → drop → rename", which is the only way SQLite
+// can alter columns/CHECK constraints.
 
-void DbSchema::migrate_v1_to_v2() {
+void DbSchema::migrate_legacy_to_v4() {
     conn_.with_transaction([this](IDbTransaction& tx) {
+        const bool has_rekor_cols =
+            column_exists("signature_records", "rekor_entry_uuid");
+        const bool has_rekor_outcome =
+            column_exists("signature_verifications", "rekor_outcome");
+
         // --- signature_records ---
-        tx.exec("ALTER TABLE signature_records ADD COLUMN rekor_entry_uuid TEXT;");
-        tx.exec("ALTER TABLE signature_records ADD COLUMN rekor_log_index INTEGER;");
-        tx.exec("ALTER TABLE signature_records ADD COLUMN rekor_set_b64 TEXT;");
-        // SQLite does not support DEFAULT in ALTER TABLE ADD COLUMN for some
-        // old versions, so we add without default then update existing rows.
-        tx.exec("ALTER TABLE signature_records ADD COLUMN rekor_status TEXT "
-                "NOT NULL DEFAULT 'DISABLED';");
-        // Backfill: rows from before Rekor integration get DISABLED so they
-        // don't block the retry queue.
-        tx.exec("UPDATE signature_records SET rekor_status='DISABLED' "
-                "WHERE rekor_status IS NULL;");
-
-        // --- signature_verifications ---
-        tx.exec("ALTER TABLE signature_verifications ADD COLUMN rekor_outcome TEXT;");
-
-        // --- key_rekor_registry ---
-        tx.exec(sql_create_key_rekor_registry());
-
-        // --- new indexes ---
-        tx.exec("CREATE INDEX IF NOT EXISTS idx_sig_rekor_uuid "
-                "ON signature_records(rekor_entry_uuid);");
-        tx.exec("CREATE INDEX IF NOT EXISTS idx_sig_rekor_status "
-                "ON signature_records(rekor_status);");
-        tx.exec("CREATE INDEX IF NOT EXISTS idx_krr_fingerprint "
-                "ON key_rekor_registry(key_fingerprint);");
-
-        // Bump schema version.
-        tx.exec("UPDATE db_meta SET value='2' WHERE key='schema_version';");
-    });
-}
-
-// Migration v2 → v3
-//
-// What changed in v3:
-//   - signature_records gains 2 Rekor columns (rekor_integrated_time,
-//     rekor_inclusion_proof)
-//
-// Both columns are nullable until the async Rekor commit completes.
-
-void DbSchema::migrate_v2_to_v3() {
-    conn_.with_transaction([this](IDbTransaction& tx) {
-        // --- signature_records ---
-        tx.exec("ALTER TABLE signature_records ADD COLUMN rekor_integrated_time TEXT;");
-        tx.exec("ALTER TABLE signature_records ADD COLUMN rekor_inclusion_proof TEXT;");
-
-        // Bump schema version.
-        tx.exec("UPDATE db_meta SET value='3' WHERE key='schema_version';");
-    });
-}
-
-// Migration v3 → v4
-//
-// What changed in v4:
-//   - signature_records replaces Rekor columns with ledger columns:
-//       ledger_tx_id (TEXT)        -> from rekor_entry_uuid
-//       ledger_block_num (INTEGER) -> from rekor_log_index
-//       ledger_tx_time (TEXT)      -> from rekor_integrated_time
-//       ledger_tx_proof (TEXT)     -> from rekor_inclusion_proof
-//       ledger_tx_set_b64 (TEXT)   -> from rekor_set_b64
-//       ledger_status (TEXT)       -> from rekor_status (with updated CHECK constraint)
-//   - Drops the integrity_hmac column (ledger provides tamper evidence)
-//
-// We implement this by creating a new table, copying data, then renaming.
-
-void DbSchema::migrate_v3_to_v4() {
-    conn_.with_transaction([this](IDbTransaction& tx) {
-        // 1. Create new table with the new schema.
         tx.exec(R"SQL(
             CREATE TABLE signature_records_new (
                 id                TEXT    NOT NULL PRIMARY KEY,
@@ -417,38 +338,87 @@ void DbSchema::migrate_v3_to_v4() {
             );
         )SQL");
 
-        // 2. Copy data from the old table to the new table.
-        // We map the old columns to the new columns.
-        tx.exec(R"SQL(
-            INSERT INTO signature_records_new (
-                id, created_at, slot_id, token_label, key_id, key_fingerprint,
-                mechanism, payload_digest, signature_b64, session_handle,
-                user_label, app_context,
-                ledger_tx_id, ledger_block_num, ledger_tx_time, ledger_tx_proof,
-                ledger_tx_set_b64, ledger_status
-            )
-            SELECT
-                id, created_at, slot_id, token_label, key_id, key_fingerprint,
-                mechanism, payload_digest, signature_b64, session_handle,
-                user_label, app_context,
-                rekor_entry_uuid, rekor_log_index, rekor_integrated_time, rekor_inclusion_proof,
-                rekor_set_b64, rekor_status
-            FROM signature_records;
-        )SQL");
+        // Column mapping for the data copy.  Legacy Rekor columns are mapped
+        // onto their ledger equivalents when present; clean pre-Rekor DBs leave
+        // the ledger fields NULL/PENDING.
+        const std::vector<std::string> new_cols = {
+            "id", "created_at", "slot_id", "token_label", "key_id",
+            "key_fingerprint", "mechanism", "payload_digest", "signature_b64",
+            "session_handle", "user_label", "app_context", "ledger_tx_id",
+            "ledger_block_num", "ledger_tx_time", "ledger_tx_proof",
+            "ledger_tx_set_b64", "ledger_status"
+        };
 
-        // 3. Drop the old table.
+        std::vector<std::string> src_cols;
+        if (has_rekor_cols) {
+            src_cols = {
+                "id", "created_at", "slot_id", "token_label", "key_id",
+                "key_fingerprint", "mechanism", "payload_digest", "signature_b64",
+                "session_handle", "user_label", "app_context",
+                "rekor_entry_uuid", "rekor_log_index", "rekor_integrated_time",
+                "rekor_inclusion_proof", "rekor_set_b64",
+                "COALESCE(rekor_status,'PENDING')"
+            };
+        } else {
+            src_cols = {
+                "id", "created_at", "slot_id", "token_label", "key_id",
+                "key_fingerprint", "mechanism", "payload_digest", "signature_b64",
+                "session_handle", "user_label", "app_context",
+                "NULL", "NULL", "NULL", "NULL", "NULL", "'PENDING'"
+            };
+        }
+
+        std::string copy = "INSERT INTO signature_records_new (" +
+                            join(new_cols, ", ") + ") SELECT " +
+                            join(src_cols, ", ") +
+                            " FROM signature_records;";
+        tx.exec(copy);
         tx.exec("DROP TABLE signature_records;");
-
-        // 4. Rename the new table to the original name.
         tx.exec("ALTER TABLE signature_records_new RENAME TO signature_records;");
 
-        // 5. Recreate the indexes on the new table (they were dropped when we dropped the old table).
-        // We'll execute the index creation statements.
+        // --- signature_verifications ---
+        tx.exec(R"SQL(
+            CREATE TABLE signature_verifications_new (
+                id               TEXT    NOT NULL PRIMARY KEY,
+                verified_at      INTEGER NOT NULL,
+                signature_id     TEXT    REFERENCES signature_records(id),
+                verifier_session TEXT    NOT NULL,
+                outcome          TEXT    NOT NULL
+                    CHECK(outcome IN ('VALID','INVALID','KEY_NOT_FOUND','ERROR')),
+                ledger_outcome   TEXT
+                    CHECK(ledger_outcome IN ('MATCH','MISMATCH','NOT_FOUND','NOT_CHECKED')),
+                error_detail     TEXT
+            );
+        )SQL");
+
+        std::string v_src;
+        if (has_rekor_outcome) {
+            // Map legacy Rekor proof outcomes onto ledger cross-check outcomes.
+            v_src = ("SELECT id, verified_at, signature_id, verifier_session, outcome, "
+                     "CASE rekor_outcome WHEN 'PROOF_OK' THEN 'MATCH' "
+                     "WHEN 'PROOF_FAILED' THEN 'MISMATCH' "
+                     "WHEN 'NOT_CHECKED' THEN 'NOT_CHECKED' ELSE NULL END, "
+                     "error_detail FROM signature_verifications;");
+        } else {
+            v_src = ("SELECT id, verified_at, signature_id, verifier_session, outcome, "
+                     "NULL, error_detail FROM signature_verifications;");
+        }
+        tx.exec("INSERT INTO signature_verifications_new ("
+                "id, verified_at, signature_id, verifier_session, outcome, "
+                "ledger_outcome, error_detail) " + v_src);
+        tx.exec("DROP TABLE signature_verifications;");
+        tx.exec("ALTER TABLE signature_verifications_new RENAME TO signature_verifications;");
+
+        // --- drop the legacy key lifecycle table ---
+        if (table_exists("key_rekor_registry")) {
+            tx.exec("DROP TABLE key_rekor_registry;");
+        }
+
+        // --- Rebuild the index set ---
         std::string idx_sql = sql_create_indexes();
         std::istringstream idx_stream(idx_sql);
         std::string stmt;
         while (std::getline(idx_stream, stmt, ';')) {
-            // Trim whitespace.
             auto first = stmt.find_first_not_of(" \t\r\n");
             if (first == std::string::npos) continue;
             stmt = stmt.substr(first);
@@ -457,7 +427,7 @@ void DbSchema::migrate_v3_to_v4() {
             }
         }
 
-        // 6. Bump schema version.
+        // --- Bump schema version ---
         tx.exec("UPDATE db_meta SET value='4' WHERE key='schema_version';");
     });
 }
@@ -473,7 +443,6 @@ bool DbSchema::verify_schema(std::string& out_error) {
         table::kSignatureVerifications,
         table::kNotificationSubscribers,
         table::kNotificationLog,
-        table::kKeyRekorRegistry,
     };
 
     for (const auto& tbl : expected_tables) {

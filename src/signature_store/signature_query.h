@@ -8,11 +8,7 @@
 #include "../core/types.h"
 #include "db_connection.h"
 #include "signature_repository.h"
-
-// Forward declaration of RekorEntry and VerificationResult from other modules.
-namespace vhsm::rekor {
-    struct RekorEntry;
-} // namespace vhsm::rekor
+#include "../ledger/ledger_client.h"
 
 namespace vhsm::signature_store {
 namespace db {
@@ -25,15 +21,27 @@ public:
     // Returns nullopt if not found.
     std::optional<std::vector<std::optional<std::string>>> get_signature_by_id(const std::string& signature_id) const;
 
-    // Verify a signature by ID: check local HMAC and optionally verify Rekor proof.
-    // Returns a struct with verification results.
+    // Verifies a signature by ID.
+    //
+    // Local-only form: reports whether the local record exists and what its
+    // anchored Fabric ledger status is.  It cannot prove tamper-evidence on
+    // its own — that requires the ledger cross-check (see the overload below).
     struct VerificationResult {
-        bool local_hmac_ok;          // HMAC verification passed
-        bool rekor_proof_ok;         // Rekor inclusion proof verified (if Rekor data present)
-        bool payload_digest_match;   // Rekor payload digest matches local payload digest
+        bool record_found = false;               // present in the local DB
+        bool ledger_cross_check_ok = false;      // ledger entry matches local row
         std::optional<std::string> error_detail;
+        std::optional<std::string> ledger_tx_id;
+        std::optional<int64_t>     ledger_block_num;
+        std::string                ledger_status; // PENDING / COMMITTED / FAILED
+        std::optional<std::string> payload_digest;
     };
+
     VerificationResult verify_signature(const std::string& signature_id) const;
+
+    // Live form: additionally queries the Fabric ledger via `ledger` and
+    // cross-checks payload_digest / signature_b64 / key_fingerprint.  This is
+    // the tamper-evident form — it does not require trusting the local DB.
+    VerificationResult verify_signature(const std::string& signature_id, vhsm::ledger::LedgerClient& ledger) const;
 
     // Query signatures by key fingerprint.
     std::vector<std::string> get_signature_ids_by_key_fingerprint(const std::string& key_fingerprint) const;

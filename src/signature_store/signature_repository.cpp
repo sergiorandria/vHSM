@@ -20,7 +20,7 @@ std::optional<std::string> SignatureRepository::insert(
     const std::string& key_id,
     const std::string& key_fingerprint,
     const std::string& mechanism,
-    const std::string& digest_algorithm,
+    [[maybe_unused]] const std::string& digest_algorithm,
     const std::string& payload_digest,
     int ,
     const std::string& signature_b64,
@@ -30,30 +30,29 @@ std::optional<std::string> SignatureRepository::insert(
     // Generate a UUID for the signature ID
     std::string id = vhsm::utils::uuid_v4();
 
-    // Prepare column values as strings for the columns (excluding integrity_hmac which is removed)
-    // We use empty string for NULL text columns and "0" for NULL integer column.
+    // Column order matches sql_create_signature_records(); the legacy
+    // digest_algorithm parameter is not stored (no dedicated column).
     std::vector<std::string> column_values;
-    column_values.reserve(17); // 17 columns: id to ledger_status
+    column_values.reserve(18);
 
-    column_values.push_back(id); // id
-    column_values.push_back(std::to_string(created_at)); // created_at
-    column_values.push_back(std::to_string(slot_id)); // slot_id
-    column_values.push_back(token_label); // token_label
-    column_values.push_back(key_id); // key_id
-    column_values.push_back(key_fingerprint); // key_fingerprint
-    column_values.push_back(mechanism); // mechanism
-    column_values.push_back(digest_algorithm); // digest_algorithm
-    column_values.push_back(payload_digest); // payload_digest
-    column_values.push_back(signature_b64); // signature_b64
-    column_values.push_back(session_handle); // session_handle
-    column_values.push_back(user_label.value_or("")); // user_label: empty string if nullopt
-    column_values.push_back(app_context.value_or("")); // app_context: empty string if nullopt
-    column_values.push_back(""); // ledger_tx_id: NULL -> empty string
-    column_values.push_back("0"); // ledger_block_num: NULL -> "0"
-    column_values.push_back(""); // ledger_tx_time: NULL -> empty string
-    column_values.push_back(""); // ledger_tx_proof: NULL -> empty string
-    column_values.push_back(""); // ledger_tx_set_b64: NULL -> empty string
-    column_values.push_back("PENDING"); // ledger_status
+    column_values.push_back(id);                 // id
+    column_values.push_back(std::to_string(created_at));          // created_at
+    column_values.push_back(std::to_string(slot_id));             // slot_id
+    column_values.push_back(token_label);        // token_label
+    column_values.push_back(key_id);             // key_id
+    column_values.push_back(key_fingerprint);    // key_fingerprint
+    column_values.push_back(mechanism);          // mechanism
+    column_values.push_back(payload_digest);     // payload_digest
+    column_values.push_back(signature_b64);      // signature_b64
+    column_values.push_back(session_handle);     // session_handle
+    column_values.push_back(user_label.value_or(""));   // user_label
+    column_values.push_back(app_context.value_or("")); // app_context
+    column_values.push_back("");                 // ledger_tx_id (NULL)
+    column_values.push_back("0");                // ledger_block_num (NULL)
+    column_values.push_back("");                 // ledger_tx_time
+    column_values.push_back("");                 // ledger_tx_proof
+    column_values.push_back("");                 // ledger_tx_set_b64
+    column_values.push_back("PENDING");          // ledger_status
 
     // Now we insert the row (no integrity_hmac column)
     const std::string sql = R"SQL(
@@ -80,69 +79,40 @@ std::optional<std::string> SignatureRepository::insert(
 
 bool SignatureRepository::update_ledger_fields(const std::string& signature_id,
                                                const vhsm::ledger::LedgerEntry& entry) {
-    // Prepare the column values for the ledger columns.
-    // We will update the ledger_* columns.
-
-    // First, retrieve the current row to get the non-ledger columns.
+    // Load the current row so we can preserve the non-ledger columns and any
+    // previously captured ledger_tx_time / ledger_tx_proof / ledger_tx_set_b64.
     auto current_row = get_by_id(signature_id);
     if (!current_row) {
         return false;
     }
 
-    // current_row is a vector of 17 optional<string> (in the order of the table columns).
-    // We will replace the ledger columns (indices 12 to 16) with the new values.
-    // Index mapping:
-    // 0: id
-    // 1: created_at
-    // 2: slot_id
-    // 3: token_label
-    // 4: key_id
-    // 5: key_fingerprint
-    // 6: mechanism
-    // 7: payload_digest
-    // 8: signature_b64
-    // 9: session_handle
-    // 10: user_label
-    // 11: app_context
-    // 12: ledger_tx_id
-    // 13: ledger_block_num
-    // 14: ledger_tx_time
-    // 15: ledger_tx_proof
-    // 16: ledger_tx_set_b64
-    // 17: ledger_status
+    // Row layout (matches sql_create_signature_records()):
+    // 0: id | 1: created_at | 2: slot_id | 3: token_label | 4: key_id
+    // 5: key_fingerprint | 6: mechanism | 7: payload_digest | 8: signature_b64
+    // 9: session_handle | 10: user_label | 11: app_context
+    // 12: ledger_tx_id | 13: ledger_block_num | 14: ledger_tx_time
+    // 15: ledger_tx_proof | 16: ledger_tx_set_b64 | 17: ledger_status
+    const auto& row = *current_row;
+    if (row.size() < 18) {
+        return false;
+    }
 
-    // We'll build a new vector of strings for the 17 columns (we don't have integrity_hmac anymore).
-    std::vector<std::string> new_column_values;
-    new_column_values.reserve(17);
-
-    // Helper to convert optional<string> to string for storage: nullopt -> empty string, value -> value.
     auto to_storage_string = [](const std::optional<std::string>& opt) -> std::string {
         return opt ? *opt : "";
     };
 
-    // Copy the first 12 columns (id through app_context) from current_row.
-    for (size_t i = 0; i < 12; ++i) {
-        new_column_values.push_back(to_storage_string(current_row.value()[i]));
+    std::vector<std::string> cols;
+    cols.reserve(18);
+    for (std::size_t i = 0; i < 12; ++i) {
+        cols.push_back(to_storage_string(row[i]));
     }
+    cols.push_back(entry.tx_id);              // 12: ledger_tx_id
+    cols.push_back(std::to_string(entry.block_number)); // 13: ledger_block_num
+    cols.push_back(to_storage_string(row[14])); // 14: ledger_tx_time (preserve)
+    cols.push_back(to_storage_string(row[15])); // 15: ledger_tx_proof (preserve)
+    cols.push_back(to_storage_string(row[16])); // 16: ledger_tx_set_b64 (preserve)
+    cols.push_back("COMMITTED");              // 17: ledger_status
 
-    // Now the ledger columns: we will set them from the entry.
-    // ledger_tx_id
-    new_column_values.push_back(to_storage_string(std::make_optional<std::string>(entry.tx_id)));
-    // ledger_block_num
-    new_column_values.push_back(std::to_string(entry.block_number));
-    
-    // COMMENTED OUT
-    // ledger_tx_time
-    //new_column_values.push_back(to_storage_string(std::make_optional<std::string>(entry.tx_time)));
-    // ledger_tx_proof
-    //new_column_values.push_back(to_storage_string(std::make_optional<std::string>(entry.tx_proof)));
-    // ledger_tx_set_b64
-    //new_column_values.push_back(to_storage_string(std::make_optional<std::string>(entry.tx_set_b64)));
-
-    // ledger_status: we assume it's COMMITTED when we have a LedgerEntry.
-    new_column_values.push_back("COMMITTED");
-
-    // Now we have all 17 columns as strings. We can do the UPDATE.
     const std::string sql = R"SQL(
         UPDATE signature_records SET
             id = ?,
@@ -166,12 +136,8 @@ bool SignatureRepository::update_ledger_fields(const std::string& signature_id,
         WHERE id = ?;
     )SQL";
 
-    // Note: we have to include the WHERE condition. We'll add the signature_id at the end.
-    // But our new_column_values already has the id as the first element? Actually, we built new_column_values
-    // starting with id. So we have 17 values, and we need to add the WHERE condition which is the id again.
-    // We'll create a new vector for the bind parameters: the 17 columns plus the WHERE id.
-    std::vector<std::string> bind_params = new_column_values;
-    bind_params.push_back(new_column_values[0]); // id for WHERE clause
+    std::vector<std::string> bind_params = cols;
+    bind_params.push_back(signature_id);  // WHERE id
 
     try {
         conn_.exec(sql, bind_params);
