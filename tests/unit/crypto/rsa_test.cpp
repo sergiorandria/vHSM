@@ -6,21 +6,20 @@
 
 using namespace vhsm::crypto;
 
-TEST(RSA, GenerateSignVerify)
-{
-    // generate key
-    RSAKeyPair kp = RSAUtil::generate_key(2048);
-    ASSERT_NE(kp.key, nullptr);
+TEST(RSA, GenerateSignVerify) {
+  // generate key
+  RSAKeyPair kp = RSAUtil::generate_key(2048);
+  ASSERT_NE(kp.key, nullptr);
 
-    std::vector<uint8_t> msg = { 'h', 'e', 'l', 'l', 'o' };
+  std::vector<uint8_t> msg = {'h', 'e', 'l', 'l', 'o'};
 
-    // sign
-    std::vector<uint8_t> sig = RSAUtil::sign(kp.key, msg);
-    ASSERT_FALSE(sig.empty());
+  // sign
+  std::vector<uint8_t> sig = RSAUtil::sign(kp.key, msg);
+  ASSERT_FALSE(sig.empty());
 
-    // verify
-    bool ok = RSAUtil::verify(kp.key, msg, sig);
-    EXPECT_TRUE(ok);
+  // verify
+  bool ok = RSAUtil::verify(kp.key, msg, sig);
+  EXPECT_TRUE(ok);
 
-    EVP_PKEY_free(kp.key);
+  EVP_PKEY_free(kp.key);
 }

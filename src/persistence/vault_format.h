@@ -12,9 +12,7 @@ namespace vhsm::persistence {
 
 // Magic bytes at offset 0. Used to reject non-vault files before we even try
 // to derive a KEK (avoids wasteful PBKDF2 runs on random data).
-inline constexpr char kVaultMagic[8] = {
-    'V', 'H', 'S', 'M', 'V', 'A', 'U', 'L'
-};
+inline constexpr char kVaultMagic[8] = {'V', 'H', 'S', 'M', 'V', 'A', 'U', 'L'};
 
 // Version history:
 //   1 — initial layout: header + PBKDF2 params + AES-256-GCM blob
@@ -27,10 +25,10 @@ inline constexpr std::uint32_t kVaultFormatVersion = 1;
 inline constexpr std::uint32_t kVaultPbkdf2Iterations = 600'000;
 
 // AES-256-GCM parameter sizes (see crypto/aes_gcm.h).
-inline constexpr std::size_t kVaultSaltLen   = 16;   // PBKDF2 salt
-inline constexpr std::size_t kVaultNonceLen  = 12;   // GCM IV
-inline constexpr std::size_t kVaultTagLen    = 16;   // GCM auth tag
-inline constexpr std::size_t kVaultKeyLen    = 32;   // AES-256 key
+inline constexpr std::size_t kVaultSaltLen = 16;  // PBKDF2 salt
+inline constexpr std::size_t kVaultNonceLen = 12; // GCM IV
+inline constexpr std::size_t kVaultTagLen = 16;   // GCM auth tag
+inline constexpr std::size_t kVaultKeyLen = 32;   // AES-256 key
 
 // Fixed header layout (little-endian): all sizes below are in bytes.
 //   0..7    magic

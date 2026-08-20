@@ -1,11 +1,11 @@
 #ifndef VHSM_SIGSTORE_LEDGER_RETRY_QUEUE_H
 #define VHSM_SIGSTORE_LEDGER_RETRY_QUEUE_H
 
+#include "../core/types.h"
+#include "db_connection.h"
+#include <optional>
 #include <string>
 #include <vector>
-#include <optional>
-#include "db_connection.h"
-#include "../core/types.h"
 
 namespace vhsm::signature_store {
 namespace db {
@@ -24,25 +24,26 @@ namespace db {
 // recovery path explicit and independently testable.
 class LedgerRetryQueue {
 public:
-    explicit LedgerRetryQueue(IDbConnection& conn);
+  explicit LedgerRetryQueue(IDbConnection &conn);
 
-    // Scan for ledger_status='PENDING' rows and return their signature IDs.
-    std::vector<std::string> scan_pending_ids();
+  // Scan for ledger_status='PENDING' rows and return their signature IDs.
+  std::vector<std::string> scan_pending_ids();
 
-    // Reconstruct a full SignatureRecord for a row previously returned by
-    // scan_pending_ids().  Returns std::nullopt if the row no longer exists
-    // or cannot be reconstructed.
-    std::optional<SignatureRecord> load_pending_record(const std::string& signature_id);
+  // Reconstruct a full SignatureRecord for a row previously returned by
+  // scan_pending_ids().  Returns std::nullopt if the row no longer exists
+  // or cannot be reconstructed.
+  std::optional<SignatureRecord>
+  load_pending_record(const std::string &signature_id);
 
-    // Convenience: scan + load every PENDING record as a ready-to-submit
-    // SignatureRecord.  Missing/unparseable rows are skipped.
-    std::vector<SignatureRecord> load_pending_records();
+  // Convenience: scan + load every PENDING record as a ready-to-submit
+  // SignatureRecord.  Missing/unparseable rows are skipped.
+  std::vector<SignatureRecord> load_pending_records();
 
 private:
-    IDbConnection& conn_;
+  IDbConnection &conn_;
 };
 
-}  // namespace db
-}  // namespace vhsm::signature_store
+} // namespace db
+} // namespace vhsm::signature_store
 
 #endif // VHSM_SIGSTORE_LEDGER_RETRY_QUEUE_H

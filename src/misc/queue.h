@@ -2,31 +2,31 @@
 #define VHSM_MISC_QUEUE_H
 
 #include <optional>
-#include <vector> 
+#include <vector>
 
 #include "../keystore/hsm_object.h"
 
 using namespace vhsm::keystore;
 
 namespace vhsm::misc {
-class Queue { 
-    
+class Queue {
+
 public:
-    explicit Queue(const std::optional<std::vector<HsmObject>>& ); 
+  explicit Queue(const std::optional<std::vector<HsmObject>> &);
 
-    virtual ~Queue();
-    
-    // In a very large scale application, synchronous operations 
-    // can overload the CPU (on older systems). To prevent that, 
-    // Using coroutine to limit appendable object. 
-    // Return the last object ID.
-    std::string push_back(const std::optional<HsmObject>& );
+  virtual ~Queue();
 
-    std::string pop_back();
+  // In a very large scale application, synchronous operations
+  // can overload the CPU (on older systems). To prevent that,
+  // Using coroutine to limit appendable object.
+  // Return the last object ID.
+  std::string push_back(const std::optional<HsmObject> &);
 
-private: 
-    HsmObject *obj;
+  std::string pop_back();
+
+private:
+  HsmObject *obj;
 };
-} // namespace misc
+} // namespace vhsm::misc
 
 #endif // VHSM_MISC_QUEUE_H

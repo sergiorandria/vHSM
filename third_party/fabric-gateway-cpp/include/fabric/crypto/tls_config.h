@@ -1,17 +1,17 @@
-#ifndef FABRIC_CRYPTO_TLS_CONFIG 
-#define FABRIC_CRYPTO_TLS_CONFIG 
+#ifndef FABRIC_CRYPTO_TLS_CONFIG
+#define FABRIC_CRYPTO_TLS_CONFIG
 
 #include "tls_config_builder.h"
 
-namespace fabric::crypto { 
+namespace fabric::crypto {
 
-class TLSConfig { 
+class TLSConfig {
 public:
-    void buildTLSConfig();     
+  void buildTLSConfig();
 
-private: 
-    // TLS configuration backend
-    TLSConfigBuilder builder;
+private:
+  // TLS configuration backend
+  TLSConfigBuilder builder;
 };
-} // fabric::crypto
+} // namespace fabric::crypto
 #endif // FABRIC_CRYPTO_TLS_CONFIG

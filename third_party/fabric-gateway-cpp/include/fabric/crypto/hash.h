@@ -11,7 +11,7 @@ namespace crypto {
  * @param data Input bytes
  * @return 32-byte digest
  */
-std::string sha256(const std::string& data);
+std::string sha256(const std::string &data);
 
 } // namespace crypto
 } // namespace fabric

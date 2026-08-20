@@ -12,8 +12,8 @@
 #include <string>
 #include <vector>
 
-#include "fabric/crypto/ec.h"
 #include "fabric/crypto/csr.h"
+#include "fabric/crypto/ec.h"
 #include "fabric/identity/identity.h"
 #include "fabric/identity/wallet.h"
 
@@ -26,30 +26,30 @@ using fabric::identity::InMemoryWallet;
 
 namespace {
 
-bool contains(const std::string& haystack, const std::string& needle) {
-    return haystack.find(needle) != std::string::npos;
+bool contains(const std::string &haystack, const std::string &needle) {
+  return haystack.find(needle) != std::string::npos;
 }
 
 // Unique temp directory for file-system-wallet tests, created in SetUp and
 // removed after the fixture is done.
 class FileSystemWalletTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        dir_ = fs::temp_directory_path() /
-               ("fabric_wallet_test_" +
-                std::to_string(
-                    std::chrono::system_clock::now().time_since_epoch().count()));
-        fs::remove_all(dir_);
-        wallet_ = std::make_unique<FileSystemWallet>(dir_.string());
-    }
+  void SetUp() override {
+    dir_ = fs::temp_directory_path() /
+           ("fabric_wallet_test_" +
+            std::to_string(
+                std::chrono::system_clock::now().time_since_epoch().count()));
+    fs::remove_all(dir_);
+    wallet_ = std::make_unique<FileSystemWallet>(dir_.string());
+  }
 
-    void TearDown() override {
-        wallet_.reset();
-        fs::remove_all(dir_);
-    }
+  void TearDown() override {
+    wallet_.reset();
+    fs::remove_all(dir_);
+  }
 
-    fs::path dir_;
-    std::unique_ptr<FileSystemWallet> wallet_;
+  fs::path dir_;
+  std::unique_ptr<FileSystemWallet> wallet_;
 };
 
 } // namespace
@@ -59,29 +59,29 @@ protected:
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ECKeyPairTest, GenerateReturnsPEMKeys) {
-    auto [priv, pub] = ECKeyPair::generate();
+  auto [priv, pub] = ECKeyPair::generate();
 
-    EXPECT_FALSE(priv.empty());
-    EXPECT_FALSE(pub.empty());
+  EXPECT_FALSE(priv.empty());
+  EXPECT_FALSE(pub.empty());
 
-    // Private key is a PEM-encoded ECPrivateKey block.
-    EXPECT_TRUE(contains(priv, "-----BEGIN EC PRIVATE KEY-----"));
-    EXPECT_TRUE(contains(priv, "-----END EC PRIVATE KEY-----"));
+  // Private key is a PEM-encoded ECPrivateKey block.
+  EXPECT_TRUE(contains(priv, "-----BEGIN EC PRIVATE KEY-----"));
+  EXPECT_TRUE(contains(priv, "-----END EC PRIVATE KEY-----"));
 
-    // Public key is a PEM-encoded SPKI block.
-    EXPECT_TRUE(contains(pub, "-----BEGIN PUBLIC KEY-----"));
-    EXPECT_TRUE(contains(pub, "-----END PUBLIC KEY-----"));
+  // Public key is a PEM-encoded SPKI block.
+  EXPECT_TRUE(contains(pub, "-----BEGIN PUBLIC KEY-----"));
+  EXPECT_TRUE(contains(pub, "-----END PUBLIC KEY-----"));
 
-    // Public and private material must differ.
-    EXPECT_NE(priv, pub);
+  // Public and private material must differ.
+  EXPECT_NE(priv, pub);
 }
 
 TEST(ECKeyPairTest, TwoGeneratedKeyPairsDiffer) {
-    auto [privA, pubA] = ECKeyPair::generate();
-    auto [privB, pubB] = ECKeyPair::generate();
+  auto [privA, pubA] = ECKeyPair::generate();
+  auto [privB, pubB] = ECKeyPair::generate();
 
-    EXPECT_NE(privA, privB);
-    EXPECT_NE(pubA, pubB);
+  EXPECT_NE(privA, privB);
+  EXPECT_NE(pubA, pubB);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -89,65 +89,65 @@ TEST(ECKeyPairTest, TwoGeneratedKeyPairsDiffer) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(ECKeyPairTest, SignVerifyRoundTrip) {
-    auto [priv, pub] = ECKeyPair::generate();
+  auto [priv, pub] = ECKeyPair::generate();
 
-    ECKeyPair key(priv);
-    const std::string data = "payload to sign";
+  ECKeyPair key(priv);
+  const std::string data = "payload to sign";
 
-    std::string sig = key.sign(data);
-    EXPECT_FALSE(sig.empty());
+  std::string sig = key.sign(data);
+  EXPECT_FALSE(sig.empty());
 
-    // Signature is a hex string of the DER-encoded ECDSA-Sig-Value.
-    EXPECT_TRUE(contains(sig, "30")); // ASN.1 SEQUENCE tag opens the DER blob
-    EXPECT_EQ(sig.size() % 2, 0u);
+  // Signature is a hex string of the DER-encoded ECDSA-Sig-Value.
+  EXPECT_TRUE(contains(sig, "30")); // ASN.1 SEQUENCE tag opens the DER blob
+  EXPECT_EQ(sig.size() % 2, 0u);
 
-    EXPECT_TRUE(key.verify(data, sig));
+  EXPECT_TRUE(key.verify(data, sig));
 }
 
 TEST(ECKeyPairTest, SignVerifyRoundTripEmptyPayload) {
-    auto [priv, pub] = ECKeyPair::generate();
+  auto [priv, pub] = ECKeyPair::generate();
 
-    ECKeyPair key(priv);
-    std::string sig = key.sign("");
-    EXPECT_TRUE(key.verify("", sig));
+  ECKeyPair key(priv);
+  std::string sig = key.sign("");
+  EXPECT_TRUE(key.verify("", sig));
 }
 
 TEST(ECKeyPairTest, VerifyRejectsTamperedPayload) {
-    auto [priv, pub] = ECKeyPair::generate();
+  auto [priv, pub] = ECKeyPair::generate();
 
-    ECKeyPair key(priv);
-    std::string sig = key.sign("original");
-    EXPECT_TRUE(key.verify("original", sig));
+  ECKeyPair key(priv);
+  std::string sig = key.sign("original");
+  EXPECT_TRUE(key.verify("original", sig));
 
-    EXPECT_FALSE(key.verify("tampered", sig));
-    EXPECT_FALSE(key.verify("", sig));
+  EXPECT_FALSE(key.verify("tampered", sig));
+  EXPECT_FALSE(key.verify("", sig));
 }
 
 TEST(ECKeyPairTest, VerifyRejectsWrongSignatureBytes) {
-    auto [priv, pub] = ECKeyPair::generate();
+  auto [priv, pub] = ECKeyPair::generate();
 
-    ECKeyPair key(priv);
-    std::string data = "data";
-    EXPECT_FALSE(key.verify(data, "deadbeef"));
-    EXPECT_FALSE(key.verify(data, ""));
-    EXPECT_FALSE(key.verify(data, "0f"));
+  ECKeyPair key(priv);
+  std::string data = "data";
+  EXPECT_FALSE(key.verify(data, "deadbeef"));
+  EXPECT_FALSE(key.verify(data, ""));
+  EXPECT_FALSE(key.verify(data, "0f"));
 }
 
 TEST(ECKeyPairTest, ReloadedPrivateKeyVerifiesAcrossInstances) {
-    auto [priv, pub] = ECKeyPair::generate();
+  auto [priv, pub] = ECKeyPair::generate();
 
-    ECKeyPair a(priv);
-    ECKeyPair b(priv);
-    EXPECT_EQ(a.getPrivateKeyPEM(), b.getPrivateKeyPEM());
-    EXPECT_EQ(a.getPublicKeyPEM(), b.getPublicKeyPEM());
+  ECKeyPair a(priv);
+  ECKeyPair b(priv);
+  EXPECT_EQ(a.getPrivateKeyPEM(), b.getPrivateKeyPEM());
+  EXPECT_EQ(a.getPublicKeyPEM(), b.getPublicKeyPEM());
 
-    std::string data = "cross-instance";
-    std::string sig = a.sign(data);
-    EXPECT_TRUE(b.verify(data, sig));
+  std::string data = "cross-instance";
+  std::string sig = a.sign(data);
+  EXPECT_TRUE(b.verify(data, sig));
 }
 
 TEST(ECKeyPairTest, LoadRejectsGarbagePem) {
-    EXPECT_THROW(ECKeyPair("not a pem key at all"), std::runtime_error);
+  EXPECT_THROW(ECKeyPair("not a pem key at all"), std::runtime_error);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -155,44 +155,45 @@ TEST(ECKeyPairTest, LoadRejectsGarbagePem) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(CSRTest, GenerateProducesValidCSR) {
-    auto [priv, pub] = ECKeyPair::generate();
+  auto [priv, pub] = ECKeyPair::generate();
 
-    std::string csr = CSR::generate(priv, "user1@example.com", "Org1", "Dev", "City", "ST", "US");
+  std::string csr = CSR::generate(priv, "user1@example.com", "Org1", "Dev",
+                                  "City", "ST", "US");
 
-    EXPECT_TRUE(contains(csr, "-----BEGIN CERTIFICATE REQUEST-----"));
-    EXPECT_TRUE(contains(csr, "-----END CERTIFICATE REQUEST-----"));
+  EXPECT_TRUE(contains(csr, "-----BEGIN CERTIFICATE REQUEST-----"));
+  EXPECT_TRUE(contains(csr, "-----END CERTIFICATE REQUEST-----"));
 
-    // The CSR must be self-signed by the requesting key and verify cleanly.
-    EXPECT_TRUE(CSR::validate(csr));
+  // The CSR must be self-signed by the requesting key and verify cleanly.
+  EXPECT_TRUE(CSR::validate(csr));
 }
 
 TEST(CSRTest, GeneratedCSRCarriesSubjectAndPublicKey) {
-    auto [priv, pub] = ECKeyPair::generate();
+  auto [priv, pub] = ECKeyPair::generate();
 
-    std::string csr = CSR::generate(priv, "cn.example.org", "Org1");
+  std::string csr = CSR::generate(priv, "cn.example.org", "Org1");
 
-    std::string extracted = CSR::extractPublicKey(csr);
-    EXPECT_FALSE(extracted.empty());
-    EXPECT_TRUE(contains(extracted, "-----BEGIN PUBLIC KEY-----"));
+  std::string extracted = CSR::extractPublicKey(csr);
+  EXPECT_FALSE(extracted.empty());
+  EXPECT_TRUE(contains(extracted, "-----BEGIN PUBLIC KEY-----"));
 
-    // The public key the CSR carries must equal the one from the keypair.
-    EXPECT_EQ(extracted, pub);
+  // The public key the CSR carries must equal the one from the keypair.
+  EXPECT_EQ(extracted, pub);
 }
 
 TEST(CSRTest, ValidateRejectsGarbage) {
-    EXPECT_FALSE(CSR::validate("this is definitely not a CSR"));
-    EXPECT_FALSE(CSR::validate(""));
+  EXPECT_FALSE(CSR::validate("this is definitely not a CSR"));
+  EXPECT_FALSE(CSR::validate(""));
 }
 
 TEST(CSRTest, ValidateAcceptsCSRWithSans) {
-    auto [priv, pub] = ECKeyPair::generate();
-    std::string csr = CSR::generate(priv, "svc.example.com", "Org1", "", "", "", "",
-                                    { "svc.example.com", "www.example.com" });
-    EXPECT_TRUE(CSR::validate(csr));
+  auto [priv, pub] = ECKeyPair::generate();
+  std::string csr = CSR::generate(priv, "svc.example.com", "Org1", "", "", "",
+                                  "", {"svc.example.com", "www.example.com"});
+  EXPECT_TRUE(CSR::validate(csr));
 }
 
 TEST(CSRTest, GenerateThrowsOnInvalidKey) {
-    EXPECT_THROW(CSR::generate("not-a-valid-pem-key", "cn"), std::runtime_error);
+  EXPECT_THROW(CSR::generate("not-a-valid-pem-key", "cn"), std::runtime_error);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -200,19 +201,20 @@ TEST(CSRTest, GenerateThrowsOnInvalidKey) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(IdentityTest, GettersRoundTrip) {
-    Identity id("Org1MSP", "-----BEGIN CERTIFICATE-----", "-----BEGIN PRIVATE KEY-----");
+  Identity id("Org1MSP", "-----BEGIN CERTIFICATE-----",
+              "-----BEGIN PRIVATE KEY-----");
 
-    EXPECT_EQ(id.getMSPID(), "Org1MSP");
-    EXPECT_EQ(id.getCertificate(), "-----BEGIN CERTIFICATE-----");
-    EXPECT_EQ(id.getPrivateKey(), "-----BEGIN PRIVATE KEY-----");
-    EXPECT_TRUE(id.isValid());
+  EXPECT_EQ(id.getMSPID(), "Org1MSP");
+  EXPECT_EQ(id.getCertificate(), "-----BEGIN CERTIFICATE-----");
+  EXPECT_EQ(id.getPrivateKey(), "-----BEGIN PRIVATE KEY-----");
+  EXPECT_TRUE(id.isValid());
 }
 
 TEST(IdentityTest, PartialIdentityIsInvalid) {
-    EXPECT_FALSE(Identity("", "", "").isValid());
-    EXPECT_FALSE(Identity("Org1MSP", "", "").isValid());
-    EXPECT_FALSE(Identity("", "cert", "").isValid());
-    EXPECT_FALSE(Identity("", "", "key").isValid());
+  EXPECT_FALSE(Identity("", "", "").isValid());
+  EXPECT_FALSE(Identity("Org1MSP", "", "").isValid());
+  EXPECT_FALSE(Identity("", "cert", "").isValid());
+  EXPECT_FALSE(Identity("", "", "key").isValid());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -220,31 +222,31 @@ TEST(IdentityTest, PartialIdentityIsInvalid) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(InMemoryWalletTest, PutGetExistsListDelete) {
-    InMemoryWallet wallet;
-    Identity id("Org1MSP", "CERT", "KEY");
+  InMemoryWallet wallet;
+  Identity id("Org1MSP", "CERT", "KEY");
 
-    ASSERT_TRUE(wallet.put("user1", id));
-    // Duplicate label must not overwrite.
-    EXPECT_FALSE(wallet.put("user1", id));
+  ASSERT_TRUE(wallet.put("user1", id));
+  // Duplicate label must not overwrite.
+  EXPECT_FALSE(wallet.put("user1", id));
 
-    ASSERT_TRUE(wallet.exists("user1"));
-    EXPECT_FALSE(wallet.exists("missing"));
+  ASSERT_TRUE(wallet.exists("user1"));
+  EXPECT_FALSE(wallet.exists("missing"));
 
-    auto got = wallet.get("user1");
-    ASSERT_TRUE(got != nullptr);
-    EXPECT_EQ(got->getMSPID(), "Org1MSP");
-    EXPECT_EQ(got->getCertificate(), "CERT");
+  auto got = wallet.get("user1");
+  ASSERT_TRUE(got != nullptr);
+  EXPECT_EQ(got->getMSPID(), "Org1MSP");
+  EXPECT_EQ(got->getCertificate(), "CERT");
 
-    EXPECT_EQ(wallet.get("missing"), nullptr);
+  EXPECT_EQ(wallet.get("missing"), nullptr);
 
-    auto labels = wallet.list();
-    ASSERT_EQ(labels.size(), 1u);
-    EXPECT_EQ(labels[0], "user1");
+  auto labels = wallet.list();
+  ASSERT_EQ(labels.size(), 1u);
+  EXPECT_EQ(labels[0], "user1");
 
-    EXPECT_TRUE(wallet.deleteIdentity("user1"));
-    EXPECT_FALSE(wallet.exists("user1"));
-    EXPECT_FALSE(wallet.deleteIdentity("user1"));
-    EXPECT_TRUE(wallet.list().empty());
+  EXPECT_TRUE(wallet.deleteIdentity("user1"));
+  EXPECT_FALSE(wallet.exists("user1"));
+  EXPECT_FALSE(wallet.deleteIdentity("user1"));
+  EXPECT_TRUE(wallet.list().empty());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -252,30 +254,30 @@ TEST(InMemoryWalletTest, PutGetExistsListDelete) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST_F(FileSystemWalletTest, PutGetExistsDelete) {
-    Identity id("Org1MSP", "CERTIFICATE-PEM", "PRIVATE-KEY-PEM");
+  Identity id("Org1MSP", "CERTIFICATE-PEM", "PRIVATE-KEY-PEM");
 
-    ASSERT_TRUE(wallet_->put("alice", id));
-    EXPECT_TRUE(wallet_->exists("alice"));
-    EXPECT_FALSE(wallet_->exists("bob"));
+  ASSERT_TRUE(wallet_->put("alice", id));
+  EXPECT_TRUE(wallet_->exists("alice"));
+  EXPECT_FALSE(wallet_->exists("bob"));
 
-    auto got = wallet_->get("alice");
-    ASSERT_TRUE(got != nullptr);
-    EXPECT_EQ(got->getMSPID(), "Org1MSP");
-    EXPECT_EQ(got->getCertificate(), "CERTIFICATE-PEM");
-    EXPECT_EQ(got->getPrivateKey(), "PRIVATE-KEY-PEM");
+  auto got = wallet_->get("alice");
+  ASSERT_TRUE(got != nullptr);
+  EXPECT_EQ(got->getMSPID(), "Org1MSP");
+  EXPECT_EQ(got->getCertificate(), "CERTIFICATE-PEM");
+  EXPECT_EQ(got->getPrivateKey(), "PRIVATE-KEY-PEM");
 
-    // Files were persisted on disk under the wallet directory.
-    fs::path base = dir_ / "alice.id";
-    EXPECT_TRUE(fs::exists(base.string() + ".cert"));
-    EXPECT_TRUE(fs::exists(base.string() + ".key"));
-    EXPECT_TRUE(fs::exists(base.string() + ".msp"));
+  // Files were persisted on disk under the wallet directory.
+  fs::path base = dir_ / "alice.id";
+  EXPECT_TRUE(fs::exists(base.string() + ".cert"));
+  EXPECT_TRUE(fs::exists(base.string() + ".key"));
+  EXPECT_TRUE(fs::exists(base.string() + ".msp"));
 
-    EXPECT_TRUE(wallet_->deleteIdentity("alice"));
-    EXPECT_FALSE(wallet_->exists("alice"));
-    EXPECT_EQ(wallet_->get("alice"), nullptr);
+  EXPECT_TRUE(wallet_->deleteIdentity("alice"));
+  EXPECT_FALSE(wallet_->exists("alice"));
+  EXPECT_EQ(wallet_->get("alice"), nullptr);
 }
 
 TEST_F(FileSystemWalletTest, GetUnknownLabelReturnsNull) {
-    EXPECT_EQ(wallet_->get("nobody"), nullptr);
-    EXPECT_FALSE(wallet_->exists("nobody"));
+  EXPECT_EQ(wallet_->get("nobody"), nullptr);
+  EXPECT_FALSE(wallet_->exists("nobody"));
 }

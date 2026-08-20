@@ -1,5 +1,4 @@
 #ifndef VHSM_PKCS11_FUNC_H
 #define VHSM_PKCS11_FUNC_H
 
-
 #endif // VHSM_PKCS11_FUNC_H

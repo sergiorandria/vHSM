@@ -1,137 +1,155 @@
 #ifndef VHSM_SESSION_SESSION_H
 #define VHSM_SESSION_SESSION_H
 
+#include "../core/secure_buffer.h"
 #include "../core/types.h"
 #include "../keystore/object_store.h"
-#include "../core/secure_buffer.h"
 #include <mutex>
 
 namespace vhsm::session {
 
-// WHY Session represents a PKCS#11 session: In PKCS#11, a "session" is a stateful
-// connection between an application and a token. Sessions track login state, current
-// operations, and per-session attributes. Multiple sessions can exist on the same
-// token (different login states, different operations in parallel). Each session
-// has its own object visibility scope (a private key created in one session may be
-// visible to another, depending on token settings).
+// WHY Session represents a PKCS#11 session: In PKCS#11, a "session" is a
+// stateful connection between an application and a token. Sessions track login
+// state, current operations, and per-session attributes. Multiple sessions can
+// exist on the same token (different login states, different operations in
+// parallel). Each session has its own object visibility scope (a private key
+// created in one session may be visible to another, depending on token
+// settings).
 //
-// WHY each Session has its own ObjectStore: Object stores are per-session in this
-// design. Applications can create/find/destroy objects within a session. The store
-// enforces isolation and visibility rules. If a different design were needed (shared
-// object store across sessions), the ObjectStore could be moved to Token; for now,
-// it's session-private.
+// WHY each Session has its own ObjectStore: Object stores are per-session in
+// this design. Applications can create/find/destroy objects within a session.
+// The store enforces isolation and visibility rules. If a different design were
+// needed (shared object store across sessions), the ObjectStore could be moved
+// to Token; for now, it's session-private.
 //
-// WHY non-copyable due to mutex: Each Session has a unique mutex protecting its state.
-// Copying would duplicate the mutex, violating synchronization semantics (two copies
-// with separate locks could race). Non-copyable enforces single ownership.
+// WHY non-copyable due to mutex: Each Session has a unique mutex protecting its
+// state. Copying would duplicate the mutex, violating synchronization semantics
+// (two copies with separate locks could race). Non-copyable enforces single
+// ownership.
 class Session {
 public:
-    // WHY constructor takes explicit parameters: Session identity is fixed at creation
-    // (handle, slotID, flags, notify callback). All are PKCS#11 semantics provided by
-    // the caller (SessionManager). Explicit parameters make the contract clear.
-    Session(CK_SESSION_HANDLE handle, CK_SLOT_ID slotID, CK_FLAGS flags, CK_VOID_PTR pApplication, CK_NOTIFY notify);
+  // WHY constructor takes explicit parameters: Session identity is fixed at
+  // creation (handle, slotID, flags, notify callback). All are PKCS#11
+  // semantics provided by the caller (SessionManager). Explicit parameters make
+  // the contract clear.
+  Session(CK_SESSION_HANDLE handle, CK_SLOT_ID slotID, CK_FLAGS flags,
+          CK_VOID_PTR pApplication, CK_NOTIFY notify);
 
-    ~Session();
+  ~Session();
 
-    // WHY non-copyable and non-movable: Sessions are stateful (login state, operation
-    // state, object store). Copying/moving would create confusing duplicates. Sessions
-    // should be managed via pointers or references (by SessionManager).
-    Session(const Session&) = delete;
-    Session& operator=(const Session&) = delete;
+  // WHY non-copyable and non-movable: Sessions are stateful (login state,
+  // operation state, object store). Copying/moving would create confusing
+  // duplicates. Sessions should be managed via pointers or references (by
+  // SessionManager).
+  Session(const Session &) = delete;
+  Session &operator=(const Session &) = delete;
 
-    // WHY separate getters for each field: PKCS#11 C_GetSessionInfo requires returning
-    // all session attributes. Separate getters allow callers to query individual fields
-    // efficiently. [[nodiscard]] catches accidental misuse.
-    [[nodiscard]] CK_SESSION_HANDLE getHandle() const noexcept;
-    [[nodiscard]] CK_SLOT_ID getSlotID() const noexcept;
-    [[nodiscard]] CK_FLAGS getFlags() const noexcept;
-    [[nodiscard]] CK_STATE getState() const noexcept;
-    [[nodiscard]] CK_USER_TYPE getUserType() const noexcept;
+  // WHY separate getters for each field: PKCS#11 C_GetSessionInfo requires
+  // returning all session attributes. Separate getters allow callers to query
+  // individual fields efficiently. [[nodiscard]] catches accidental misuse.
+  [[nodiscard]] CK_SESSION_HANDLE getHandle() const noexcept;
+  [[nodiscard]] CK_SLOT_ID getSlotID() const noexcept;
+  [[nodiscard]] CK_FLAGS getFlags() const noexcept;
+  [[nodiscard]] CK_STATE getState() const noexcept;
+  [[nodiscard]] CK_USER_TYPE getUserType() const noexcept;
 
-    // WHY separate state transition methods: PKCS#11 session state machine has explicit
-    // transitions (login → logout, initialize operation → finalize operation).
-    // Separate methods make state changes explicit and allow validation (can't finalize
-    // an uninitialized operation). This prevents logic bugs.
-    //
-    // WHY login/logout take userType and PIN: Login state depends on who is logged in
-    // (CKU_USER vs CKU_SO) and whether the PIN is correct. The PIN is sensitive, so
-    // it's wrapped in SecureBuffer (zeroed after use).
-    CK_RV login(CK_USER_TYPE userType, const SecureBuffer& pin);
-    CK_RV logout();
-    
-    // WHY initializeOperation / finalizeOperation: PKCS#11 requires initializing an operation
-    // (select mechanism, pass parameters) before performing sign/encrypt/verify/decrypt.
-    // Finalizing closes the operation and clears state. This prevents accidental reuse
-    // of operation state across multiple operations.
-    CK_RV initializeOperation(CK_MECHANISM_TYPE mechanism, CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount);
-    CK_RV finalizeOperation();
+  // WHY separate state transition methods: PKCS#11 session state machine has
+  // explicit transitions (login → logout, initialize operation → finalize
+  // operation). Separate methods make state changes explicit and allow
+  // validation (can't finalize an uninitialized operation). This prevents logic
+  // bugs.
+  //
+  // WHY login/logout take userType and PIN: Login state depends on who is
+  // logged in (CKU_USER vs CKU_SO) and whether the PIN is correct. The PIN is
+  // sensitive, so it's wrapped in SecureBuffer (zeroed after use).
+  CK_RV login(CK_USER_TYPE userType, const SecureBuffer &pin);
+  CK_RV logout();
 
-    // WHY getObjectStore is mutable and const: Sessions need to access (and modify) the
-    // object store to create/find/destroy objects. Both const and non-const versions allow
-    // callers to work with mutable or immutable sessions. The mutex protects concurrent access.
-    [[nodiscard]] vhsm::keystore::internal::v_ObjectStore_M1& getObjectStore() noexcept;
-    [[nodiscard]] const vhsm::keystore::internal::v_ObjectStore_M1& getObjectStore() const noexcept;
+  // WHY initializeOperation / finalizeOperation: PKCS#11 requires initializing
+  // an operation (select mechanism, pass parameters) before performing
+  // sign/encrypt/verify/decrypt. Finalizing closes the operation and clears
+  // state. This prevents accidental reuse of operation state across multiple
+  // operations.
+  CK_RV initializeOperation(CK_MECHANISM_TYPE mechanism,
+                            CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount);
+  CK_RV finalizeOperation();
 
-    // WHY getSessionInfo populates a pointer: PKCS#11 C_GetSessionInfo uses the caller's
-    // CK_SESSION_INFO struct. This method fills it with all session attributes at once,
-    // avoiding multiple round-trips to query individual fields.
-    void getSessionInfo(CK_SESSION_INFO_PTR pInfo) const;
+  // WHY getObjectStore is mutable and const: Sessions need to access (and
+  // modify) the object store to create/find/destroy objects. Both const and
+  // non-const versions allow callers to work with mutable or immutable
+  // sessions. The mutex protects concurrent access.
+  [[nodiscard]] vhsm::keystore::internal::v_ObjectStore_M1 &
+  getObjectStore() noexcept;
+  [[nodiscard]] const vhsm::keystore::internal::v_ObjectStore_M1 &
+  getObjectStore() const noexcept;
 
-    // WHY separate accessors for notify callback: The application and notify callback are
-    // PKCS#11 semantics that stay unchanged after session creation. Accessors allow
-    // SessionManager to pass them to the original caller (for event notification).
-    CK_VOID_PTR getApplication() const noexcept;
-    CK_NOTIFY getNotify() const noexcept;
+  // WHY getSessionInfo populates a pointer: PKCS#11 C_GetSessionInfo uses the
+  // caller's CK_SESSION_INFO struct. This method fills it with all session
+  // attributes at once, avoiding multiple round-trips to query individual
+  // fields.
+  void getSessionInfo(CK_SESSION_INFO_PTR pInfo) const;
+
+  // WHY separate accessors for notify callback: The application and notify
+  // callback are PKCS#11 semantics that stay unchanged after session creation.
+  // Accessors allow SessionManager to pass them to the original caller (for
+  // event notification).
+  CK_VOID_PTR getApplication() const noexcept;
+  CK_NOTIFY getNotify() const noexcept;
 
 private:
-    // WHY handle_ is unique: CK_SESSION_HANDLE is the session's opaque identifier. Callers
-    // use handles (not pointers) to refer to sessions. The SessionManager maps handles to
-    // Session objects. Immutable after creation ensures handle stability.
-    CK_SESSION_HANDLE handle_;
+  // WHY handle_ is unique: CK_SESSION_HANDLE is the session's opaque
+  // identifier. Callers use handles (not pointers) to refer to sessions. The
+  // SessionManager maps handles to Session objects. Immutable after creation
+  // ensures handle stability.
+  CK_SESSION_HANDLE handle_;
 
-    // WHY slotID_ is immutable: Sessions are bound to a specific slot (token). A session
-    // can't migrate to a different slot. This is enforced by making slotID_ private and
-    // set-once in the constructor.
-    CK_SLOT_ID slotID_;
+  // WHY slotID_ is immutable: Sessions are bound to a specific slot (token). A
+  // session can't migrate to a different slot. This is enforced by making
+  // slotID_ private and set-once in the constructor.
+  CK_SLOT_ID slotID_;
 
-    // WHY flags_ are immutable: Session flags (CKF_RW_SESSION, CKF_SERIAL_SESSION) are
-    // set at creation and don't change. They define whether the session is read-only,
-    // whether multiple simultaneous operations are allowed, etc.
-    CK_FLAGS flags_;
+  // WHY flags_ are immutable: Session flags (CKF_RW_SESSION,
+  // CKF_SERIAL_SESSION) are set at creation and don't change. They define
+  // whether the session is read-only, whether multiple simultaneous operations
+  // are allowed, etc.
+  CK_FLAGS flags_;
 
-    // WHY state_ is mutable: Session state (public, user functions, SO functions) changes
-    // via login/logout. The state determines which operations are allowed (e.g., SO functions
-    // only available to the SO user, in SO session state).
-    CK_STATE state_;
+  // WHY state_ is mutable: Session state (public, user functions, SO functions)
+  // changes via login/logout. The state determines which operations are allowed
+  // (e.g., SO functions only available to the SO user, in SO session state).
+  CK_STATE state_;
 
-    // WHY userType_ tracks login identity: When logged in, this field holds CKU_USER or
-    // CKU_SO (the user type). When not logged in, it's set to CKU_INVALID. Guides operation
-    // authorization (some operations require a specific user type).
-    CK_USER_TYPE userType_;
+  // WHY userType_ tracks login identity: When logged in, this field holds
+  // CKU_USER or CKU_SO (the user type). When not logged in, it's set to
+  // CKU_INVALID. Guides operation authorization (some operations require a
+  // specific user type).
+  CK_USER_TYPE userType_;
 
-    // WHY objectStore_ is per-session: Simplifies object visibility rules. Objects created
-    // in a session are stored here. If a future design needs shared objects (across sessions),
-    // the store can be moved to Token; for now, isolation is cleaner.
-    vhsm::keystore::internal::v_ObjectStore_M1 objectStore_;
+  // WHY objectStore_ is per-session: Simplifies object visibility rules.
+  // Objects created in a session are stored here. If a future design needs
+  // shared objects (across sessions), the store can be moved to Token; for now,
+  // isolation is cleaner.
+  vhsm::keystore::internal::v_ObjectStore_M1 objectStore_;
 
-    // WHY operationInitialized_ and currentOperationMechanism_: Track the current operation
-    // state. Once an operation is initialized (e.g., C_SignInit), these fields track what's
-    // active. Prevents accidental mixing of operations (can't call C_Encrypt while a sign
-    // operation is initialized).
-    bool operationInitialized_;
-    CK_MECHANISM_TYPE currentOperationMechanism_;
+  // WHY operationInitialized_ and currentOperationMechanism_: Track the current
+  // operation state. Once an operation is initialized (e.g., C_SignInit), these
+  // fields track what's active. Prevents accidental mixing of operations (can't
+  // call C_Encrypt while a sign operation is initialized).
+  bool operationInitialized_;
+  CK_MECHANISM_TYPE currentOperationMechanism_;
 
-    // WHY pApplication_ and notify_: PKCS#11 callback mechanism. Applications register a
-    // callback (notify_) to receive events (e.g., "token inserted"). pApplication_ is
-    // context data passed to the callback. These are stored but rarely used in simple HSM
-    // implementations; included for API compliance.
-    CK_VOID_PTR pApplication_;
-    CK_NOTIFY notify_;
+  // WHY pApplication_ and notify_: PKCS#11 callback mechanism. Applications
+  // register a callback (notify_) to receive events (e.g., "token inserted").
+  // pApplication_ is context data passed to the callback. These are stored but
+  // rarely used in simple HSM implementations; included for API compliance.
+  CK_VOID_PTR pApplication_;
+  CK_NOTIFY notify_;
 
-    // WHY mutable mutex_: Protects all session state from concurrent access. mutable allows
-    // const methods (like getHandle()) to lock (for consistency checks or future logging).
-    // In practice, const methods often don't need the lock, but the pattern is safe.
-    mutable std::mutex mutex_;
+  // WHY mutable mutex_: Protects all session state from concurrent access.
+  // mutable allows const methods (like getHandle()) to lock (for consistency
+  // checks or future logging). In practice, const methods often don't need the
+  // lock, but the pattern is safe.
+  mutable std::mutex mutex_;
 };
 
 } // namespace vhsm::session

@@ -26,35 +26,35 @@ namespace vhsm::notification {
 
 class BoundedNotificationBus : public NotificationBus {
 public:
-    // capacity: maximum number of undelivered events buffered.
-    explicit BoundedNotificationBus(std::size_t capacity = 1024);
+  // capacity: maximum number of undelivered events buffered.
+  explicit BoundedNotificationBus(std::size_t capacity = 1024);
 
-    // Enqueue `event` for delivery.  Never blocks.  If the queue is full the
-    // event is dropped and dropped_count() is incremented.
-    void publish(const NotificationEvent& event) override;
+  // Enqueue `event` for delivery.  Never blocks.  If the queue is full the
+  // event is dropped and dropped_count() is incremented.
+  void publish(const NotificationEvent &event) override;
 
-    // Pop one pending event.  Returns true and fills `out` if an event was
-    // dequeued, false if the queue is empty.
-    bool try_pop(NotificationEvent& out);
+  // Pop one pending event.  Returns true and fills `out` if an event was
+  // dequeued, false if the queue is empty.
+  bool try_pop(NotificationEvent &out);
 
-    // Blocking variant: waits up to `timeout_ms` for an event.  Returns true
-    // if an event was dequeued.  Used by the dispatcher loop between sweeps.
-    bool pop_timeout(NotificationEvent& out, int timeout_ms);
+  // Blocking variant: waits up to `timeout_ms` for an event.  Returns true
+  // if an event was dequeued.  Used by the dispatcher loop between sweeps.
+  bool pop_timeout(NotificationEvent &out, int timeout_ms);
 
-    // Number of events currently buffered (diagnostics / tests).
-    std::size_t size() const;
+  // Number of events currently buffered (diagnostics / tests).
+  std::size_t size() const;
 
-    // Number of events dropped because the queue was full (diagnostics).
-    std::size_t dropped_count() const;
+  // Number of events dropped because the queue was full (diagnostics).
+  std::size_t dropped_count() const;
 
 private:
-    const std::size_t capacity_;
-    std::deque<NotificationEvent> queue_;
-    mutable std::mutex mutex_;
-    std::condition_variable cv_;
-    std::size_t dropped_{0};
+  const std::size_t capacity_;
+  std::deque<NotificationEvent> queue_;
+  mutable std::mutex mutex_;
+  std::condition_variable cv_;
+  std::size_t dropped_{0};
 };
 
-}  // namespace vhsm::notification
+} // namespace vhsm::notification
 
 #endif // VHSM_NOTIFICATION_BOUNDED_NOTIFICATION_BUS_H
