@@ -16,27 +16,27 @@ class Contract;
  */
 class Network : public std::enable_shared_from_this<Network> {
 public:
-    /**
-     * Get a contract deployed on this network.
-     * @param chaincodeName Name of the chaincode
-     * @return Contract handle
-     */
-    std::shared_ptr<Contract> getContract(const std::string& chaincodeName);
+  /**
+   * Get a contract deployed on this network.
+   * @param chaincodeName Name of the chaincode
+   * @return Contract handle
+   */
+  std::shared_ptr<Contract> getContract(const std::string &chaincodeName);
 
-    const std::string& channelId() const { return channelId_; }
+  const std::string &channelId() const { return channelId_; }
 
-    /**
-     * Get the Gateway client that owns this network.
-     * @return Gateway handle
-     */
-    std::shared_ptr<Gateway> gateway();
+  /**
+   * Get the Gateway client that owns this network.
+   * @return Gateway handle
+   */
+  std::shared_ptr<Gateway> gateway();
 
 private:
-    friend class Gateway;
-    Network(std::shared_ptr<Gateway> gateway, std::string channelId);
+  friend class Gateway;
+  Network(std::shared_ptr<Gateway> gateway, std::string channelId);
 
-    std::shared_ptr<Gateway> gateway_;
-    std::string channelId_;
+  std::shared_ptr<Gateway> gateway_;
+  std::string channelId_;
 };
 
 } // namespace gateway

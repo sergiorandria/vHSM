@@ -1,8 +1,8 @@
 #ifndef FABRIC_CRYPTO_EC_H
 #define FABRIC_CRYPTO_EC_H
 
-#include <string>
 #include <memory>
+#include <string>
 
 namespace fabric {
 namespace crypto {
@@ -13,60 +13,60 @@ namespace crypto {
  */
 class ECKeyPair {
 public:
-    /**
-     * Generate a new EC key pair using P-256 curve
-     * @return Pair of (privateKeyPEM, publicKeyPEM) as strings
-     */
-    static std::pair<std::string, std::string> generate();
+  /**
+   * Generate a new EC key pair using P-256 curve
+   * @return Pair of (privateKeyPEM, publicKeyPEM) as strings
+   */
+  static std::pair<std::string, std::string> generate();
 
-    /**
-     * Load a private key from PEM format
-     * @param pem Private key in PEM format
-     */
-    explicit ECKeyPair(const std::string& pem);
+  /**
+   * Load a private key from PEM format
+   * @param pem Private key in PEM format
+   */
+  explicit ECKeyPair(const std::string &pem);
 
-    ~ECKeyPair();
+  ~ECKeyPair();
 
-    /**
-     * Get the private key in PEM format
-     * @return Private key as PEM string
-     */
-    std::string getPrivateKeyPEM() const;
+  /**
+   * Get the private key in PEM format
+   * @return Private key as PEM string
+   */
+  std::string getPrivateKeyPEM() const;
 
-    /**
-     * Get the public key in PEM format
-     * @return Public key as PEM string
-     */
-    std::string getPublicKeyPEM() const;
+  /**
+   * Get the public key in PEM format
+   * @return Public key as PEM string
+   */
+  std::string getPublicKeyPEM() const;
 
-    /**
-     * Sign data using ECDSA
-     * @param data Data to sign
-     * @return Signature as hex string
-     */
-    std::string sign(const std::string& data) const;
+  /**
+   * Sign data using ECDSA
+   * @param data Data to sign
+   * @return Signature as hex string
+   */
+  std::string sign(const std::string &data) const;
 
-    /**
-     * Sign a message digest (SHA-256 output, not the message itself) using ECDSA
-     * and return a DER-encoded (ASN.1 SEQUENCE{ R, S }) signature with low-S
-     * enforced.  This matches the scheme Hyperledger Fabric uses for its
-     * transaction and registry token signatures.
-     * @param digest Digest bytes to sign (typically a SHA-256 hash)
-     * @return DER-encoded ECDSA signature bytes
-     */
-    std::string signDigest(const std::string& digest) const;
+  /**
+   * Sign a message digest (SHA-256 output, not the message itself) using ECDSA
+   * and return a DER-encoded (ASN.1 SEQUENCE{ R, S }) signature with low-S
+   * enforced.  This matches the scheme Hyperledger Fabric uses for its
+   * transaction and registry token signatures.
+   * @param digest Digest bytes to sign (typically a SHA-256 hash)
+   * @return DER-encoded ECDSA signature bytes
+   */
+  std::string signDigest(const std::string &digest) const;
 
-    /**
-     * Verify a signature
-     * @param data Data that was signed
-     * @param signature Hex-encoded signature
-     * @return True if signature is valid
-     */
-    bool verify(const std::string& data, const std::string& signature) const;
+  /**
+   * Verify a signature
+   * @param data Data that was signed
+   * @param signature Hex-encoded signature
+   * @return True if signature is valid
+   */
+  bool verify(const std::string &data, const std::string &signature) const;
 
 private:
-    class Impl;
-    std::unique_ptr<Impl> pimpl_;
+  class Impl;
+  std::unique_ptr<Impl> pimpl_;
 };
 
 } // namespace crypto

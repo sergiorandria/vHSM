@@ -4,20 +4,16 @@
 #include "ctx_guard.h"
 #include <openssl/evp.h>
 
-namespace vhsm::crypto
-{
-class CipherCtxGuard : public vhsm::crypto::CtxGuard<EVP_CIPHER_CTX>
-{
+namespace vhsm::crypto {
+class CipherCtxGuard : public vhsm::crypto::CtxGuard<EVP_CIPHER_CTX> {
 public:
-    explicit CipherCtxGuard(EVP_CIPHER_CTX* c) noexcept : CtxGuard(c) {}
+  explicit CipherCtxGuard(EVP_CIPHER_CTX *c) noexcept : CtxGuard(c) {}
 
-    ~CipherCtxGuard() override
-    {
-        if (this->ctx_)
-        {
-            EVP_CIPHER_CTX_free(this->ctx_);
-        }
+  ~CipherCtxGuard() override {
+    if (this->ctx_) {
+      EVP_CIPHER_CTX_free(this->ctx_);
     }
+  }
 };
 } // namespace vhsm::crypto
 

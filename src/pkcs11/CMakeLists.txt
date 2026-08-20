@@ -22,23 +22,31 @@ target_include_directories(vhsm_pkcs11
     PUBLIC ${PROJECT_SOURCE_DIR}
 )
 
+target_compile_options(vhsm_pkcs11 PRIVATE -fPIC -Wno-deprecated-declarations)
+
 target_link_libraries(vhsm_pkcs11
     PUBLIC
     vhsm_core
     vhsm_crypto
     vhsm_keystore
+    vhsm_persistence
     vhsm_session
     OpenSSL::SSL
 )
 
 # Shared module that can be loaded as a PKCS#11 .so
 add_library(vhsm_pkcs11_mod SHARED $<TARGET_OBJECTS:vhsm_pkcs11>)
-set_target_properties(vhsm_pkcs11_mod PROPERTIES OUTPUT_NAME "vhsm_pkcs11")
+set_target_properties(vhsm_pkcs11_mod PROPERTIES
+    OUTPUT_NAME "vhsm_pkcs11"
+    POSITION_INDEPENDENT_CODE ON
+)
+target_compile_options(vhsm_pkcs11_mod PRIVATE -fPIC -Wno-deprecated-declarations)
 target_link_libraries(vhsm_pkcs11_mod
     PUBLIC
     vhsm_core
     vhsm_crypto
     vhsm_keystore
+    vhsm_persistence
     vhsm_session
     OpenSSL::SSL
 )

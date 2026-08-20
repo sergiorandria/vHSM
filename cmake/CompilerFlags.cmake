@@ -7,8 +7,9 @@ function(add_hardening_flags TARGET)
             -Werror
             -fstack-protector-strong
             -D_FORTIFY_SOURCE=2
-            -fPIE
-            -pie
+            -fPIC
+        )
+        target_link_options(${TARGET} PRIVATE
             -Wl,-z,relro,-z,now
         )
     elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
