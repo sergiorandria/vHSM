@@ -1,6 +1,6 @@
 # Signature Store Unit Tests
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests/unit/signature_store)
 
 add_executable(vhsm_signature_store_test
     db_tests.cpp
@@ -8,6 +8,8 @@ add_executable(vhsm_signature_store_test
     sqlite_transaction_tests.cpp
     signature_repository_test.cpp
     signature_store_core_test.cpp
+    signature_store_integration_test.cpp
+    notification_dispatcher_test.cpp
 )
 
 target_include_directories(vhsm_signature_store_test

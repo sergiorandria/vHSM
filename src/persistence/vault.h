@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "../core/types.h"
+#include "vault_format.h"
 
 // WHY a Vault: PLAN.md Phase 7 requires encrypted-at-rest storage of sensitive
 // token state (KEK, wrapped keys, integrity anchors).  The Vault is the
@@ -53,6 +54,10 @@ public:
     bool is_valid() const noexcept { return valid_; }
 
 private:
+    // Internal constructor for create(): records path/password without reading
+    // the (not-yet-existing) file.  `valid_` stays false until save() persists.
+    Vault(const std::filesystem::path& path, const std::string& password, bool /*unused*/);
+
     // Reads the file and derives/returns the key for the given salt+iterations
     // encoded in the header.
     std::vector<u8> make_key(const std::vector<u8>& salt,
@@ -60,7 +65,7 @@ private:
 
     std::filesystem::path path_;
     std::string password_;
-    std::uint32_t version_ = 0;
+    std::uint32_t version_ = kVaultFormatVersion;
     bool valid_ = false;
 };
 

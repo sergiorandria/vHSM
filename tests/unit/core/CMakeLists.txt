@@ -1,9 +1,10 @@
 # Core Unit Tests
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests/unit/core)
 
 add_executable(vhsm_core_test
     secure_buffer_test.cpp
     clock_test.cpp
+    thread_pool_test.cpp
 )
 
 target_include_directories(vhsm_core_test
@@ -15,6 +16,7 @@ target_include_directories(vhsm_core_test
 target_link_libraries(vhsm_core_test
     PRIVATE
         vhsm_core
+        vhsm_threadpool
         GTest::gtest
         GTest::gtest_main
 )

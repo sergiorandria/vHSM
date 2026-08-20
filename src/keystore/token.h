@@ -119,6 +119,21 @@ public:
     void increment_rw_session_count();
     void decrement_rw_session_count();
 
+    // Restores persisted token state (Backup/Restore, vault load-on-init).
+    // See v_TokenCore_M1::v_restore_state.  Values come from our own
+    // TokenSerializer output, so input validation is minimal here.
+    void restore_state(CK_BBOOL token_initialized,
+                       CK_BBOOL user_pin_set,
+                       CK_BBOOL so_pin_set,
+                       CK_BBOOL user_login_required,
+                       CK_BBOOL so_login_required,
+                       unsigned max_failed_attempts,
+                       unsigned user_failed_attempts,
+                       unsigned so_failed_attempts,
+                       CK_BBOOL user_pin_locked,
+                       CK_BBOOL so_pin_locked,
+                       const std::vector<uint8_t>& kek);
+
     // WHY NOTE on getLoginState: In PKCS#11, login state is PER-SESSION, not per-token.
     // Different sessions can have different login states. The Token only verifies PIN
     // correctness. The Session object tracks who is logged in (if anyone). This boundary

@@ -11,6 +11,26 @@ HsmAdminServiceImpl::HsmAdminServiceImpl(vhsm::notification::NotificationBus* bu
                                          vhsm::audit::AuditLog* audit_log)
     : bus_(bus), audit_log_(audit_log) {}
 
+namespace {
+
+// Resolves slot -> token via the global SlotManager singleton (shared with the
+// PKCS#11 module).  Returns nullptr (with a status string set) on failure.
+std::shared_ptr<keystore::Token> resolve_token(uint32_t slot_id, std::string& err) {
+    auto slot = vhsm::session::SlotManager::get_instance().get_slot(slot_id);
+    if (!slot) {
+        err = "slot not found: " + std::to_string(slot_id);
+        return nullptr;
+    }
+    auto token = slot->get_token();
+    if (!token) {
+        err = "no token present in slot " + std::to_string(slot_id);
+        return nullptr;
+    }
+    return token;
+}
+
+}  // namespace
+
 ::grpc::Status HsmAdminServiceImpl::AdminLogin(::grpc::ServerContext* /*ctx*/,
                                                const AdminLoginRequest* request,
                                                AdminLoginResponse* response) {
@@ -55,6 +75,54 @@ HsmAdminServiceImpl::HsmAdminServiceImpl(vhsm::notification::NotificationBus* bu
         default:
             response->set_status("LOGIN_FAILED");
             return ::grpc::Status(::grpc::StatusCode::UNAUTHENTICATED, "LOGIN_FAILED");
+    }
+}
+
+::grpc::Status HsmAdminServiceImpl::BackupToken(::grpc::ServerContext* /*ctx*/,
+                                                const BackupTokenRequest* request,
+                                                BackupTokenResponse* response) {
+    if (!request || !response || request->vault_path().empty() ||
+        request->vault_password().empty()) {
+        return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
+                              "vault_path and vault_password are required");
+    }
+    std::string err;
+    auto token = resolve_token(request->slot_id(), err);
+    if (!token) {
+        return ::grpc::Status(::grpc::StatusCode::NOT_FOUND, err);
+    }
+    try {
+        TokenBackupCore core(*token);
+        core.backup(request->vault_path(), request->vault_password());
+        response->set_status("OK");
+        return ::grpc::Status::OK;
+    } catch (const std::exception& e) {
+        response->set_status(std::string("ERROR:") + e.what());
+        return ::grpc::Status(::grpc::StatusCode::FAILED_PRECONDITION, e.what());
+    }
+}
+
+::grpc::Status HsmAdminServiceImpl::RestoreToken(::grpc::ServerContext* /*ctx*/,
+                                                 const RestoreTokenRequest* request,
+                                                 RestoreTokenResponse* response) {
+    if (!request || !response || request->vault_path().empty() ||
+        request->vault_password().empty()) {
+        return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
+                              "vault_path and vault_password are required");
+    }
+    std::string err;
+    auto token = resolve_token(request->slot_id(), err);
+    if (!token) {
+        return ::grpc::Status(::grpc::StatusCode::NOT_FOUND, err);
+    }
+    try {
+        TokenBackupCore core(*token);
+        core.restore(request->vault_path(), request->vault_password());
+        response->set_status("OK");
+        return ::grpc::Status::OK;
+    } catch (const std::exception& e) {
+        response->set_status(std::string("ERROR:") + e.what());
+        return ::grpc::Status(::grpc::StatusCode::FAILED_PRECONDITION, e.what());
     }
 }
 

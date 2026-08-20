@@ -17,6 +17,8 @@
 #include "../session/session_manager.h"
 #include "../session/slot_manager.h"
 
+#include "../persistence/vault.h"
+
 #include "../signature_store/signature_dispatcher.h"
 #include "../signature_store/db_connection.h"
 #include "../notification/notification_bus.h"
@@ -74,6 +76,9 @@ std::unique_ptr<vhsm::notification::BoundedNotificationBus> g_boundedBus;
 // Ledger anchoring globals (optional; only populated when a Fabric gateway is configured)
 std::unique_ptr<vhsm::ledger::LedgerClient> g_ledgerClient;
 std::unique_ptr<vhsm::ledger::LedgerWorker> g_ledgerWorker;
+
+// Optional encrypted vault backing the default token (PLAN.md Phase 7).
+std::unique_ptr<vhsm::persistence::Vault> g_vault;
 
 // ---------------------------------------------------------------------------
 // Library / session state

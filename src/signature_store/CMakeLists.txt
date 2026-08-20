@@ -33,6 +33,7 @@ target_link_libraries(vhsm_signature_store
     vhsm_core
     vhsm_crypto
     vhsm_keystore
+    vhsm_persistence
     vhsm_notification
     vhsm_ledger
     OpenSSL::SSL

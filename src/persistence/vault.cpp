@@ -136,11 +136,20 @@ Vault Vault::create(const std::filesystem::path& path,
     if (std::filesystem::exists(path)) {
         throw std::runtime_error("Vault::create: file already exists: " + path.string());
     }
-    Vault v(path, password);
-    // Pre-validate the payload by doing a save() round trip; if the crypto
-    // fails it throws before we write anything.
+    // Build a not-yet-valid Vault (private ctor) so save() can produce the file
+    // without first reading/authenticating a file that does not exist yet.
+    Vault v(path, password, true);
     v.save(initial_payload);
     return v;
+}
+
+// Internal ctor used by create(): never reads the file.
+Vault::Vault(const std::filesystem::path& path, const std::string& password, bool /*unused*/)
+    : path_(path)
+    , password_(password)
+    , version_(kVaultFormatVersion)
+    , valid_(false)
+{
 }
 
 void Vault::save(const std::vector<u8>& payload)
@@ -223,6 +232,9 @@ void Vault::save(const std::vector<u8>& payload)
         ::fsync(dfd);
         ::close(dfd);
     }
+
+    // A successful write means the vault on disk is authentic and readable.
+    valid_ = true;
 }
 
 std::vector<u8> Vault::load() const

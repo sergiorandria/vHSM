@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <string>
 
 #include "../core/types.h"
@@ -26,9 +27,9 @@ struct RetryPolicy {
 };
 
 // Anchors signature records to the ledger asynchronously.  Instead of spinning
-// a dedicated worker thread, submitted records are enqueued as tasks on the
-// process-wide threadpool so multiple records can be committed concurrently
-// while a stalled (backing off) submission never blocks the rest of the queue.
+// a dedicated worker thread, submitted records are enqueued as tasks on a
+// threadpool so multiple records can be committed concurrently while a stalled
+// (backing off) submission never blocks the rest of the queue.
 class LedgerWorker {
 public:
     // Called after a record is successfully committed to the ledger.  The
@@ -37,11 +38,16 @@ public:
     using CommitCallback = std::function<void(const SignatureRecord&, const LedgerEntry&)>;
 
     // concurrent_workers: pool size used for anchoring.  0 selects an automatic
-    // default derived from hardware concurrency.
+    // default derived from hardware concurrency.  `pool` optionally injects a
+    // shared threadpool owned by the caller; when null the worker creates and
+    // owns its own pool on start().  drain_and_stop() shuts down the attached
+    // pool (joining its threads), so a caller sharing one pool must serialize
+    // drains at the owner level.
     explicit LedgerWorker(LedgerClient& client, notification::NotificationBus& bus,
                           CommitCallback on_committed = nullptr,
                           RetryPolicy retry = RetryPolicy(),
-                          std::size_t concurrent_workers = 0);
+                          std::size_t concurrent_workers = 0,
+                          std::shared_ptr<threadpool::ThreadPool> pool = nullptr);
     ~LedgerWorker();
 
     // Start accepting and processing submissions.
@@ -72,7 +78,8 @@ private:
     RetryPolicy retry_policy_;
     std::size_t pool_size_;
 
-    threadpool::ThreadPool* pool_ = nullptr;       // owned by the threadpool singleton
+    std::shared_ptr<threadpool::ThreadPool> owned_pool_; // set when created by start()
+    threadpool::ThreadPool* pool_ = nullptr;             // owned_pool_ or injected
     threadpool::CapabilityToken token_;
     std::atomic<bool> running_{false};
     std::atomic<long> committed_count_{0};

@@ -6,7 +6,7 @@
 # Output binary is placed under the per-directory 'build' folder used by the
 # other unit test CMake files in this repository.
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests/unit/session)
 
 add_executable(vhsm_session_test
     session_manager_test.cpp 

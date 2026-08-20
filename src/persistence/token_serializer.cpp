@@ -4,6 +4,7 @@
 #include <stdexcept>
 
 #include "../core/error.h"
+#include "vault.h"
 
 // Serialization layout (all multi-byte integers little-endian):
 //
@@ -189,6 +190,33 @@ TokenSnapshot snapshot_from_token(const vhsm::keystore::Token& token) {
     snap.so_pin_locked         = token.is_so_pin_locked();
     snap.kek                   = token.get_kek();
     return snap;
+}
+
+void restore_token_from_snapshot(vhsm::keystore::Token& token,
+                                 const TokenSnapshot& snap) {
+    if (snap.label.size() > 255 || snap.id.size() > 255) {
+        throw std::runtime_error("restore_token_from_snapshot: label/id too long");
+    }
+    token.restore_state(
+        snap.token_initialized,
+        snap.user_pin_set,
+        snap.so_pin_set,
+        snap.user_login_required,
+        snap.so_login_required,
+        snap.max_failed_attempts,
+        snap.user_failed_attempts,
+        snap.so_failed_attempts,
+        snap.user_pin_locked,
+        snap.so_pin_locked,
+        snap.kek);
+}
+
+void persist_token_to_vault(const vhsm::keystore::Token& token, Vault& vault) {
+    vault.save(serialize_token_snapshot(snapshot_from_token(token)));
+}
+
+void restore_token_from_vault(vhsm::keystore::Token& token, const Vault& vault) {
+    restore_token_from_snapshot(token, deserialize_token_snapshot(vault.load()));
 }
 
 } // namespace vhsm::persistence

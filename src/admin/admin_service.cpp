@@ -2,6 +2,10 @@
 
 #include <chrono>
 #include <sstream>
+#include <stdexcept>
+
+#include "../persistence/token_serializer.h"
+#include "../persistence/vault.h"
 
 namespace vhsm::admin {
 
@@ -49,6 +53,31 @@ CK_RV AdminLoginCore::admin_login(CK_USER_TYPE userType, const std::string& pin,
     }
 
     return CKR_OK;
+}
+
+TokenBackupCore::TokenBackupCore(keystore::Token& token)
+    : token_(token) {}
+
+void TokenBackupCore::backup(const std::string& vault_path,
+                             const std::string& vault_password) const {
+    // Serialize the token's durable state into a snapshot and encrypt it into
+    // a brand-new vault file.  Vault::create refuses to overwrite an existing
+    // file, which protects an existing backup from accidental clobbering.
+    const std::vector<u8> snapshot =
+        vhsm::persistence::serialize_token_snapshot(
+            vhsm::persistence::snapshot_from_token(token_));
+    vhsm::persistence::Vault vault = vhsm::persistence::Vault::create(
+        vault_path, vault_password, snapshot);
+    (void)vault.is_valid();
+}
+
+void TokenBackupCore::restore(const std::string& vault_path,
+                              const std::string& vault_password) const {
+    vhsm::persistence::Vault vault(vault_path, vault_password);
+    if (!vault.is_valid()) {
+        throw std::runtime_error("vault authentication failed");
+    }
+    vhsm::persistence::restore_token_from_vault(token_, vault);
 }
 
 }  // namespace vhsm::admin
