@@ -1,91 +1,38 @@
 #include "db_hmac_key.h"
 
-#include "../core/utils.h"
-#include "db_connection.h"
-#include "db_schema.h"
-
-#include "../keystore/key_wrap.h"
-
-#include <vector>
 #include <string>
-#include <optional>
+#include <vector>
+
+#include "../persistence/kdf.h"
 
 namespace vhsm::signature_store {
 namespace db {
 
-DbHmacKey::DbHmacKey(IDbConnection& conn, vhsm::keystore::Token& token)
-    : conn_(conn)
-    , token_(token) {}
+DbHmacKey::DbHmacKey(IDbConnection &conn, vhsm::keystore::Token &token)
+    : conn_(conn), token_(token) {}
 
 std::vector<std::uint8_t> DbHmacKey::get_key() const {
-    // Retrieve the wrapped key from db_meta
-    std::string sql = "SELECT value FROM db_meta WHERE key = ?";
-    std::vector<std::string> params{std::string(meta_key::kHmacKeyWrapped)};
-    DbResultSet rs = conn_.query(sql, params);
-    if (rs.rows_count() == 0) {
-        // No wrapped key stored yet
-        return {};
-    }
-    // Get first row
-    const DbRow& row = rs.rows_[0];
-    // Get the value as string (column 0)
-    std::optional<std::string> wrapped_b64 = row.get_string(0);
-    if (!wrapped_b64 || wrapped_b64->empty()) {
-        return {};
-    }
-    // Decode base64
-    auto decoded = vhsm::utils::base64_decode(*wrapped_b64);
-    if (!decoded) {
-        return {};
-    }
-    std::vector<std::uint8_t> wrapped_key;
-    wrapped_key.reserve(decoded->size());
-    for (auto b : *decoded) {
-        wrapped_key.push_back(static_cast<std::uint8_t>(b));
-    }
-    // Get KEK from token
-    std::vector<std::uint8_t> kek = token_.get_kek();
-    if (kek.empty()) {
-        return {};
-    }
-    // Unwrap using KeyWrap
-    try {
-        vhsm::keystore::KeyWrap key_wrap(kek);
-        return key_wrap.unwrap(wrapped_key);
-    } catch (const std::exception&) {
-        // Unwrap failed (e.g., integrity check failed)
-        return {};
-    }
+  // PLAN.md Phase 7: "Derive DB HMAC key from vault KEK using HKDF."
+  // The Vault's payload is the token's durable state, which includes the KEK
+  // (recovered on load-on-init; see persistence::restore_token_from_vault).
+  // Deriving the DB-integrity key from that KEK via HKDF-SHA256 (fixed
+  // "vHSM-db-hmac" info) gives a stable per-token integrity key without
+  // storing the HMAC key or the DB key wrapped in db_meta.
+  const std::vector<std::uint8_t> kek = token_.get_kek();
+  if (kek.empty()) {
+    // No KEK yet available (token not yet restored/initialized): callers
+    // must treat an empty result as "integrity key not available".
+    return {};
+  }
+  return vhsm::persistence::derive_db_hmac_key(kek);
 }
 
-void DbHmacKey::store_key_wrapped(const std::vector<std::uint8_t>& key) const {
-    // Get KEK from token
-    std::vector<std::uint8_t> kek = token_.get_kek();
-    if (kek.empty()) {
-        // No KEK available; cannot store wrapped key
-        return;
-    }
-    // Wrap the key
-    try {
-        vhsm::keystore::KeyWrap key_wrap(kek);
-        std::vector<std::uint8_t> wrapped_key = key_wrap.wrap(key);
-        // Encode to base64
-        std::string wrapped_b64 = vhsm::utils::base64_encode(
-            std::span<const std::byte>(
-                reinterpret_cast<const std::byte*>(wrapped_key.data()),
-                wrapped_key.size()));
-        // Upsert into db_meta
-        std::string sql = "INSERT INTO db_meta(key, value) VALUES(?, ?) "
-                          "ON CONFLICT(key) DO UPDATE SET value=excluded.value;";
-        std::vector<std::string> params{
-            std::string(meta_key::kHmacKeyWrapped),
-            wrapped_b64
-        };
-        conn_.exec(sql, params);
-    } catch (const std::exception&) {
-        // Wrap failed; silently ignore
-    }
+void DbHmacKey::store_key_wrapped(
+    const std::vector<std::uint8_t> & /*key*/) const {
+  // Retained for API compatibility.  The DB integrity key is no longer
+  // persisted in db_meta: it is derived from the vault KEK on demand, so
+  // there is nothing to store here.  Do nothing.
 }
 
-}  // namespace db
-}  // namespace vhsm::signature_store
+} // namespace db
+} // namespace vhsm::signature_store

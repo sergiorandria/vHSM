@@ -1,355 +1,345 @@
 #include "secure_buffer.h"
 
 #include <cassert>
-#include <cstring> 
-#include <stdexcept> 
+#include <cstring>
+#include <stdexcept>
 
-#ifdef _WIN32 
-#include <windows.h> 
-#else 
+#ifdef _WIN32
+#include <windows.h>
+#else
 // For POSIX system
-#include <sys/mman.h> 
+#include <sys/mman.h>
 #include <unistd.h>
-#endif 
+#endif
 
 namespace vhsm {
-// Should use std::atomic_uint8_t for 
-// thread safe application, but can 
-// complicate SecureBuffer implementation 
-// a little bit. Current implementation uses std::uint8_t. 
+// Should use std::atomic_uint8_t for
+// thread safe application, but can
+// complicate SecureBuffer implementation
+// a little bit. Current implementation uses std::uint8_t.
 
 std::size_t SecureBuffer::v_sb_page_size() noexcept {
 #ifdef _WIN32
-    static const std::size_t ps = []() -> std::size_t {
-        SYSTEM_INFO si;
-        GetNativeSystemInfo(&si);
-        return static_cast<std::size_t>(si.dwPageSize);
-    }();
+  static const std::size_t ps = []() -> std::size_t {
+    SYSTEM_INFO si;
+    GetNativeSystemInfo(&si);
+    return static_cast<std::size_t>(si.dwPageSize);
+  }();
 #else
-// sysconf(_SC_PAGESIZE) the system memory page size in bytes, 
-// which is the fundamental unit of virtual memory allocation. 
-// Modern alternative of getpagesize(). 
-    static const std::size_t ps =
-        static_cast<std::size_t>(::sysconf(_SC_PAGESIZE));
+  // sysconf(_SC_PAGESIZE) the system memory page size in bytes,
+  // which is the fundamental unit of virtual memory allocation.
+  // Modern alternative of getpagesize().
+  static const std::size_t ps =
+      static_cast<std::size_t>(::sysconf(_SC_PAGESIZE));
 #endif
-    return ps;
+  return ps;
 }
 
 std::size_t SecureBuffer::v_sb_round_up_to_page(std::size_t n) noexcept {
-    const std::size_t ps = v_sb_page_size();
-    return ((n + ps - 1) / ps) * ps;
+  const std::size_t ps = v_sb_page_size();
+  return ((n + ps - 1) / ps) * ps;
 }
 
-bool SecureBuffer::v_sb_lock_pages(void* addr, std::size_t len) {
+bool SecureBuffer::v_sb_lock_pages(void *addr, std::size_t len) {
 #ifdef _WIN32
-    if (!VirtualLock(addr, len)) {
-        throw std::runtime_error(
-            "SecureBuffer: VirtualLock failed (err=" +
-            std::to_string(GetLastError()) + "). "
-            "Consider raising the working set limit.");
-    }
+  if (!VirtualLock(addr, len)) {
+    throw std::runtime_error("SecureBuffer: VirtualLock failed (err=" +
+                             std::to_string(GetLastError()) +
+                             "). "
+                             "Consider raising the working set limit.");
+  }
 #else
-    if (::mlock(addr, len) != 0) {
-        throw std::runtime_error(
-            "SecureBuffer: mlock(2) failed. "
-            "Check RLIMIT_MEMLOCK (see 'ulimit -l'). "
-            "On Linux you can raise it in /etc/security/limits.conf.");
+  if (::mlock(addr, len) != 0) {
+    throw std::runtime_error(
+        "SecureBuffer: mlock(2) failed. "
+        "Check RLIMIT_MEMLOCK (see 'ulimit -l'). "
+        "On Linux you can raise it in /etc/security/limits.conf.");
 
-        return false; // Execution doesn't reach this return.
-    }
+    return false; // Execution doesn't reach this return.
+  }
 #endif
 
-    return true;
+  return true;
 }
 
-void SecureBuffer::v_sb_unlock_pages(void* addr, std::size_t len) noexcept {
+void SecureBuffer::v_sb_unlock_pages(void *addr, std::size_t len) noexcept {
 #ifdef _WIN32
-    VirtualUnlock(addr, len);   
+  VirtualUnlock(addr, len);
 #else
-    ::munlock(addr, len);       
+  ::munlock(addr, len);
 #endif
 }
 
-void SecureBuffer::v_sb_secure_zero(void* addr, std::size_t len) noexcept {
-    if (addr == nullptr || len == 0) return;
+void SecureBuffer::v_sb_secure_zero(void *addr, std::size_t len) noexcept {
+  if (addr == nullptr || len == 0)
+    return;
 #ifdef _WIN32
-    SecureZeroMemory(addr, len);
-#elif defined(__GLIBC__) && \
-      (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 25))
-    // explicit_bzero is in POSIX.1-2008 and glibc ≥ 2.25; guaranteed not
-    // to be optimised away.
-    ::explicit_bzero(addr, len);
+  SecureZeroMemory(addr, len);
+#elif defined(__GLIBC__) &&                                                    \
+    (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 25))
+  // explicit_bzero is in POSIX.1-2008 and glibc ≥ 2.25; guaranteed not
+  // to be optimised away.
+  ::explicit_bzero(addr, len);
 #else
-    // Fallback: volatile pointer write.  Still technically UB-adjacent but
-    // the volatile qualifier prevents most optimiser elision.
-    volatile uint8_t* p = static_cast<volatile uint8_t*>(addr);
-    for (std::size_t i = 0; i < len; ++i) p[i] = 0;
+  // Fallback: volatile pointer write.  Still technically UB-adjacent but
+  // the volatile qualifier prevents most optimiser elision.
+  volatile uint8_t *p = static_cast<volatile uint8_t *>(addr);
+  for (std::size_t i = 0; i < len; ++i)
+    p[i] = 0;
 #endif
 }
 
 SecureBuffer::SecureBuffer(std::size_t size) {
-    if (size == 0) {
-        throw std::runtime_error("SecureBuffer: size must be > 0");
-    }
+  if (size == 0) {
+    throw std::runtime_error("SecureBuffer: size must be > 0");
+  }
 
-    const std::size_t ps = v_sb_page_size();
-    const std::size_t data_pages = v_sb_round_up_to_page(size);
-    
-    // Total layout: guard | data pages | guard
-    alloc_size_ = ps + data_pages + ps;
- 
+  const std::size_t ps = v_sb_page_size();
+  const std::size_t data_pages = v_sb_round_up_to_page(size);
+
+  // Total layout: guard | data pages | guard
+  alloc_size_ = ps + data_pages + ps;
+
 #ifdef _WIN32
-    // VirtualAlloc reserves and commits in one call; MEM_COMMIT | MEM_RESERVE.
-    alloc_base_ = ::VirtualAlloc(nullptr, alloc_size_,
-                                MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    if (!alloc_base_) {
-        throw std::runtime_error("SecureBuffer: VirtualAlloc failed");
-    }
+  // VirtualAlloc reserves and commits in one call; MEM_COMMIT | MEM_RESERVE.
+  alloc_base_ = ::VirtualAlloc(nullptr, alloc_size_, MEM_COMMIT | MEM_RESERVE,
+                               PAGE_READWRITE);
+  if (!alloc_base_) {
+    throw std::runtime_error("SecureBuffer: VirtualAlloc failed");
+  }
 
 #else
-    // MAP_ANONYMOUS | MAP_PRIVATE gives a zero-initialised private mapping.
-    alloc_base_ = ::mmap(nullptr, alloc_size_,
-                        PROT_READ | PROT_WRITE,
-                        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (alloc_base_ == MAP_FAILED) {
-        throw std::runtime_error("SecureBuffer: mmap failed");
-    }
+  // MAP_ANONYMOUS | MAP_PRIVATE gives a zero-initialised private mapping.
+  alloc_base_ = ::mmap(nullptr, alloc_size_, PROT_READ | PROT_WRITE,
+                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if (alloc_base_ == MAP_FAILED) {
+    throw std::runtime_error("SecureBuffer: mmap failed");
+  }
 #endif
-    // Front guard: first page of the allocation.
-    // Rear  guard: last page of the allocation.
-    // Any access to either triggers a hardware fault (SIGSEGV / AV).
-    uint8_t* base = static_cast<uint8_t*>(alloc_base_);
- 
+  // Front guard: first page of the allocation.
+  // Rear  guard: last page of the allocation.
+  // Any access to either triggers a hardware fault (SIGSEGV / AV).
+  uint8_t *base = static_cast<uint8_t *>(alloc_base_);
+
 #ifdef _WIN32
-    DWORD old_protect;
-    if (!VirtualProtect(base, ps, PAGE_NOACCESS, &old_protect)) {
-        VirtualFree(alloc_base_, 0, MEM_RELEASE);
-        throw std::runtime_error("SecureBuffer: VirtualProtect (front guard) failed");
-    }
-    if (!VirtualProtect(base + ps + data_pages, ps, PAGE_NOACCESS, &old_protect)) {
-        VirtualFree(alloc_base_, 0, MEM_RELEASE);
-        throw std::runtime_error("SecureBuffer: VirtualProtect (rear guard) failed");
-    }
+  DWORD old_protect;
+  if (!VirtualProtect(base, ps, PAGE_NOACCESS, &old_protect)) {
+    VirtualFree(alloc_base_, 0, MEM_RELEASE);
+    throw std::runtime_error(
+        "SecureBuffer: VirtualProtect (front guard) failed");
+  }
+  if (!VirtualProtect(base + ps + data_pages, ps, PAGE_NOACCESS,
+                      &old_protect)) {
+    VirtualFree(alloc_base_, 0, MEM_RELEASE);
+    throw std::runtime_error(
+        "SecureBuffer: VirtualProtect (rear guard) failed");
+  }
 #else
-    if (::mprotect(base, ps, PROT_NONE) != 0) {
-        ::munmap(alloc_base_, alloc_size_);
-        throw std::runtime_error("SecureBuffer: mprotect (front guard) failed");
-    }
-    if (::mprotect(base + ps + data_pages, ps, PROT_NONE) != 0) {
-        ::munmap(alloc_base_, alloc_size_);
-        throw std::runtime_error("SecureBuffer: mprotect (rear guard) failed");
-    }
+  if (::mprotect(base, ps, PROT_NONE) != 0) {
+    ::munmap(alloc_base_, alloc_size_);
+    throw std::runtime_error("SecureBuffer: mprotect (front guard) failed");
+  }
+  if (::mprotect(base + ps + data_pages, ps, PROT_NONE) != 0) {
+    ::munmap(alloc_base_, alloc_size_);
+    throw std::runtime_error("SecureBuffer: mprotect (rear guard) failed");
+  }
 #endif
- 
-    // Lock the data pages into RAM
-    data_ = base + ps;
-    size_ = size;
- 
-    try {
-        if (!v_sb_lock_pages(data_, data_pages)) {
-            
-        }
-    } catch (...) {
-        // Restore protections so munmap/VirtualFree can access all pages.
-#ifdef _WIN32
-        VirtualProtect(base,                  ps, PAGE_READWRITE, &old_protect);
-        VirtualProtect(base + ps + data_pages, ps, PAGE_READWRITE, &old_protect);
-        VirtualFree(alloc_base_, 0, MEM_RELEASE);
-#else
-        ::mprotect(base,                   ps, PROT_READ | PROT_WRITE);
-        ::mprotect(base + ps + data_pages, ps, PROT_READ | PROT_WRITE);
-        ::munmap(alloc_base_, alloc_size_);
-#endif
-        alloc_base_ = nullptr;
-        data_       = nullptr;
-        size_       = 0;
-        alloc_size_ = 0;
-        throw;
+
+  // Lock the data pages into RAM
+  data_ = base + ps;
+  size_ = size;
+
+  try {
+    if (!v_sb_lock_pages(data_, data_pages)) {
     }
-
-    // mmap already zero-fills MAP_ANONYMOUS; explicit zero for Windows.
+  } catch (...) {
+    // Restore protections so munmap/VirtualFree can access all pages.
 #ifdef _WIN32
-    ::memset(data_, 0, data_pages);
-#endif
-}
-
-SecureBuffer::~SecureBuffer() noexcept {
-    v_sb_release();
-}
-
-void SecureBuffer::v_sb_release() noexcept {
-    if (alloc_base_ == nullptr) {
-        return;
-    }
-
-    const std::size_t ps = v_sb_page_size();
-    const std::size_t data_pages = alloc_size_ - 2 * ps;
-    u8* base = static_cast<u8*>(alloc_base_);
-
-    // Wipe the data region first, while it's still mapped with RW.
-    if (data_ != nullptr) {
-        v_sb_secure_zero(data_, data_pages);
-    }
-
-    // Unlock pages (best-effort).
-    v_sb_unlock_pages(data_, data_pages);
-
-    // Restore guard page permissions so the OS can reclaim them cleanly.
-#ifdef _WIN32
-    DWORD old;
-    VirtualProtect(base, ps, PAGE_READWRITE, &old);
-    VirtualProtect(base + ps + data_pages, ps, PAGE_READWRITE, &old);
+    VirtualProtect(base, ps, PAGE_READWRITE, &old_protect);
+    VirtualProtect(base + ps + data_pages, ps, PAGE_READWRITE, &old_protect);
     VirtualFree(alloc_base_, 0, MEM_RELEASE);
 #else
     ::mprotect(base, ps, PROT_READ | PROT_WRITE);
     ::mprotect(base + ps + data_pages, ps, PROT_READ | PROT_WRITE);
     ::munmap(alloc_base_, alloc_size_);
 #endif
-
     alloc_base_ = nullptr;
-    data_       = nullptr;
-    size_       = 0;
+    data_ = nullptr;
+    size_ = 0;
     alloc_size_ = 0;
+    throw;
+  }
+
+  // mmap already zero-fills MAP_ANONYMOUS; explicit zero for Windows.
+#ifdef _WIN32
+  ::memset(data_, 0, data_pages);
+#endif
 }
 
-// SecureBuffer should be movable, 
+SecureBuffer::~SecureBuffer() noexcept { v_sb_release(); }
+
+void SecureBuffer::v_sb_release() noexcept {
+  if (alloc_base_ == nullptr) {
+    return;
+  }
+
+  const std::size_t ps = v_sb_page_size();
+  const std::size_t data_pages = alloc_size_ - 2 * ps;
+  u8 *base = static_cast<u8 *>(alloc_base_);
+
+  // Wipe the data region first, while it's still mapped with RW.
+  if (data_ != nullptr) {
+    v_sb_secure_zero(data_, data_pages);
+  }
+
+  // Unlock pages (best-effort).
+  v_sb_unlock_pages(data_, data_pages);
+
+  // Restore guard page permissions so the OS can reclaim them cleanly.
+#ifdef _WIN32
+  DWORD old;
+  VirtualProtect(base, ps, PAGE_READWRITE, &old);
+  VirtualProtect(base + ps + data_pages, ps, PAGE_READWRITE, &old);
+  VirtualFree(alloc_base_, 0, MEM_RELEASE);
+#else
+  ::mprotect(base, ps, PROT_READ | PROT_WRITE);
+  ::mprotect(base + ps + data_pages, ps, PROT_READ | PROT_WRITE);
+  ::munmap(alloc_base_, alloc_size_);
+#endif
+
+  alloc_base_ = nullptr;
+  data_ = nullptr;
+  size_ = 0;
+  alloc_size_ = 0;
+}
+
+// SecureBuffer should be movable,
 // like any memory data structure.
-SecureBuffer::SecureBuffer(SecureBuffer&& other) noexcept
-    : data_      (other.data_)
-    , size_      (other.size_)
-    , alloc_base_(other.alloc_base_)
-    , alloc_size_(other.alloc_size_)
-{
-    other.data_       = nullptr;
-    other.size_       = 0;
+SecureBuffer::SecureBuffer(SecureBuffer &&other) noexcept
+    : data_(other.data_), size_(other.size_), alloc_base_(other.alloc_base_),
+      alloc_size_(other.alloc_size_) {
+  other.data_ = nullptr;
+  other.size_ = 0;
+  other.alloc_base_ = nullptr;
+  other.alloc_size_ = 0;
+}
+
+SecureBuffer &SecureBuffer::operator=(SecureBuffer &&other) noexcept {
+  if (this != &other) {
+    v_sb_release();
+    data_ = other.data_;
+    size_ = other.size_;
+    alloc_base_ = other.alloc_base_;
+    alloc_size_ = other.alloc_size_;
+    other.data_ = nullptr;
+    other.size_ = 0;
     other.alloc_base_ = nullptr;
     other.alloc_size_ = 0;
+  }
+  return *this;
 }
 
-SecureBuffer& SecureBuffer::operator=(SecureBuffer&& other) noexcept {
-    if (this != &other) {
-        v_sb_release();                       
-        data_       = other.data_;
-        size_       = other.size_;
-        alloc_base_ = other.alloc_base_;
-        alloc_size_ = other.alloc_size_;
-        other.data_       = nullptr;
-        other.size_       = 0;
-        other.alloc_base_ = nullptr;
-        other.alloc_size_ = 0;
-    }
-    return *this;
+void SecureBuffer::read(std::size_t offset, u8 *dst, std::size_t len) const {
+  // Zero-length copies are a no-op; this also avoids passing a null
+  // pointer to memcpy (undefined behaviour even for len == 0).
+  if (len == 0) {
+    return;
+  }
+  if (dst == nullptr) {
+    throw std::invalid_argument("SecureBuffer::read: dst is null");
+  }
+  // Bounds check written to avoid unsigned overflow in (offset + len):
+  // if offset > size_ then size_ - offset would itself underflow.
+  if (offset > size_ || len > size_ - offset) {
+    throw std::out_of_range(
+        "SecureBuffer::read: offset=" + std::to_string(offset) +
+        " len=" + std::to_string(len) + " size=" + std::to_string(size_));
+  }
+
+  // Internal helper after validation.
+  __v_sb_read(offset, dst, len);
 }
 
-void SecureBuffer::read(std::size_t offset,
-                        u8* dst,
-                        std::size_t len) const
-{
-    // Zero-length copies are a no-op; this also avoids passing a null
-    // pointer to memcpy (undefined behaviour even for len == 0).
-    if (len == 0) {
-        return;
-    }
-    if (dst == nullptr) {
-        throw std::invalid_argument("SecureBuffer::read: dst is null");
-    }
-    // Bounds check written to avoid unsigned overflow in (offset + len):
-    // if offset > size_ then size_ - offset would itself underflow.
-    if (offset > size_ || len > size_ - offset) {
-        throw std::out_of_range(
-            "SecureBuffer::read: offset=" + std::to_string(offset) +
-            " len="    + std::to_string(len) +
-            " size="   + std::to_string(size_));
-    }
-
-    // Internal helper after validation.
-    __v_sb_read(offset, dst, len);
+__attribute__((visibility("hidden"))) __attribute__((noinline)) void
+SecureBuffer::__v_sb_write(std::size_t offset, const u8 *src, std::size_t len) {
+  ::memcpy(data_ + offset, src, len);
 }
 
-__attribute__((visibility("hidden")))
-__attribute__((noinline))
-void SecureBuffer::__v_sb_write(std::size_t offset, const u8* src, std::size_t len) {
-    ::memcpy(data_ + offset, src, len);
+__attribute__((visibility("hidden"))) __attribute__((noinline)) void
+SecureBuffer::__v_sb_read(std::size_t offset, u8 *dst, std::size_t len) const {
+  ::memcpy(dst, data_ + offset, len);
 }
 
-__attribute__((visibility("hidden")))
-__attribute__((noinline))
-void SecureBuffer::__v_sb_read(std::size_t offset, u8* dst, std::size_t len) const {
-    ::memcpy(dst, data_ + offset, len);
+void SecureBuffer::write(std::size_t offset, const u8 *src, std::size_t len) {
+  // Zero-length copies are a no-op; see read() for the null/memcpy rationale.
+  if (len == 0) {
+    return;
+  }
+  if (src == nullptr) {
+    throw std::invalid_argument("SecureBuffer::write: src is null");
+  }
+  // Bounds check written to avoid unsigned overflow in (offset + len).
+  if (offset > size_ || len > size_ - offset) {
+    throw std::out_of_range(
+        "SecureBuffer::write: offset=" + std::to_string(offset) +
+        " len=" + std::to_string(len) + " size=" + std::to_string(size_));
+  }
+
+  // Internal helper after validation.
+  // Lower level layer.
+  __v_sb_write(offset, src, len);
 }
 
-void SecureBuffer::write(std::size_t    offset,
-                        const u8* src,
-                        std::size_t    len)
-{
-    // Zero-length copies are a no-op; see read() for the null/memcpy rationale.
-    if (len == 0) {
-        return;
-    }
-    if (src == nullptr) {
-        throw std::invalid_argument("SecureBuffer::write: src is null");
-    }
-    // Bounds check written to avoid unsigned overflow in (offset + len).
-    if (offset > size_ || len > size_ - offset) {
-        throw std::out_of_range(
-            "SecureBuffer::write: offset=" + std::to_string(offset) +
-            " len="    + std::to_string(len) +
-            " size="   + std::to_string(size_));
-    }
+bool SecureBuffer::equals(const SecureBuffer &other) const noexcept {
+  if (size_ != other.size_) {
+    return false;
+  }
 
-    // Internal helper after validation. 
-    // Lower level layer. 
-    __v_sb_write(offset, src, len);
-}
+  if (data_ == nullptr && other.data_ == nullptr) {
+    return true;
+  }
 
-bool SecureBuffer::equals(const SecureBuffer& other) const noexcept {
-    if (size_ != other.size_) {
-        return false;
-    }
+  if (data_ == nullptr || other.data_ == nullptr) {
+    return false;
+  }
 
-    if (data_ == nullptr && other.data_ == nullptr) {
-        return true;
-    }
+  // XOR every byte and OR the results, no early exit.
+  volatile u8 acc = 0;
+  const u8 *a = data_;
+  const u8 *b = other.data_;
 
-    if (data_ == nullptr || other.data_ == nullptr) {
-        return false;
-    }
+  for (std::size_t i = 0; i < size_; ++i) {
+    acc |= (a[i] ^ b[i]);
+  }
 
-    // XOR every byte and OR the results, no early exit.
-    volatile u8 acc = 0;
-    const u8* a = data_;
-    const u8* b = other.data_;
-    
-    for (std::size_t i = 0; i < size_; ++i) {
-        acc |= (a[i] ^ b[i]);
-    }
-    
-    return acc == 0;
+  return acc == 0;
 }
 
 // Pointer to the locked memory
-u8* SecureBuffer::data() noexcept { return data_; }
+u8 *SecureBuffer::data() noexcept { return data_; }
 
 // Const pointer to the locked memory
-const u8* SecureBuffer::data() const noexcept { return data_; }
+const u8 *SecureBuffer::data() const noexcept { return data_; }
 
 // Size of the buffer in elements
 std::size_t SecureBuffer::size() const noexcept { return size_; }
 
 // Size of the buffer in bytes
-std::size_t SecureBuffer::byte_size() const noexcept { return size_ * sizeof(u8); }
+std::size_t SecureBuffer::byte_size() const noexcept {
+  return size_ * sizeof(u8);
+}
 
-bool SecureBuffer::operator==(const SecureBuffer& other) const noexcept {
-    return this->equals(other);
-} 
-    
-bool SecureBuffer::operator!=(const SecureBuffer& other) const noexcept {
-    return !this->equals(other);
+bool SecureBuffer::operator==(const SecureBuffer &other) const noexcept {
+  return this->equals(other);
+}
+
+bool SecureBuffer::operator!=(const SecureBuffer &other) const noexcept {
+  return !this->equals(other);
 }
 
 // Zeroize the buffer contents
 void SecureBuffer::wipe() noexcept {
-    if (data_ != nullptr)
-        v_sb_secure_zero(data_, size_);
+  if (data_ != nullptr)
+    v_sb_secure_zero(data_, size_);
 }
-}
+} // namespace vhsm

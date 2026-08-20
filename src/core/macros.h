@@ -1,12 +1,12 @@
-#ifndef VHSM_MACROS_H 
-#define VHSM_MACROS_H 
+#ifndef VHSM_MACROS_H
+#define VHSM_MACROS_H
 
-#define VHSM_CORE_VERSION  0.1L
+#define VHSM_CORE_VERSION 0.1L
 
-#ifdef __GNUC__ 
+#ifdef __GNUC__
 #define VHSM_NODISCARD [[nodiscard]]
-#elif defined(_MSVC) 
+#elif defined(_MSVC)
 #define VHSM_NODISCARD __nodiscard
-#endif 
+#endif
 
 #endif // VHSM_MACROS_H

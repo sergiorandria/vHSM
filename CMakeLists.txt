@@ -32,13 +32,15 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         -Werror
         -fstack-protector-strong
         -D_FORTIFY_SOURCE=2
-        -fPIE
+        -fPIC
     )
     # Linker hardening flags — applied to all link steps
+    # PIE is set per-executable only, to avoid -pie conflicting with -shared
+    # when building shared libraries / loadable modules.
     add_link_options(
-        -pie
         -Wl,-z,relro,-z,now
     )
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     add_compile_options(
         /W4 /WX /GS /GL /sdl
