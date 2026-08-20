@@ -40,23 +40,6 @@ namespace db {
 //   - What gets ledger-committed (cryptographic proof)
 // This prevents bypasses and ensures consistency.
 
-#pragma once
-
-#include <optional>
-#include <string>
-
-#include "../core/types.h"
-#include "../core/system_hsm_clock.h"
-#include "db_connection.h"
-#include "internal/signature_dispatcher_core.h"
-#include "../keystore/token.h"
-#include "../notification/notification_bus.h"
-#include "../audit/audit_log.h"
-#include "../ledger/ledger_worker.h"
-
-namespace vhsm::signature_store {
-namespace db {
-
 // WHY public facade + internal core pattern: Input validation and orchestration live in the
 // facade (this class). The core owns database transactions, retry logic, and ledger state.
 // This separation makes the facade testable (mock the core) and the core auditable (no C API).
@@ -83,8 +66,8 @@ public:
     //   3. Log to audit log (user_label, mechanism, success/failure)
     //   4. Publish notification (severity = CRITICAL on failure, INFO on success)
     //   5. Queue to ledger worker for asynchronous blockchain commit
-    // Returns void; exceptions on failure (fail-closed).
-    void dispatch(
+    // Returns true on success, false if the DB write failed (fail-closed).
+    bool dispatch(
         const vhsm::crypto::SignResult& sign_result,
         int64_t created_at,
         int slot_id,
@@ -105,11 +88,6 @@ private:
     // WHY internal core: All state management, transactions, and ledger logic.
     vhsm::signature_store::db::internal::v_SignatureDispatcherCore_M1 v_core_;
 };
-
-}  // namespace db
-}  // namespace vhsm::signature_store
-
-#endif // VHSM_SIGSTORE_SIGNATURE_DISPATCHER_H
 
 }  // namespace db
 }  // namespace vhsm::signature_store

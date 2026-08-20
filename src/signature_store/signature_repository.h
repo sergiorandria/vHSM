@@ -30,21 +30,6 @@ namespace db {
 // The caller (dispatcher) maps these to typed fields. This abstraction prevents tight coupling
 // to database schema (easier to add columns without changing callers).
 
-#ifndef VHSM_SIGSTORE_SIGNATURE_REPOSITORY_H
-#define VHSM_SIGSTORE_SIGNATURE_REPOSITORY_H
-
-#include <string>
-#include <optional>
-#include <vector>
-
-#include "../core/types.h"
-#include "db_connection.h"
-#include "../keystore/token.h"
-#include "../ledger/ledger_entry.h"
-
-namespace vhsm::signature_store {
-namespace db {
-
 class SignatureRepository {
 public:
     // WHY constructor takes IDbConnection& and Token&: Both required for operations.
@@ -94,11 +79,6 @@ private:
     IDbConnection& conn_;
     vhsm::keystore::Token& token_;
 };
-
-}  // namespace db
-}  // namespace vhsm::signature_store
-
-#endif // VHSM_SIGSTORE_SIGNATURE_REPOSITORY_H
 
 }  // namespace db
 }  // namespace vhsm::signature_store

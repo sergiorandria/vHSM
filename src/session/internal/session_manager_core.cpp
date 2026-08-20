@@ -23,7 +23,7 @@ CK_RV v_SessionManagerCore_M1::v_open_session(CK_SLOT_ID slotID, CK_FLAGS flags,
         hSession = v_next_session_id_++;
     }
 
-    v_sessions_.emplace_back(hSession, slotID, flags, pApplication, notify);
+    v_sessions_.emplace_back(std::make_shared<Session>(hSession, slotID, flags, pApplication, notify));
 
     *phSession = hSession;
     v_touch_op();
@@ -34,7 +34,7 @@ CK_RV v_SessionManagerCore_M1::v_close_session(CK_SESSION_HANDLE hSession) {
     std::lock_guard<std::mutex> lock(v_mutex_);
 
     for (auto it = v_sessions_.begin(); it != v_sessions_.end(); ++it) {
-        if (it->getHandle() == hSession) {
+        if ((*it)->getHandle() == hSession) {
             it = v_sessions_.erase(it);
             v_touch_op();
             return CKR_OK;
@@ -50,7 +50,7 @@ CK_RV v_SessionManagerCore_M1::v_close_all_sessions(CK_SLOT_ID slotID) {
     bool found = false;
     auto it = v_sessions_.begin();
     while (it != v_sessions_.end()) {
-        if (it->getSlotID() == slotID) {
+        if ((*it)->getSlotID() == slotID) {
             it = v_sessions_.erase(it);
             found = true;
         } else {
@@ -66,8 +66,8 @@ CK_RV v_SessionManagerCore_M1::v_get_session_info(CK_SESSION_HANDLE hSession, CK
     std::lock_guard<std::mutex> lock(v_mutex_);
 
     for (const auto& session : v_sessions_) {
-        if (session.getHandle() == hSession) {
-            session.getSessionInfo(pInfo);
+        if (session->getHandle() == hSession) {
+            session->getSessionInfo(pInfo);
             return CKR_OK;
         }
     }
@@ -75,12 +75,12 @@ CK_RV v_SessionManagerCore_M1::v_get_session_info(CK_SESSION_HANDLE hSession, CK
     return CKR_SESSION_HANDLE_INVALID;
 }
 
-Session* v_SessionManagerCore_M1::v_get_session(CK_SESSION_HANDLE hSession) {
+std::shared_ptr<Session> v_SessionManagerCore_M1::v_get_session(CK_SESSION_HANDLE hSession) {
     std::lock_guard<std::mutex> lock(v_mutex_);
 
     for (auto& session : v_sessions_) {
-        if (session.getHandle() == hSession) {
-            return &session;
+        if (session->getHandle() == hSession) {
+            return session;
         }
     }
 
@@ -91,7 +91,7 @@ bool v_SessionManagerCore_M1::v_have_session(CK_SLOT_ID slotID) {
     std::lock_guard<std::mutex> lock(v_mutex_);
 
     for (const auto& session : v_sessions_) {
-        if (session.getSlotID() == slotID) {
+        if (session->getSlotID() == slotID) {
             return true;
         }
     }
@@ -103,8 +103,8 @@ bool v_SessionManagerCore_M1::v_have_ro_session(CK_SLOT_ID slotID) {
     std::lock_guard<std::mutex> lock(v_mutex_);
 
     for (const auto& session : v_sessions_) {
-        if (session.getSlotID() == slotID &&
-            !(session.getFlags() & CKF_RW_SESSION)) {  // ← flag, not state
+        if (session->getSlotID() == slotID &&
+            !(session->getFlags() & CKF_RW_SESSION)) {  // ← flag, not state
             return true;
         }
     }

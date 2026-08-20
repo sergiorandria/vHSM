@@ -6,6 +6,7 @@
 #include "../keystore/attribute_store.h"
 
 #include <cstring>
+#include <sstream>
 #include <vector>
 #include <unordered_map>
 
@@ -92,7 +93,7 @@ CK_RV C_CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate, CK_
                      CK_OBJECT_HANDLE_PTR phObject) {
     if (!p11_is_initialized()) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (!phObject) return CKR_ARGUMENTS_BAD;
-    Session* s = p11_get_session(hSession);
+    auto s = p11_get_session(hSession);
     if (!s) return CKR_SESSION_HANDLE_INVALID;
 
     ObjectType type; bool sensitive, extractable, token, priv;
@@ -112,10 +113,14 @@ CK_RV C_CopyObject(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
                    CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount, CK_OBJECT_HANDLE_PTR phNewObject) {
     if (!p11_is_initialized()) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (!phNewObject) return CKR_ARGUMENTS_BAD;
-    Session* s = p11_get_session(hSession);
+    auto s = p11_get_session(hSession);
     if (!s) return CKR_SESSION_HANDLE_INVALID;
-    HsmObject* src = p11_get_object(hSession, hObject);
+    auto src = p11_get_object(hSession, hObject);
     if (!src) return CKR_OBJECT_HANDLE_INVALID;
+
+    // PKCS#11: sensitive objects may not be copied – duplicating them would
+    // expose otherwise-unextractable secret material.
+    if (src->isSensitive()) return CKR_ACTION_PROHIBITED;
 
     auto [handle, ptr] = s->getObjectStore().v_create_object<HsmObject>(
         src->getType(), src->isSensitive(), src->isExtractable(), src->isToken(), src->isPrivate());
@@ -129,17 +134,33 @@ CK_RV C_CopyObject(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
 
 CK_RV C_DestroyObject(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject) {
     if (!p11_is_initialized()) return CKR_CRYPTOKI_NOT_INITIALIZED;
-    Session* s = p11_get_session(hSession);
+    auto s = p11_get_session(hSession);
     if (!s) return CKR_SESSION_HANDLE_INVALID;
     if (!s->getObjectStore().v_is_valid_handle(hObject)) return CKR_OBJECT_HANDLE_INVALID;
     if (!s->getObjectStore().v_destroy_object(hObject)) return CKR_OBJECT_HANDLE_INVALID;
     p11_unregister_object(hSession, hObject);
+
+    // Audit + notify: key lifecycle event DESTROY
+    auto* token = p11_get_token_for_session(hSession);
+    int slot_id = static_cast<int>(s->getSlotID());
+    std::string token_label = token ? token->get_label() : "unknown";
+    std::stringstream detail_ss;
+    detail_ss << R"({"destroyed_object_handle":)" << hObject << R"(})";
+    p11_publish_event(
+        vhsm::notification::NotificationEvent::EventType::KEY_DESTROYED,
+        vhsm::notification::NotificationEvent::Severity::WARNING,
+        slot_id, token_label,
+        std::to_string(hObject),
+        "C_DestroyObject completed for handle " + std::to_string(hObject),
+        detail_ss.str(),
+        std::nullopt,
+        "C_DestroyObject");
     return CKR_OK;
 }
 
 CK_RV C_GetObjectSize(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject, CK_ULONG_PTR pulSize) {
     if (!pulSize) return CKR_ARGUMENTS_BAD;
-    HsmObject* o = p11_get_object(hSession, hObject);
+    auto o = p11_get_object(hSession, hObject);
     if (!o) return CKR_OBJECT_HANDLE_INVALID;
     CK_ULONG sz = 0;
     const std::vector<u8>* v = o->findAttribute(CKA_VALUE);
@@ -159,7 +180,7 @@ CK_RV C_GetObjectSize(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject, CK_U
 CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
                           CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount) {
     if (!p11_is_initialized()) return CKR_CRYPTOKI_NOT_INITIALIZED;
-    HsmObject* o = p11_get_object(hSession, hObject);
+    auto o = p11_get_object(hSession, hObject);
     if (!o) return CKR_OBJECT_HANDLE_INVALID;
     CK_RV rv = CKR_OK;
     for (CK_ULONG i = 0; i < ulCount; ++i) {
@@ -172,7 +193,7 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
 CK_RV C_SetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
                           CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount) {
     if (!p11_is_initialized()) return CKR_CRYPTOKI_NOT_INITIALIZED;
-    HsmObject* o = p11_get_object(hSession, hObject);
+    auto o = p11_get_object(hSession, hObject);
     if (!o) return CKR_OBJECT_HANDLE_INVALID;
     vhsm::keystore::internal::v_AttributeStore_M1 store(*o);
     CK_RV rv = CKR_OK;
@@ -185,39 +206,49 @@ CK_RV C_SetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
 
 CK_RV C_FindObjectsInit(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount) {
     if (!p11_is_initialized()) return CKR_CRYPTOKI_NOT_INITIALIZED;
-    Session* s = p11_get_session(hSession);
+    auto s = p11_get_session(hSession);
     if (!s) return CKR_SESSION_HANDLE_INVALID;
-    if (g_findResults.count(hSession)) return CKR_OPERATION_ACTIVE;
-
-    auto it = g_objectRegistry.find(hSession);
-    std::vector<CK_OBJECT_HANDLE> results;
-    if (it != g_objectRegistry.end()) {
-        for (CK_OBJECT_HANDLE h : it->second) {
-            HsmObject* o = s->getObjectStore().v_get_object(h);
-            if (o && match_object(*o, pTemplate, ulCount)) results.push_back(h);
-        }
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        if (g_findResults.count(hSession)) return CKR_OPERATION_ACTIVE;
     }
-    g_findResults[hSession] = std::move(results);
+
+    std::vector<CK_OBJECT_HANDLE> results;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        auto it = g_objectRegistry.find(hSession);
+        if (it != g_objectRegistry.end()) {
+            for (CK_OBJECT_HANDLE h : it->second) {
+                auto o = s->getObjectStore().v_get_object(h);
+                if (o && match_object(*o, pTemplate, ulCount)) results.push_back(h);
+            }
+        }
+        g_findResults[hSession] = std::move(results);
+    }
     return CKR_OK;
 }
 
 CK_RV C_FindObjects(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE_PTR phObject,
                     CK_ULONG ulMaxObjectCount, CK_ULONG_PTR pulObjectCount) {
     if (!pulObjectCount) return CKR_ARGUMENTS_BAD;
-    auto it = g_findResults.find(hSession);
-    if (it == g_findResults.end()) return CKR_OPERATION_NOT_INITIALIZED;
     CK_ULONG n = 0;
-    for (CK_ULONG i = 0; i < it->second.size() && n < ulMaxObjectCount; ++i) {
-        if (phObject) phObject[n] = it->second[i];
-        ++n;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        auto it = g_findResults.find(hSession);
+        if (it == g_findResults.end()) return CKR_OPERATION_NOT_INITIALIZED;
+        for (CK_ULONG i = 0; i < it->second.size() && n < ulMaxObjectCount; ++i) {
+            if (phObject) phObject[n] = it->second[i];
+            ++n;
+        }
+        *pulObjectCount = n;
+        // Remove returned handles so subsequent calls return the rest.
+        it->second.erase(it->second.begin(), it->second.begin() + n);
     }
-    *pulObjectCount = n;
-    // Remove returned handles so subsequent calls return the rest.
-    it->second.erase(it->second.begin(), it->second.begin() + n);
     return CKR_OK;
 }
 
 CK_RV C_FindObjectsFinal(CK_SESSION_HANDLE hSession) {
+    std::lock_guard<std::mutex> lock(g_stateMutex);
     g_findResults.erase(hSession);
     return CKR_OK;
 }

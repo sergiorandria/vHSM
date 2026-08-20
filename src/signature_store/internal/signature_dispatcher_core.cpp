@@ -24,7 +24,7 @@ v_SignatureDispatcherCore_M1::v_SignatureDispatcherCore_M1(
      v_clock_(clock) {
 }
 
-void v_SignatureDispatcherCore_M1::v_dispatch(
+    bool v_SignatureDispatcherCore_M1::v_dispatch(
     const v_SignatureDispatchInput_M1& input) {
     std::string payload_digest = input.sign_result.payload_digest;  // already hex string
     std::string signature_b64 = vhsm::utils::base64_encode(
@@ -60,7 +60,7 @@ void v_SignatureDispatcherCore_M1::v_dispatch(
         event.detail_json = "{}";  // TODO: include more details
         event.hsm_instance = "";   // TODO: fetch from db_meta
         v_notification_bus_.publish(event);
-        return;
+        return false;
     }
     std::string signature_id = *signature_id_opt;
 
@@ -109,6 +109,7 @@ void v_SignatureDispatcherCore_M1::v_dispatch(
         record.ledger_status      = "PENDING";
         v_ledger_worker_->submit_record(record);
     }
+    return true;
 }
 
 }  // namespace internal

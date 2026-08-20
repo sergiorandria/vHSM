@@ -156,6 +156,44 @@ std::vector<std::string> NotificationRepository::get_enabled_subscriber_ids() co
     return ids;
 }
 
+std::vector<vhsm::notification::NotificationSubscriber>
+NotificationRepository::get_enabled_subscribers() const {
+    std::vector<vhsm::notification::NotificationSubscriber> subscribers;
+
+    const std::string sql = R"SQL(
+        SELECT id, name, channel, address, min_severity, event_filter
+        FROM notification_subscribers
+        WHERE enabled = 1;
+    )SQL";
+
+    auto to_str = [](const std::optional<std::string>& v) -> std::string {
+        return v.value_or("");
+    };
+
+    try {
+        auto rs = conn_.query(sql);
+        for (const auto& row : rs.rows_) {
+            vhsm::notification::NotificationSubscriber sub;
+            // Column order: 0 id | 1 name | 2 channel | 3 address
+            //               4 min_severity | 5 event_filter
+            sub.id           = to_str(row.get_string(0));
+            sub.name         = to_str(row.get_string(1));
+            sub.channel      = to_str(row.get_string(2));
+            sub.address      = to_str(row.get_string(3));
+            sub.min_severity = to_str(row.get_string(4));
+            const std::string filter = to_str(row.get_string(5));
+            sub.event_filter = filter.empty() ? std::nullopt
+                                              : std::optional<std::string>(filter);
+            sub.enabled      = true;
+            subscribers.push_back(std::move(sub));
+        }
+    } catch (const DbError&) {
+        // No subscribers available; the dispatcher simply delivers to none.
+    }
+
+    return subscribers;
+}
+
 bool NotificationRepository::log_notification(const std::string& id, int64_t sent_at,
                                              const std::string& event_id, const std::string& subscriber_id,
                                              const std::string& outcome, int attempt_count,

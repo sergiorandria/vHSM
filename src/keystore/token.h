@@ -12,6 +12,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstring>
+#include <memory>
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -72,21 +73,22 @@ public:
     // Token only verifies PIN correctness. Track login state on Session.
 
     // WHY template methods here (not just core): create_object and find_object_by_label_and_id
-    // are templates that return typed pointers to derived HsmObject classes (e.g., PrivateKey*).
-    // Templates can't be virtual, so we implement them as thin wrappers that forward to core.
-    // This keeps the template instantiation in one place and maintains the facade pattern.
-    template <typename T, typename... Args> std::pair<CK_OBJECT_HANDLE, T*> create_object(Args&&... args)
+    // are templates that return typed shared_ptr to derived HsmObject classes (e.g.,
+    // std::shared_ptr<PrivateKey>). Templates can't be virtual, so we implement them as
+    // thin wrappers that forward to core. This keeps the template instantiation in one
+    // place and maintains the facade pattern.
+    template <typename T, typename... Args> std::pair<CK_OBJECT_HANDLE, std::shared_ptr<T>> create_object(Args&&... args)
     {
         return v_core_.v_create_object<T>(std::forward<Args>(args)...);
     }
 
-    template <typename T> T* find_object_by_label_and_id(const std::string& label, const std::string& id)
+    template <typename T> std::shared_ptr<T> find_object_by_label_and_id(const std::string& label, const std::string& id)
     {
         return v_core_.v_find_object_by_label_and_id<T>(label, id);
     }
 
-    HsmObject* get_object(CK_OBJECT_HANDLE handle);
-    const HsmObject* get_object(CK_OBJECT_HANDLE handle) const;
+    std::shared_ptr<HsmObject> get_object(CK_OBJECT_HANDLE handle);
+    std::shared_ptr<const HsmObject> get_object(CK_OBJECT_HANDLE handle) const;
     bool destroy_object(CK_OBJECT_HANDLE handle);
 
     // PIN management
@@ -100,6 +102,16 @@ public:
     CK_RV change_so_pin(const CK_CHAR* oldPin, CK_ULONG oldLen, const CK_CHAR* newPin, CK_ULONG newLen);
     CK_RV login(CK_USER_TYPE userType, const CK_CHAR* pin, CK_ULONG pinLen);
     CK_RV logout(CK_USER_TYPE userType);
+
+    // PIN lockout state (brute-force protection).  A locked PIN rejects all
+    // further attempts with CKR_PIN_LOCKED; successful verification or a
+    // successful PIN re-initialization/change clears the lock.
+    CK_BBOOL is_user_pin_locked() const noexcept { return v_core_.v_is_user_pin_locked(); }
+    CK_BBOOL is_so_pin_locked()  const noexcept { return v_core_.v_is_so_pin_locked(); }
+    unsigned user_pin_failed_attempts() const noexcept { return v_core_.v_user_failed_attempts(); }
+    unsigned so_pin_failed_attempts()  const noexcept { return v_core_.v_so_failed_attempts(); }
+    void set_max_pin_attempts(unsigned max) { v_core_.v_set_max_failed_attempts(max); }
+    unsigned max_pin_attempts() const noexcept { return v_core_.v_max_failed_attempts(); }
 
     // Session accounting (delegated to core).
     void increment_session_count();

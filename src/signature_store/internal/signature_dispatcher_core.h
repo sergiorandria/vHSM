@@ -49,7 +49,8 @@ public:
         vhsm::ledger::LedgerWorker* ledger_worker,
         const IHsmClock& clock);
 
-    void v_dispatch(const v_SignatureDispatchInput_M1& input);
+    // Returns true on success, false if the DB write failed (DB_WRITE_FAILED published).
+    bool v_dispatch(const v_SignatureDispatchInput_M1& input);
 
 private:
     IDbConnection& v_conn_;

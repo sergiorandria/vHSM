@@ -8,7 +8,7 @@ extern "C" {
 namespace vhsm::pkcs11 {
 
 namespace {
-SecureRNG g_rng;
+vhsm::crypto::SecureRNG g_rng;
 }
 
 CK_RV C_SeedRandom(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pSeed, CK_ULONG ulSeedLen) {

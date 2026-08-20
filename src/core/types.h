@@ -45,6 +45,7 @@ typedef CK_ULONG CK_USER_TYPE;
 typedef CK_ULONG CK_CERTIFICATE_TYPE;
 typedef CK_ULONG CK_KEY_TYPE;
 typedef CK_ULONG CK_MECHANISM_TYPE;
+typedef CK_ULONG CK_OBJECT_CLASS;
 
 // WHY attribute types are separate typedef: CKA_* attributes (CKA_CLASS, CKA_LABEL, etc.)
 // use the same underlying type (CK_ULONG) but are semantically distinct from handles.
@@ -52,6 +53,8 @@ typedef CK_ULONG CK_MECHANISM_TYPE;
 typedef CK_ULONG CK_ATTRIBUTE_TYPE;
 typedef void*    CK_VOID_PTR;
 typedef CK_ULONG* CK_ULONG_PTR;
+typedef CK_ULONG* CK_OBJECT_HANDLE_PTR;
+typedef CK_ULONG* CK_SESSION_HANDLE_PTR;
 
 // WHY AES mechanism types from PKCS#11 v3.0: vHSM uses AES for key wrapping (RFC 3394).
 // Defining these constants here (rather than inline in code) makes them discoverable
@@ -72,7 +75,22 @@ typedef CK_ULONG* CK_ULONG_PTR;
 #define CKM_AES_XCBC_MAC    0x0000108BUL
 #define CKM_AES_XCBC_MAC_96 0x0000108CUL
 #define CKM_AES_GMAC        0x0000108DUL
+#define CKM_AES_CMAC        0x0000108AUL
 #define CKM_SHA256_RSA_PKCS 0x00000241UL
+
+// WHY additional PKCS#11 v3.0 mechanism constants: These are used by the PKCS#11
+// module to advertise supported algorithms in C_GetMechanismList and to match
+// incoming mechanism requests in C_SignInit/C_VerifyInit.
+#define CKM_SHA384_RSA_PKCS 0x00000242UL
+#define CKM_SHA512_RSA_PKCS 0x00000243UL
+
+#define CKM_SHA256          0x00000250UL
+#define CKM_SHA384          0x00000260UL
+#define CKM_SHA512          0x00000270UL
+
+#define CKM_SHA256_HMAC     0x00000290UL
+#define CKM_SHA384_HMAC     0x00000291UL
+#define CKM_SHA512_HMAC     0x00000292UL
 
 // WHY CK_ATTRIBUTE structure defined here: PKCS#11 API uses this struct for get/set
 // attribute operations (C_GetObjectAttribute, C_SetObjectAttribute). Defining it here
@@ -175,6 +193,7 @@ typedef CK_ULONG CK_RV;
 #define CKR_WRAPPED_KEY_INVALID           ((CK_RV) 0x0000007EUL)
 #define CKR_WRAPPED_KEY_LEN_RANGE         ((CK_RV) 0x0000007FUL)
 #define CKR_WRAPPED_KEY_TYPE_INVALID      ((CK_RV) 0x00000080UL)
+#define CKR_WRAPPING_KEY_HANDLE_INVALID   ((CK_RV) 0x00000069UL)
 #define CKR_PKEY_LT_KEY                   ((CK_RV) 0x00000090UL)
 #define CKR_PKEY_GT_KEY                   ((CK_RV) 0x00000091UL)
 #define CKR_TOKEN_WRITE_WITH_SO_SESSION   ((CK_RV) 0x00000092UL)
@@ -257,6 +276,15 @@ struct SignResult {
     std::string          digest_alg;     // e.g., "SHA-256"
     std::string          payload_digest; // hex SHA-256 of input
     size_t               payload_size;
+};
+
+// WHY HashAlgorithm enum: Standardizes digest selection across crypto and PKCS#11 layers.
+// The PKCS#11 mechanism constants map to one of these hash algorithms. Centralizing makes
+// it easy to add new algorithms or audit hash usage.
+enum class HashAlgorithm {
+    SHA256,
+    SHA384,
+    SHA512
 };
 } // namespace vhsm::crypto
 

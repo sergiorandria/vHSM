@@ -12,13 +12,15 @@ namespace db {
 // Schema version
 // Bumped whenever a migration adds or changes a table.
 // Migration N upgrades from version N-1 to version N.
-inline constexpr int kCurrentSchemaVersion = 4;
+inline constexpr int kCurrentSchemaVersion = 5;
 
 // v1 — initial schema (signature_records, signature_verifications,
 //       notification_subscribers, notification_log, db_meta)
 // v2 — Rekor staging columns (removed in v4; legacy installs only)
 // v3 — more Rekor staging columns (removed in v4; legacy installs only)
 // v4 — Hyperledger Fabric ledger columns, no Rekor, no integrity_hmac
+// v5 — notification_subscribers / notification_log drop integrity_hmac
+//      (matches PLANv4 §8.5 "Fabric/notification" schema; no local HMAC)
 
 
 // Table name constants
@@ -115,6 +117,8 @@ private:
 
     // Migration steps — one method per version bump.
     void migrate_legacy_to_v4();  // Any pre-v4 DB → v4 ledger schema (no Rekor).
+    void migrate_v4_to_v5();      // v4 → v5: drop integrity_hmac from the
+                                  // notification tables.
 };
 
 }  // namespace db

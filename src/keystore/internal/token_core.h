@@ -12,6 +12,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstring>
+#include <memory>
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -92,8 +93,8 @@ public:
         return nullptr;
     }
 
-    HsmObject* v_get_object(CK_OBJECT_HANDLE handle);
-    const HsmObject* v_get_object(CK_OBJECT_HANDLE handle) const;
+    std::shared_ptr<HsmObject> v_get_object(CK_OBJECT_HANDLE handle);
+    std::shared_ptr<const HsmObject> v_get_object(CK_OBJECT_HANDLE handle) const;
     bool v_destroy_object(CK_OBJECT_HANDLE handle);
 
     // Retrieve the Key Encryption Key (KEK) used for wrapping/unwrapping.
@@ -122,6 +123,18 @@ public:
     // observable in tests.
     HsmTimePoint v_last_pin_op_at() const noexcept;
 
+    // --- PIN lockout (brute-force protection) ---
+    // The plan specifies a failed-attempt lockout counter (see PLAN.md
+    // "PIN brute force").  Each failed verification increments the counter;
+    // once it reaches the threshold the PIN is locked and further attempts
+    // return CKR_PIN_LOCKED.  A successful verification resets the counter.
+    void v_set_max_failed_attempts(unsigned max);
+    unsigned v_max_failed_attempts() const noexcept;
+    CK_BBOOL v_is_user_pin_locked() const noexcept;
+    CK_BBOOL v_is_so_pin_locked() const noexcept;
+    unsigned v_user_failed_attempts() const noexcept;
+    unsigned v_so_failed_attempts() const noexcept;
+
 private:
     // Constant-time PIN comparison (see token.cpp for rationale).
     static bool v_secure_pin_equals(const SecureBuffer& stored,
@@ -130,6 +143,15 @@ private:
                                     CK_ULONG candidate_len) noexcept;
 
     void v_touch_pin_op() noexcept;
+
+    // Core of PIN verification with lockout bookkeeping.  `counter`, `locked`
+    // and `mutex` select the per-role state (user vs SO).
+    static CK_RV v_verify_pin_with_lockout(
+        const SecureBuffer& stored, std::size_t stored_len,
+        const CK_CHAR* candidate, CK_ULONG candidate_len,
+        CK_BBOOL pin_set, CK_RV not_initialized_rv, unsigned max_attempts,
+        std::atomic<unsigned>& counter, std::atomic<CK_BBOOL>& locked,
+        std::mutex& mutex);
 
     std::string v_label_;
     std::string v_id_;
@@ -151,6 +173,14 @@ private:
     std::size_t v_so_pin_len_{0};
     std::mutex v_user_pin_mutex_;
     std::mutex v_so_pin_mutex_;
+
+    // PKCS#11 defines SO as "Security Officer"; its PIN also gets lockout
+    // protection so an intruder cannot brute-force admin access either.
+    std::atomic<unsigned> v_user_failed_attempts_{0};
+    std::atomic<unsigned> v_so_failed_attempts_{0};
+    std::atomic<CK_BBOOL> v_user_pin_locked_{CK_FALSE};
+    std::atomic<CK_BBOOL> v_so_pin_locked_{CK_FALSE};
+    std::atomic<unsigned> v_max_failed_attempts_{5};
 
     mutable std::shared_mutex v_mutex_;
 
