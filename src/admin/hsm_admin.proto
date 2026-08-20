@@ -39,6 +39,32 @@ message AdminLoginResponse {
   string status = 2;
 }
 
+// Request: encrypt the slot's token snapshot into a vault file.
+message BackupTokenRequest {
+  uint32 slot_id = 1;        // PKCS#11 slot id
+  string vault_path = 2;     // vault file to create (must not already exist)
+  string vault_password = 3; // password used to derive the vault key
+}
+
+message BackupTokenResponse {
+  string status = 1;         // OK / ERROR:<reason>
+}
+
+// Request: restore a slot's token from a vault file.
+message RestoreTokenRequest {
+  uint32 slot_id = 1;        // PKCS#11 slot id
+  string vault_path = 2;     // vault file to read
+  string vault_password = 3; // password used to derive the vault key
+}
+
+message RestoreTokenResponse {
+  string status = 1;         // OK / ERROR:<reason>
+}
+
 service HsmAdmin {
   rpc AdminLogin(AdminLoginRequest) returns (AdminLoginResponse);
+  // Backup/Restore the token's durable state (KEK, flags, counters) into an
+  // encrypted vault file (PLAN.md §8 BackupToken / RestoreToken).
+  rpc BackupToken(BackupTokenRequest) returns (BackupTokenResponse);
+  rpc RestoreToken(RestoreTokenRequest) returns (RestoreTokenResponse);
 }

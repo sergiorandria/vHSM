@@ -24,6 +24,14 @@ public:
                               const AdminLoginRequest* request,
                               AdminLoginResponse* response) override;
 
+    ::grpc::Status BackupToken(::grpc::ServerContext* ctx,
+                               const BackupTokenRequest* request,
+                               BackupTokenResponse* response) override;
+
+    ::grpc::Status RestoreToken(::grpc::ServerContext* ctx,
+                                const RestoreTokenRequest* request,
+                                RestoreTokenResponse* response) override;
+
 private:
     vhsm::notification::NotificationBus* const bus_;
     vhsm::audit::AuditLog* const audit_log_;

@@ -42,6 +42,30 @@ private:
     vhsm::audit::AuditLog* const audit_log_;
 };
 
+// Transport-agnostic Backup/Restore of a token's durable state (PLAN.md §8
+// BackupToken / RestoreToken).  Like AdminLoginCore, this core is kept free of
+// gRPC types so it can be unit-tested directly; hsm_admin_grpc is a thin
+// adapter.  Backup writes a serialized token snapshot into a new encrypted
+// vault file (persistence::TokenSerializer + persistence::Vault); Restore is
+// the inverse.  Throws std::runtime_error on failure so the gRPC adapter can
+// map the failure to a status string.
+class TokenBackupCore {
+public:
+    TokenBackupCore(keystore::Token& token);
+
+    // Encrypts the token's snapshot into `vault_path` (creates the file).
+    // Fails if the file already exists (a backup must not clobber).
+    void backup(const std::string& vault_path,
+                const std::string& vault_password) const;
+
+    // Decrypts `vault_path` and restores the durable state into the token.
+    void restore(const std::string& vault_path,
+                 const std::string& vault_password) const;
+
+private:
+    keystore::Token& token_;
+};
+
 }  // namespace vhsm::admin
 
 #endif  // VHSM_ADMIN_ADMIN_SERVICE_H

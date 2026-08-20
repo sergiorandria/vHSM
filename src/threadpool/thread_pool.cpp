@@ -3,24 +3,29 @@
 #include <algorithm>
 #include <chrono>
 #include <stdexcept>
+#include <thread>
 #include <utility>
 
 namespace vhsm::threadpool {
 
-    ThreadPool::ThreadPool(std::size_t ncpus) : cpu_cores_(ncpus)
+    ThreadPool::ThreadPool(PoolConfig config)
+        : high_capacity_(config.queue_capacity),
+          low_capacity_(config.queue_capacity),
+          worker_count_(resolve_worker_count(config.worker_count)),
+          shutdown_grace_(config.shutdown_grace)
     {
-        if (ncpus == 0)
-            throw std::runtime_error("ThreadPool: required at least one worker core");
-
-        high_tier_cores_ = std::max<std::size_t>(1, ncpus / 2);
-        // ncpus == 1 yields low_tier_cores_ == 0; Low-privilege submissions are
-        // routed onto the high-tier queue by queue_index_for_tier() in that case.
-        low_tier_cores_ = ncpus - high_tier_cores_;
-
-        task_queues_.resize(ncpus);
-        threads_.reserve(ncpus);
-        for (std::size_t i = 0; i < ncpus; ++i)
+        threads_.reserve(worker_count_);
+        for (std::size_t i = 0; i < worker_count_; ++i)
             threads_.emplace_back(&ThreadPool::worker_thread, this, i);
+    }
+
+    std::size_t ThreadPool::resolve_worker_count(std::size_t requested)
+    {
+        if (requested != 0)
+            return requested;
+
+        std::size_t hw = std::thread::hardware_concurrency();
+        return hw == 0 ? 1 : hw;
     }
 
     ThreadPool::~ThreadPool()
@@ -28,25 +33,26 @@ namespace vhsm::threadpool {
         shutdown();
     }
 
+    void ThreadPool::shutdown()
+    {
+        shutdown(shutdown_grace_);
+    }
+
     void ThreadPool::shutdown(std::chrono::milliseconds timeout)
     {
         {
-            std::lock_guard<std::mutex> lock(submit_mutex_);
-            stopping_.store(true, std::memory_order_release);
+            std::lock_guard<std::mutex> lock(queue_mutex_);
+            counters_.stopping.store(true, std::memory_order_release);
         }
         work_cv_.notify_all();
 
-        // Grace period: wait until every task has been drained and no worker is
-        // still executing one.  Workers notify shutdown_cv_ every time they
-        // finish a task.  If `timeout` elapses first (e.g. a task is slow), we
-        // do NOT detach: join() below still waits for the workers to run the
-        // remaining queue and exit, which is the only choice that guarantees
-        // the pool is never destroyed underneath a live worker.
+        // Wait (bounded) for the pool to actually drain before joining so that
+        // still-queued work runs instead of being abandoned.
         {
             std::unique_lock<std::mutex> lock(shutdown_mutex_);
             shutdown_cv_.wait_for(lock, timeout, [this] {
-                return running_tasks_.load(std::memory_order_acquire) == 0
-                    && queued_tasks_.load(std::memory_order_acquire) == 0;
+                return counters_.running.load(std::memory_order_acquire) == 0
+                    && counters_.queued.load(std::memory_order_acquire) == 0;
             });
         }
 
@@ -57,84 +63,75 @@ namespace vhsm::threadpool {
         }
     }
 
-    bool ThreadPool::try_take_task(std::size_t thread_index, std::size_t tier_begin,
-                                   std::size_t tier_end, TaskWorker& out)
+    bool ThreadPool::enqueue_locked(PrivilegeTier tier, TaskWorker&& worker)
     {
-        // Own queue first: cheap, cache-friendly, preserves submission order
-        // for a single consumer.
+        std::queue<TaskWorker>& target =
+            (tier == PrivilegeTier::High) ? high_queue_ : low_queue_;
+        const std::size_t capacity =
+            (tier == PrivilegeTier::High) ? high_capacity_ : low_capacity_;
+
+        if (capacity > 0 && target.size() >= capacity)
         {
-            std::unique_lock<std::mutex> lock(task_queues_[thread_index].queue_mutex_);
-            if (!task_queues_[thread_index].task_queue_.empty())
-            {
-                out = std::move(task_queues_[thread_index].task_queue_.front());
-                task_queues_[thread_index].task_queue_.pop();
-                queued_tasks_.fetch_sub(1, std::memory_order_release);
-                return true;
-            }
+            counters_.dropped.fetch_add(1, std::memory_order_release);
+            return false;
         }
 
-        // Steal from tier-legal neighbours.  try_to_lock avoids two workers
-        // fighting over the same foreign queue (one of them steals, the other
-        // simply finds it locked and moves on).
-        for (std::size_t i = tier_begin; i < tier_end; ++i)
-        {
-            if (i == thread_index)
-                continue;
-
-            std::unique_lock<std::mutex> lock(task_queues_[i].queue_mutex_, std::try_to_lock);
-            if (lock.owns_lock() && !task_queues_[i].task_queue_.empty())
-            {
-                out = std::move(task_queues_[i].task_queue_.front());
-                task_queues_[i].task_queue_.pop();
-                queued_tasks_.fetch_sub(1, std::memory_order_release);
-                return true;
-            }
-        }
-
-        return false;
+        target.emplace(std::move(worker));
+        counters_.queued.fetch_add(1, std::memory_order_release);
+        counters_.enqueued.fetch_add(1, std::memory_order_release);
+        return true;
     }
 
     void ThreadPool::worker_thread(std::size_t thread_index)
     {
-        // Stealing boundaries.  High-tier workers may steal across the full
-        // range [0, cpu_cores_); low-tier workers steal only within their tier.
-        const std::size_t tier_begin = is_high_tier_worker(thread_index) ? 0 : high_tier_cores_;
-        const std::size_t tier_end   = is_high_tier_worker(thread_index) ? cpu_cores_ : cpu_cores_;
-
+        (void)thread_index;
         while (true)
         {
             TaskWorker task;
-            if (try_take_task(thread_index, tier_begin, tier_end, task))
             {
-                running_tasks_.fetch_add(1, std::memory_order_acquire);
-                try {
-                    task();
-                } catch (...) {
-                    // Defensive: task wrappers already swallow exceptions, but a
-                    // stray throw must never escape and terminate the worker.
+                std::unique_lock<std::mutex> lock(queue_mutex_);
+                work_cv_.wait(lock, [this] {
+                    return counters_.stopping.load(std::memory_order_acquire)
+                        || counters_.queued.load(std::memory_order_acquire) > 0;
+                });
+
+                if (counters_.stopping.load(std::memory_order_acquire)
+                    && counters_.queued.load(std::memory_order_acquire) == 0)
+                {
+                    return;
                 }
-                running_tasks_.fetch_sub(1, std::memory_order_release);
-                shutdown_cv_.notify_all();
-                continue;
+
+                // Prefer High-tier work; fall back to Low-tier tasks.
+                if (!high_queue_.empty())
+                {
+                    task = std::move(high_queue_.front());
+                    high_queue_.pop();
+                }
+                else
+                {
+                    task = std::move(low_queue_.front());
+                    low_queue_.pop();
+                }
+                counters_.queued.fetch_sub(1, std::memory_order_release);
             }
 
-            // Nothing to do: block until work appears or the pool is stopping.
-            // The predicate is keyed on *queued* work only, so workers that
-            // missed a race for the last task sleep immediately instead of
-            // spinning while the winning worker finishes its task.
-            std::unique_lock<std::mutex> lock(submit_mutex_);
-            work_cv_.wait(lock, [this] {
-                return stopping_.load(std::memory_order_acquire)
-                    || queued_tasks_.load(std::memory_order_acquire) > 0;
-            });
-
-            // Stopping with nothing left queued: every worker exits and
-            // shutdown() joins them.  A worker still executing its last task
-            // finishes it here first (running_tasks_ is only for diagnostics).
-            if (stopping_.load(std::memory_order_acquire)
-                && queued_tasks_.load(std::memory_order_acquire) == 0)
-                return;
+            counters_.running.fetch_add(1, std::memory_order_acquire);
+            try {
+                task();
+            } catch (...) {
+                // Individual tasks must not take the pool down; submit()
+                // surfaces exceptions through its future instead.
+            }
+            counters_.running.fetch_sub(1, std::memory_order_release);
+            counters_.executed.fetch_add(1, std::memory_order_release);
+            shutdown_cv_.notify_all();
         }
+    }
+
+    void ThreadPool::validate_token(const CapabilityToken& token)
+    {
+        if (!token.is_valid())
+            throw std::runtime_error("ThreadPool: invalid task token, submission refused.");
     }
 
 } // namespace vhsm::threadpool

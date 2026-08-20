@@ -18,6 +18,8 @@
 #include "../ledger/ledger_worker.h"
 #include "../ledger/ledger_client.h"
 #include "../ledger/ledger_entry.h"
+#include "../persistence/token_serializer.h"
+#include "../persistence/vault.h"
 
 #include <cstring>
 #include <cstdlib>
@@ -34,6 +36,47 @@ static void ensure_default_token() {
         auto tok  = std::make_shared<vhsm::keystore::Token>("vHSM Software Token", "vhsm-token-0");
         slot->insert_token(tok);
         sm.register_slot(0);
+    }
+}
+
+// Open (or create) the optional encrypted vault that backs the default token.
+//
+// Vault persistence is opt-in: it is enabled only when BOTH VHSM_VAULT_PATH and
+// VHSM_VAULT_PASSWORD are set.  On first run (no vault file yet) we create a
+// fresh vault from the current token snapshot so subsequent finalize() calls
+// have a place to save.  On later runs we open the existing vault and restore
+// the durable token state (flags, counters, KEK) so a process restart recovers
+// the token exactly as it was.  Failures are swallowed here — a missing/wrong
+// password must not prevent C_Initialize from succeeding (the token just starts
+// in its fresh state).
+static void init_vault() {
+    const char* path_cstr = std::getenv("VHSM_VAULT_PATH");
+    const char* pass_cstr = std::getenv("VHSM_VAULT_PASSWORD");
+    if (!path_cstr || !*path_cstr || !pass_cstr) return;
+
+    const std::filesystem::path vault_path(path_cstr);
+    const std::string password = pass_cstr;
+
+    auto* token = p11_get_token(0);
+    if (!token) return;
+
+    try {
+        if (std::filesystem::exists(vault_path)) {
+            g_vault = std::make_unique<vhsm::persistence::Vault>(vault_path, password);
+            if (g_vault->is_valid()) {
+                vhsm::persistence::restore_token_from_vault(*token, *g_vault);
+            }
+        } else {
+            const std::vector<u8> snap =
+                vhsm::persistence::serialize_token_snapshot(
+                    vhsm::persistence::snapshot_from_token(*token));
+            g_vault = std::make_unique<vhsm::persistence::Vault>(
+                vhsm::persistence::Vault::create(vault_path, password, snap));
+        }
+    } catch (const std::exception&) {
+        // Vault unavailable (corrupt file / bad password / I/O error): proceed
+        // with the in-memory token.
+        g_vault.reset();
     }
 }
 
@@ -181,6 +224,7 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
         }
     }
     ensure_default_token();
+    init_vault();
     init_signature_dispatcher();
     g_initialized = true;
     return CKR_OK;
@@ -190,6 +234,20 @@ CK_RV C_Finalize(CK_VOID_PTR pReserved) {
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (pReserved != nullptr) return CKR_ARGUMENTS_BAD;
     g_initialized = false;
+
+    // Persist the default token's durable state into the vault before any
+    // reset, so a subsequent C_Initialize recovers the same token.
+    if (g_vault) {
+        if (auto* token = p11_get_token(0)) {
+            try {
+                vhsm::persistence::persist_token_to_vault(*token, *g_vault);
+            } catch (const std::exception&) {
+                // Best-effort: keep going with finalization.
+            }
+        }
+        g_vault.reset();
+    }
+
     // Drain the notification pipeline first so queued events flush, then the
     // ledger worker so in-flight anchoring completes during normal shutdown.
     if (g_notificationDispatcher) {

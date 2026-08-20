@@ -481,7 +481,12 @@ C_Sign(hSession, pData, ulDataLen, pSignature, pulSignatureLen)
 
 ### 8. `persistence/` — Encrypted File Vault
 
-*(Unchanged from original plan. See original for vault format, KEK derivation, and atomic write.)*
+**Implemented (Phase 7).** `Vault` (AES-256-GCM + PBKDF2-600k) with atomic
+temp-file+rename writes and per-write re-salt; `kdf.{h,cpp}` (PBKDF2 vault key,
+HKDF-SHA256 DB HMAC key from the vault KEK); `token_serializer.{h,cpp}`
+(versioned self-describing snapshot of token state for Backup/Restore);
+`migrations.{h,cpp}` (from-version -> upgrade registry for forward format
+changes). On-disk layout documented in `vault_format.h`.
 
 ---
 
@@ -790,12 +795,14 @@ option(VHSM_NOTIFY_BUS_SIZE "Notification ring buffer capacity"         1024)
 - [ ] Conformance tests (OASIS PKCS#11 suite)
 
 ### Phase 7 — Persistence Layer (Week 9)
-- [ ] Implement `Vault` with AES-256-GCM and PBKDF2
-- [ ] Derive DB HMAC key from vault KEK using HKDF
-- [ ] Implement `TokenSerializer` with protobuf
-- [ ] Implement atomic write (temp file + rename)
-- [ ] Add migration framework
-- [ ] Round-trip integration tests
+- [x] Implement `Vault` with AES-256-GCM and PBKDF2
+- [x] Derive DB HMAC key from vault KEK using HKDF
+- [x] Implement `TokenSerializer` (self-describing binary; see WHY note in
+  `src/persistence/token_serializer.h` — deliberately chosen over protobuf to
+  avoid a protoc dependency and keep the format auditable/versioned)
+- [x] Implement atomic write (temp file + rename)
+- [x] Add migration framework
+- [x] Round-trip integration tests
 
 ### Phase 8 — Admin gRPC + Signature Query API (Week 10)
 - [ ] Define `admin.proto` with all RPCs including notification management and `StreamEvents`

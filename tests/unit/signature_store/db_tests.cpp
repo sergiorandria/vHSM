@@ -693,8 +693,8 @@ TEST(DbSchemaConstantsTest, LedgerStatusConstants_AreCorrect) {
     EXPECT_EQ(ledger_status::kFailed,    "FAILED");
 }
 
-TEST(DbSchemaConstantsTest, CurrentSchemaVersion_IsFour) {
-    EXPECT_EQ(kCurrentSchemaVersion, 4);
+TEST(DbSchemaConstantsTest, CurrentSchemaVersion_IsFive) {
+    EXPECT_EQ(kCurrentSchemaVersion, 5);
 }
 
 }  // namespace vhsm::signature_store::db

@@ -15,6 +15,9 @@
 .astylerc
 .clang-format
 build/
+build2/
+build3/
+_build_corrupt/
 docker-compose.yml
 .vscode
 network/fabric_configuration/peer-data/peer0.misa.university.com/lifecycle/

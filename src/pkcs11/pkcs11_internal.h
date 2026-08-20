@@ -74,6 +74,10 @@ public:
     }
 };
 
+// Forward-declared at global scope so g_vault (a unique_ptr<..::Vault>) can be
+// declared inside vhsm::pkcs11 without pulling in the whole persistence headers.
+namespace vhsm::persistence { class Vault; }
+
 namespace vhsm::pkcs11 {
 using keystore::HsmObject;
 using keystore::ObjectType;
@@ -99,6 +103,11 @@ extern std::unique_ptr<vhsm::notification::BoundedNotificationBus> g_boundedBus;
 // Ledger anchoring globals (optional; only populated when a Fabric gateway is configured)
 extern std::unique_ptr<vhsm::ledger::LedgerClient> g_ledgerClient;
 extern std::unique_ptr<vhsm::ledger::LedgerWorker> g_ledgerWorker;
+
+// Optional encrypted vault backing the default token (PLAN.md Phase 7).
+// Owned by the PKCS#11 module; opened/created in C_Initialize from
+// VHSM_VAULT_PATH + VHSM_VAULT_PASSWORD, closed in C_Finalize.
+extern std::unique_ptr<vhsm::persistence::Vault> g_vault;
 
 // WHY extern g_sessionManager: Same pattern as g_initialized. Defined in p11_internal.cpp,
 // used by p11_session.cpp, p11_keygen.cpp, etc.

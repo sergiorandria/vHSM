@@ -118,6 +118,26 @@ public:
     void v_increment_rw_session_count();
     void v_decrement_rw_session_count();
 
+    // --- Snapshot restore (Backup/Restore / vault load-on-init) ---
+    // Re-installs persisted token state captured by TokenSerializer.  The KEK
+    // is re-created as a SECRET_KEY object labelled "KEK" (the object that
+    // v_get_kek() finds).  This is the inverse of v_get_kek() + the getters:
+    // persistence serialize a Token into a TokenSnapshot and, to restore, feed
+    // the fields back in here.  Session counters (which are runtime state, not
+    // part of the durable identity) are deliberately left to the caller's
+    // increment/decrement API.
+    void v_restore_state(CK_BBOOL token_initialized,
+                         CK_BBOOL user_pin_set,
+                         CK_BBOOL so_pin_set,
+                         CK_BBOOL user_login_required,
+                         CK_BBOOL so_login_required,
+                         unsigned max_failed_attempts,
+                         unsigned user_failed_attempts,
+                         unsigned so_failed_attempts,
+                         CK_BBOOL user_pin_locked,
+                         CK_BBOOL so_pin_locked,
+                         const std::vector<std::uint8_t>& kek);
+
     // Last PIN operation timestamp (wall-clock via injected IHsmClock).
     // Exposed for auditing / rate-limiting and to make the clock dependency
     // observable in tests.

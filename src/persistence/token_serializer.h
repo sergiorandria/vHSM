@@ -8,18 +8,9 @@
 #include "../core/types.h"
 #include "../keystore/token.h"
 
-// WHY a TokenSerializer: PLAN.md Phase 7 requires persisting token state (the
-// KEK, PIN flags, lockout counters) so a Backup/Restore flow can rebuild a
-// Token after process restart.  The serializer converts a Token into a
-// length-prefixed, versioned byte payload that the Vault encrypts at rest.
-//
-// Format note: PLAN.md listed protobuf for this component. We deliberately use
-// a small self-describing binary encoding instead: it keeps `vhsm_persistence`
-// free of a protobuf/protoc build dependency, works identically across
-// platforms, and is trivially auditable (every field is (len,bytes) prefixed).
-// The format is versioned so a future switch to protobuf can add a new version
-// without breaking existing vaults (see migrations.h).
 namespace vhsm::persistence {
+
+class Vault;  // defined in vault.h; forward-declared to avoid a heavy include
 
 struct TokenSnapshot {
     std::string label;
@@ -52,6 +43,25 @@ TokenSnapshot deserialize_token_snapshot(const std::vector<u8>& data);
 // Convenience: builds a snapshot from a live Token. Only properties the public
 // facade exposes are captured (identity, flags, counters, KEK).
 TokenSnapshot snapshot_from_token(const vhsm::keystore::Token& token);
+
+// Restores the durable state captured in a snapshot back into a live Token.
+// This is the inverse of snapshot_from_token(): the caller opens/creates a vault
+// (persistence::Vault), deserializes its payload, and feeds the fields back.
+// Session counters are runtime state and are NOT restored (the caller re-accounts
+// them via the session API).  Throws std::runtime_error on bad input.
+void restore_token_from_snapshot(vhsm::keystore::Token& token,
+                                 const TokenSnapshot& snap);
+
+// Saves a live Token's snapshot into an existing (open) vault.  Thin helper so
+// callers (C_Initialize/BackupToken) do not have to call the serializer + vault
+// in the right order themselves.
+void persist_token_to_vault(const vhsm::keystore::Token& token,
+                            Vault& vault);
+
+// Loads a token snapshot from an open vault and restores it into the token.
+// Throws std::runtime_error if the vault payload is not a valid snapshot.
+void restore_token_from_vault(vhsm::keystore::Token& token,
+                              const Vault& vault);
 
 } // namespace vhsm::persistence
 

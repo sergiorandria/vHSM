@@ -152,4 +152,22 @@ void Token::decrement_rw_session_count() {
     v_core_.v_decrement_rw_session_count();
 }
 
+void Token::restore_state(CK_BBOOL token_initialized,
+                          CK_BBOOL user_pin_set,
+                          CK_BBOOL so_pin_set,
+                          CK_BBOOL user_login_required,
+                          CK_BBOOL so_login_required,
+                          unsigned max_failed_attempts,
+                          unsigned user_failed_attempts,
+                          unsigned so_failed_attempts,
+                          CK_BBOOL user_pin_locked,
+                          CK_BBOOL so_pin_locked,
+                          const std::vector<uint8_t>& kek) {
+    v_core_.v_restore_state(token_initialized, user_pin_set, so_pin_set,
+                            user_login_required, so_login_required,
+                            max_failed_attempts, user_failed_attempts,
+                            so_failed_attempts, user_pin_locked, so_pin_locked,
+                            kek);
+}
+
 } // namespace vhsm::keystore

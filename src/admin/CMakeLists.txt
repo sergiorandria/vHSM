@@ -69,6 +69,7 @@ target_link_libraries(vhsm_admin
     PUBLIC
         vhsm_core
         vhsm_keystore
+        vhsm_persistence
         vhsm_session
         vhsm_notification
         protobuf::libprotobuf

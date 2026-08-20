@@ -29,6 +29,7 @@ target_link_libraries(vhsm_pkcs11
     vhsm_core
     vhsm_crypto
     vhsm_keystore
+    vhsm_persistence
     vhsm_session
     OpenSSL::SSL
 )
@@ -45,6 +46,7 @@ target_link_libraries(vhsm_pkcs11_mod
     vhsm_core
     vhsm_crypto
     vhsm_keystore
+    vhsm_persistence
     vhsm_session
     OpenSSL::SSL
 )

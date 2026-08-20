@@ -201,7 +201,7 @@ TEST_F(SessionManagerTest, GetSessionInfoAfterCloseReturnsHandleInvalid) {
 
 TEST_F(SessionManagerTest, GetSessionReturnsNonNullForValidHandle) {
     CK_SESSION_HANDLE h = openRW();
-    Session* s = mgr.getSession(h);
+    auto s = mgr.getSession(h);
     EXPECT_NE(s, nullptr);
 }
 
@@ -217,7 +217,7 @@ TEST_F(SessionManagerTest, GetSessionReturnsNullAfterClose) {
 
 TEST_F(SessionManagerTest, GetSessionHandleMatchesRequest) {
     CK_SESSION_HANDLE h = openRW();
-    Session* s = mgr.getSession(h);
+    auto s = mgr.getSession(h);
     ASSERT_NE(s, nullptr);
     EXPECT_EQ(s->getHandle(), h);
 }

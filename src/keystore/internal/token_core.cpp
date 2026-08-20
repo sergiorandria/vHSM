@@ -128,6 +128,62 @@ std::vector<std::uint8_t> v_TokenCore_M1::v_get_kek() const {
     return key_value;
 }
 
+void v_TokenCore_M1::v_restore_state(CK_BBOOL token_initialized,
+                                     CK_BBOOL user_pin_set,
+                                     CK_BBOOL so_pin_set,
+                                     CK_BBOOL user_login_required,
+                                     CK_BBOOL so_login_required,
+                                     unsigned max_failed_attempts,
+                                     unsigned user_failed_attempts,
+                                     unsigned so_failed_attempts,
+                                     CK_BBOOL user_pin_locked,
+                                     CK_BBOOL so_pin_locked,
+                                     const std::vector<std::uint8_t>& kek) {
+    // The KEK is single-writer state: hold the shared_mutex during the object
+    // store mutation to serialize against concurrent wrap/unwrap attempts.
+    std::unique_lock<std::shared_mutex> lock(v_mutex_);
+
+    v_token_initialized_.store(token_initialized);
+    v_user_pin_set_.store(user_pin_set);
+    v_so_pin_set_.store(so_pin_set);
+    v_user_login_required_.store(user_login_required);
+    v_so_login_required_.store(so_login_required);
+    v_max_failed_attempts_.store(max_failed_attempts);
+    v_user_failed_attempts_.store(user_failed_attempts);
+    v_so_failed_attempts_.store(so_failed_attempts);
+    v_user_pin_locked_.store(user_pin_locked);
+    v_so_pin_locked_.store(so_pin_locked);
+
+    // Re-create the KEK as a SECRET_KEY object labelled "KEK" — the exact shape
+    // v_get_kek() looks for (CKA_LABEL, CKA_CLASS + CKA_VALUE).  If one exists
+    // already (e.g. a fresh token that generated a KEK before restore), replace
+    // it so the restored key wins.
+    auto existing = v_object_store_.v_find_object_if([](HsmObject* obj) {
+        v_AttributeStore_M1 attr_store(*obj);
+        std::vector<u8> label_value;
+        CK_ULONG label_len = 0;
+        if (attr_store.v_get_attribute(CKA_LABEL, nullptr, &label_len) != CKR_OK) return false;
+        label_value.resize(label_len);
+        if (attr_store.v_get_attribute(CKA_LABEL, label_value.data(), &label_len) != CKR_OK) return false;
+        std::string obj_label(reinterpret_cast<char*>(label_value.data()), label_len);
+        return obj_label == "KEK";
+    });
+    if (existing.second) {
+        v_object_store_.v_destroy_object(existing.first);
+    }
+    if (!kek.empty()) {
+        auto [handle, obj] = v_object_store_.v_create_object<HsmObject>(
+            ObjectType::SECRET_KEY, /*sensitive=*/false, /*extractable=*/true,
+            /*token=*/false, /*private=*/false);
+        (void)handle;
+        const CK_ULONG cls = CKO_SECRET_KEY;
+        obj->setAttribute(CKA_CLASS, reinterpret_cast<const u8*>(&cls), sizeof(cls));
+        const u8 label_str[] = {'K', 'E', 'K'};
+        obj->setAttribute(CKA_LABEL, label_str, sizeof(label_str));
+        obj->setAttribute(CKA_VALUE, kek.data(), kek.size());
+    }
+}
+
 bool v_TokenCore_M1::v_secure_pin_equals(const SecureBuffer& stored,
                                          std::size_t stored_len,
                                          const CK_CHAR* candidate,

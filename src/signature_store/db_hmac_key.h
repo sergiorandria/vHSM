@@ -13,9 +13,11 @@ namespace db {
 class IDbConnection;
 
 // Retrieves the HMAC key used for row integrity checks.
-// The key is derived from the KEK (key encryption key) via HKDF.
-// For simplicity in this implementation, we return a fixed key.
-// In production, this should be securely retrieved from the key store.
+// Per PLAN.md Phase 7, the key is derived from the token/vault KEK via HKDF
+// (vhsm::persistence::derive_db_hmac_key) — it is NOT stored in the database.
+// The KEK itself lives in the token and is recovered from the encrypted vault
+// on load-on-init.  If the KEK is unavailable (token not yet initialized), the
+// key is reported as absent (empty vector).
 class DbHmacKey {
 public:
     DbHmacKey(IDbConnection& conn, vhsm::keystore::Token& token);
