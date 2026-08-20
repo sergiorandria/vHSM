@@ -13,19 +13,19 @@ namespace grpc {
  */
 class GrpcError : public std::runtime_error {
 public:
-    GrpcError(const std::string& what,
-              ::grpc::StatusCode code = ::grpc::StatusCode::UNKNOWN,
-              const std::string& grpcMessage = "",
-              const std::string& details = "");
+  GrpcError(const std::string &what,
+            ::grpc::StatusCode code = ::grpc::StatusCode::UNKNOWN,
+            const std::string &grpcMessage = "",
+            const std::string &details = "");
 
-    ::grpc::StatusCode code() const noexcept { return code_; }
-    const std::string& grpcMessage() const noexcept { return grpcMessage_; }
-    const std::string& details() const noexcept { return details_; }
+  ::grpc::StatusCode code() const noexcept { return code_; }
+  const std::string &grpcMessage() const noexcept { return grpcMessage_; }
+  const std::string &details() const noexcept { return details_; }
 
 private:
-    ::grpc::StatusCode code_;
-    std::string grpcMessage_;
-    std::string details_;
+  ::grpc::StatusCode code_;
+  std::string grpcMessage_;
+  std::string details_;
 };
 
 /**
@@ -33,7 +33,7 @@ private:
  */
 class ConnectionError : public GrpcError {
 public:
-    explicit ConnectionError(const std::string& what);
+  explicit ConnectionError(const std::string &what);
 };
 
 /**
@@ -41,15 +41,14 @@ public:
  */
 class StatusException : public GrpcError {
 public:
-    StatusException(::grpc::StatusCode code,
-                    const std::string& grpcMessage,
-                    const std::string& details = "");
+  StatusException(::grpc::StatusCode code, const std::string &grpcMessage,
+                  const std::string &details = "");
 };
 
 /**
  * Human-readable label for a gRPC status code.
  */
-const char* statusCodeName(::grpc::StatusCode code);
+const char *statusCodeName(::grpc::StatusCode code);
 
 /**
  * Whether a failed RPC with this status code is worth retrying

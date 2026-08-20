@@ -19,17 +19,17 @@ namespace vhsm::notification {
 
 class NotificationAdapter {
 public:
-    virtual ~NotificationAdapter() = default;
+  virtual ~NotificationAdapter() = default;
 
-    // Deliver `event` to `subscriber`.  Returns true on success.  The
-    // dispatcher retries WARN/CRITICAL events when this returns false.
-    virtual bool deliver(const NotificationSubscriber& subscriber,
-                         const NotificationEvent& event) = 0;
+  // Deliver `event` to `subscriber`.  Returns true on success.  The
+  // dispatcher retries WARN/CRITICAL events when this returns false.
+  virtual bool deliver(const NotificationSubscriber &subscriber,
+                       const NotificationEvent &event) = 0;
 
-    // Human-readable channel name ("email", "webhook", "grpc_push").
-    virtual const char* channel_name() const = 0;
+  // Human-readable channel name ("email", "webhook", "grpc_push").
+  virtual const char *channel_name() const = 0;
 };
 
-}  // namespace vhsm::notification
+} // namespace vhsm::notification
 
 #endif // VHSM_NOTIFICATION_NOTIFICATION_ADAPTER_H

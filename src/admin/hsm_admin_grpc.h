@@ -5,8 +5,8 @@
 
 #include <string>
 
-#include "admin_service.h"
 #include "../session/slot_manager.h"
+#include "admin_service.h"
 
 namespace vhsm::admin {
 
@@ -17,26 +17,26 @@ namespace vhsm::admin {
 // live in exactly one testable place.
 class HsmAdminServiceImpl final : public HsmAdmin::Service {
 public:
-    HsmAdminServiceImpl(vhsm::notification::NotificationBus* bus,
-                        vhsm::audit::AuditLog* audit_log);
+  HsmAdminServiceImpl(vhsm::notification::NotificationBus *bus,
+                      vhsm::audit::AuditLog *audit_log);
 
-    ::grpc::Status AdminLogin(::grpc::ServerContext* ctx,
-                              const AdminLoginRequest* request,
-                              AdminLoginResponse* response) override;
+  ::grpc::Status AdminLogin(::grpc::ServerContext *ctx,
+                            const AdminLoginRequest *request,
+                            AdminLoginResponse *response) override;
 
-    ::grpc::Status BackupToken(::grpc::ServerContext* ctx,
-                               const BackupTokenRequest* request,
-                               BackupTokenResponse* response) override;
+  ::grpc::Status BackupToken(::grpc::ServerContext *ctx,
+                             const BackupTokenRequest *request,
+                             BackupTokenResponse *response) override;
 
-    ::grpc::Status RestoreToken(::grpc::ServerContext* ctx,
-                                const RestoreTokenRequest* request,
-                                RestoreTokenResponse* response) override;
+  ::grpc::Status RestoreToken(::grpc::ServerContext *ctx,
+                              const RestoreTokenRequest *request,
+                              RestoreTokenResponse *response) override;
 
 private:
-    vhsm::notification::NotificationBus* const bus_;
-    vhsm::audit::AuditLog* const audit_log_;
+  vhsm::notification::NotificationBus *const bus_;
+  vhsm::audit::AuditLog *const audit_log_;
 };
 
-}  // namespace vhsm::admin
+} // namespace vhsm::admin
 
-#endif  // VHSM_ADMIN_HSM_ADMIN_GRPC_H
+#endif // VHSM_ADMIN_HSM_ADMIN_GRPC_H

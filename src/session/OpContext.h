@@ -13,14 +13,14 @@ namespace vhsm::session {
 /// - Moveable to allow transfer of ownership when session state is relocated.
 class OpContext {
 public:
-    OpContext() = default;
-    virtual ~OpContext() = default;
+  OpContext() = default;
+  virtual ~OpContext() = default;
 
-    /// Non-copyable, moveable
-    OpContext(const OpContext&) = delete;
-    OpContext& operator=(const OpContext&) = delete;
-    OpContext(OpContext&&) noexcept = default;
-    OpContext& operator=(OpContext&&) noexcept = default;
+  /// Non-copyable, moveable
+  OpContext(const OpContext &) = delete;
+  OpContext &operator=(const OpContext &) = delete;
+  OpContext(OpContext &&) noexcept = default;
+  OpContext &operator=(OpContext &&) noexcept = default;
 };
 } // namespace vhsm::session
 #endif // VHSM_OP_CONTEXT_H

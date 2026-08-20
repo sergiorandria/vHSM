@@ -20,22 +20,23 @@ class IDbConnection;
 // key is reported as absent (empty vector).
 class DbHmacKey {
 public:
-    DbHmacKey(IDbConnection& conn, vhsm::keystore::Token& token);
+  DbHmacKey(IDbConnection &conn, vhsm::keystore::Token &token);
 
-    // Returns the HMAC key as a byte vector.
-    // If the key is not yet available, returns empty vector.
-    std::vector<std::uint8_t> get_key() const;
+  // Returns the HMAC key as a byte vector.
+  // If the key is not yet available, returns empty vector.
+  std::vector<std::uint8_t> get_key() const;
 
-    // Stores the HMAC key wrapped in the db_meta table.
-    // This should be called once during initialization after the KEK is available.
-    void store_key_wrapped(const std::vector<std::uint8_t>& key) const;
+  // Stores the HMAC key wrapped in the db_meta table.
+  // This should be called once during initialization after the KEK is
+  // available.
+  void store_key_wrapped(const std::vector<std::uint8_t> &key) const;
 
 private:
-    IDbConnection& conn_;
-    vhsm::keystore::Token& token_;
+  IDbConnection &conn_;
+  vhsm::keystore::Token &token_;
 };
 
-}  // namespace db
-}  // namespace vhsm::signature_store
+} // namespace db
+} // namespace vhsm::signature_store
 
 #endif // VHSM_SIGSTORE_DB_HMAC_KEY_H

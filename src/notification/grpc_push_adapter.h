@@ -14,26 +14,26 @@ namespace vhsm::notification {
 // wires this to a generated protobuf client for the push service.
 class GrpcPushAdapter : public NotificationAdapter {
 public:
-    // transport: push-endpoint address, JSON payload → success.
-    using Sender = std::function<bool(const std::string& address,
-                                      const std::string& payload)>;
+  // transport: push-endpoint address, JSON payload → success.
+  using Sender = std::function<bool(const std::string &address,
+                                    const std::string &payload)>;
 
-    explicit GrpcPushAdapter(Sender sender = default_sender());
+  explicit GrpcPushAdapter(Sender sender = default_sender());
 
-    bool deliver(const NotificationSubscriber& subscriber,
-                 const NotificationEvent& event) override;
-    const char* channel_name() const override { return "grpc_push"; }
+  bool deliver(const NotificationSubscriber &subscriber,
+               const NotificationEvent &event) override;
+  const char *channel_name() const override { return "grpc_push"; }
 
-    // Renders the JSON payload for a gRPC push.
-    static std::string render_payload(const NotificationEvent& event);
+  // Renders the JSON payload for a gRPC push.
+  static std::string render_payload(const NotificationEvent &event);
 
-    // Default transport: fail closed until a gRPC push client is wired.
-    static Sender default_sender();
+  // Default transport: fail closed until a gRPC push client is wired.
+  static Sender default_sender();
 
 private:
-    Sender sender_;
+  Sender sender_;
 };
 
-}  // namespace vhsm::notification
+} // namespace vhsm::notification
 
 #endif // VHSM_NOTIFICATION_GRPC_PUSH_ADAPTER_H

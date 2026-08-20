@@ -17,27 +17,28 @@ namespace vhsm::notification {
 // libcurl's SMTP support or a real queue in the default sender.
 class EmailAdapter : public NotificationAdapter {
 public:
-    // transport: to-address, rendered message → success.
-    using Sender = std::function<bool(const std::string& to, const std::string& message)>;
+  // transport: to-address, rendered message → success.
+  using Sender =
+      std::function<bool(const std::string &to, const std::string &message)>;
 
-    explicit EmailAdapter(Sender sender = default_sender());
+  explicit EmailAdapter(Sender sender = default_sender());
 
-    bool deliver(const NotificationSubscriber& subscriber,
-                 const NotificationEvent& event) override;
-    const char* channel_name() const override { return "email"; }
+  bool deliver(const NotificationSubscriber &subscriber,
+               const NotificationEvent &event) override;
+  const char *channel_name() const override { return "email"; }
 
-    // Renders a plain-text RFC 5322-ish message for `event`.
-    static std::string render_message(const NotificationEvent& event,
-                                      const std::string& from);
+  // Renders a plain-text RFC 5322-ish message for `event`.
+  static std::string render_message(const NotificationEvent &event,
+                                    const std::string &from);
 
-    // Default transport (env-configured).  Without VHSM_SMTP_SERVER the
-    // default sender reports failure so misconfiguration is loud, not silent.
-    static Sender default_sender();
+  // Default transport (env-configured).  Without VHSM_SMTP_SERVER the
+  // default sender reports failure so misconfiguration is loud, not silent.
+  static Sender default_sender();
 
 private:
-    Sender sender_;
+  Sender sender_;
 };
 
-}  // namespace vhsm::notification
+} // namespace vhsm::notification
 
 #endif // VHSM_NOTIFICATION_EMAIL_ADAPTER_H

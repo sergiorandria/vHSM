@@ -10,33 +10,35 @@
 // Requires C++20.
 
 #include "db_connection.h"
+#include "../core/error.h"
 #include "StmtGuard.h"
 #include "sqlite_connection.h"
-#include "../core/error.h"
 
 #include <sqlite3.h>
 
 #include <memory>
-#include <string>
 #include <stdexcept>
+#include <string>
 
 namespace vhsm::signature_store {
-    namespace db {
+namespace db {
 
-        // Factory function — the only symbol clients need to call
-        std::unique_ptr<IDbConnection> make_sqlite_connection(const std::string& path) {
-            return std::make_unique<SqliteConnection>(path);
-        }
+// Factory function — the only symbol clients need to call
+std::unique_ptr<IDbConnection> make_sqlite_connection(const std::string &path) {
+  return std::make_unique<SqliteConnection>(path);
+}
 
-        // Stub for PostgreSQL connection — to be implemented in future phases
-        std::unique_ptr<IDbConnection> make_postgresql_connection(const std::string& /*connection_string*/) {
-            throw std::runtime_error("PostgreSQL backend not yet implemented");
-        }
+// Stub for PostgreSQL connection — to be implemented in future phases
+std::unique_ptr<IDbConnection>
+make_postgresql_connection(const std::string & /*connection_string*/) {
+  throw std::runtime_error("PostgreSQL backend not yet implemented");
+}
 
-        // Stub for MySQL connection — to be implemented in future phases
-        std::unique_ptr<IDbConnection> make_mysql_connection(const std::string& /*connection_string*/) {
-            throw std::runtime_error("MySQL backend not yet implemented");
-        }
+// Stub for MySQL connection — to be implemented in future phases
+std::unique_ptr<IDbConnection>
+make_mysql_connection(const std::string & /*connection_string*/) {
+  throw std::runtime_error("MySQL backend not yet implemented");
+}
 
-    }  // namespace db
-}  // namespace vhsm::signature_store
+} // namespace db
+} // namespace vhsm::signature_store

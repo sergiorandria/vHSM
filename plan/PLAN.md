@@ -803,6 +803,14 @@ option(VHSM_NOTIFY_BUS_SIZE "Notification ring buffer capacity"         1024)
 - [x] Implement atomic write (temp file + rename)
 - [x] Add migration framework
 - [x] Round-trip integration tests
+- [x] Token lifecycle wiring: `C_Initialize` opens/creates the vault from
+  `VHSM_VAULT_PATH` + `VHSM_VAULT_PASSWORD` and load-on-init restores the
+  token's durable state (including KEK) via `persistence::restore_token_from_vault`;
+  `C_Finalize` autosaves the live token state. `DbHmacKey` derives the DB
+  integrity key from the restored KEK via HKDF-SHA256 (stable across restarts).
+- [x] Admin `BackupToken` / `RestoreToken` RPCs (`TokenBackupCore` +
+  `Vault`) — backup refuses to clobber an existing vault; failed restores leave
+  the target token untouched.
 
 ### Phase 8 — Admin gRPC + Signature Query API (Week 10)
 - [ ] Define `admin.proto` with all RPCs including notification management and `StreamEvents`
