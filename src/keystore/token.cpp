@@ -54,11 +54,11 @@ CK_BBOOL Token::is_so_login_required() const noexcept {
     return v_core_.v_is_so_login_required();
 }
 
-HsmObject* Token::get_object(CK_OBJECT_HANDLE handle) {
+std::shared_ptr<HsmObject> Token::get_object(CK_OBJECT_HANDLE handle) {
     return v_core_.v_get_object(handle);
 }
 
-const HsmObject* Token::get_object(CK_OBJECT_HANDLE handle) const {
+std::shared_ptr<const HsmObject> Token::get_object(CK_OBJECT_HANDLE handle) const {
     return v_core_.v_get_object(handle);
 }
 

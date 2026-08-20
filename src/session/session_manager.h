@@ -7,6 +7,7 @@
 #include "internal/session_manager_core.h"
 
 #include <list>
+#include <memory>
 #include <mutex>
 #include <atomic>
 
@@ -56,10 +57,11 @@ public:
     // complex struct (which doesn't port well to C).
     CK_RV getSessionInfo(CK_SESSION_HANDLE hSession, CK_SESSION_INFO_PTR pInfo);
 
-    // WHY getSession returns a raw Session*: Internal callers (C_Sign, C_GetObjectAttribute)
-    // need to work with the session. Returning a pointer (not a copy) avoids allocation
-    // overhead. The caller must not delete the pointer (manager owns it).
-    Session* getSession(CK_SESSION_HANDLE hSession);
+    // WHY getSession returns shared_ptr<Session>: Internal callers (C_Sign,
+    // C_GetAttributeValue) need to work with the session. Returning shared_ptr
+    // avoids use-after-free: the caller's reference keeps the Session alive even
+    // if another thread closes the session (closing only erases the manager's ref).
+    std::shared_ptr<Session> getSession(CK_SESSION_HANDLE hSession);
 
     // WHY haveSession checks for any session on a slot: Some operations require at least
     // one session to be open on a slot (e.g., token operations). haveSession lets callers

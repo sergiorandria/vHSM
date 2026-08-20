@@ -4,11 +4,15 @@
 
 #include "../keystore/key_wrap.h"
 #include "../crypto/ecc.h"
+#include "../notification/notification_event.h"
 
 #include <openssl/rsa.h>
+#include <openssl/x509.h>
 #include <vector>
 #include <string>
 #include <cstring>
+#include <optional>
+#include <sstream>
 
 extern "C" {
 namespace vhsm::pkcs11 {
@@ -23,6 +27,16 @@ struct CK_ECDH1_DERIVE_PARAMS {
     CK_BYTE_PTR pPublicData;
 };
 
+std::string mech_label(CK_MECHANISM_TYPE m) {
+    switch (m) {
+        case CKM_AES_KEY_WRAP: return "CKM_AES_KEY_WRAP";
+        case CKM_RSA_PKCS: return "CKM_RSA_PKCS";
+        case CKM_RSA_PKCS_OAEP: return "CKM_RSA_PKCS_OAEP";
+        case CKM_ECDH1_DERIVE: return "CKM_ECDH1_DERIVE";
+        default: return "CKM_VENDOR_DEFINED";
+    }
+}
+
 bool raw_key_bytes(HsmObject* o, std::vector<u8>& out) {
     const auto* v = o->findAttribute(CKA_VALUE);
     if (v && !v->empty()) { out = *v; return true; }
@@ -35,7 +49,7 @@ bool raw_key_bytes(HsmObject* o, std::vector<u8>& out) {
 
 CK_RV create_from_raw(CK_SESSION_HANDLE hSession, const std::vector<u8>& raw,
                       CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount, CK_OBJECT_HANDLE_PTR phKey) {
-    Session* s = p11_sessions().getSession(hSession);
+    auto s = p11_sessions().getSession(hSession);
     if (!s) return CKR_SESSION_HANDLE_INVALID;
     auto& store = s->getObjectStore();
 
@@ -69,15 +83,18 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
                 CK_BYTE_PTR pWrappedKey, CK_ULONG_PTR pulWrappedKeyLen) {
     if (!p11_is_initialized()) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (!pMechanism || !pulWrappedKeyLen) return CKR_ARGUMENTS_BAD;
-    Session* s = p11_sessions().getSession(hSession);
+    auto s = p11_sessions().getSession(hSession);
     if (!s) return CKR_SESSION_HANDLE_INVALID;
 
-    HsmObject* wkey = p11_get_object(hSession, hWrappingKey);
-    HsmObject* tkey = p11_get_object(hSession, hKey);
+    auto wkey = p11_get_object(hSession, hWrappingKey);
+    auto tkey = p11_get_object(hSession, hKey);
     if (!wkey || !tkey) return CKR_KEY_HANDLE_INVALID;
 
+    // PKCS#11: non-extractable keys may not be wrapped.
+    if (!tkey->isExtractable()) return CKR_KEY_UNEXTRACTABLE;
+
     std::vector<u8> raw;
-    if (!raw_key_bytes(tkey, raw)) return CKR_KEY_HANDLE_INVALID;
+    if (!raw_key_bytes(tkey.get(), raw)) return CKR_KEY_HANDLE_INVALID;
 
     std::vector<u8> out;
     CK_RV rv = CKR_OK;
@@ -91,7 +108,7 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
         } catch (...) { return CKR_WRAPPED_KEY_INVALID; }
     } else if (pMechanism->mechanism == CKM_RSA_PKCS ||
                pMechanism->mechanism == CKM_RSA_PKCS_OAEP) {
-        EVP_PKEY* wk = p11_evp_from_object(wkey);
+        EVP_PKEY* wk = p11_evp_from_object(wkey.get());
         if (!wk) return CKR_WRAPPING_KEY_HANDLE_INVALID;
         int padding = (pMechanism->mechanism == CKM_RSA_PKCS_OAEP) ? RSA_PKCS1_OAEP_PADDING : RSA_PKCS1_PADDING;
         std::string md = (pMechanism->mechanism == CKM_RSA_PKCS_OAEP) ? "SHA-256" : "";
@@ -112,6 +129,29 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
         }
         if (!out.empty()) std::memcpy(pWrappedKey, out.data(), out.size());
         *pulWrappedKeyLen = static_cast<CK_ULONG>(out.size());
+
+        // Audit: key wrap completed
+        auto* token = p11_get_token_for_session(hSession);
+        auto session = p11_get_session(hSession);
+        int slot_id = session ? static_cast<int>(session->getSlotID()) : 0;
+        std::string token_label = token ? token->get_label() : "unknown";
+        std::string wkey_label = wkey->findAttribute(CKA_LABEL)
+            ? std::string(reinterpret_cast<const char*>(wkey->findAttribute(CKA_LABEL)->data()),
+                          wkey->findAttribute(CKA_LABEL)->size())
+            : std::string();
+        std::string key_info = wkey_label.empty() ? std::to_string(hWrappingKey) : wkey_label;
+
+        std::stringstream detail_ss;
+        detail_ss << R"({"mechanism":")" << mech_label(pMechanism->mechanism) << R"(",)"
+                  << R"("wrapped_key_len":)" << out.size() << R"(})";
+        p11_publish_event(
+            vhsm::notification::NotificationEvent::EventType::WRAP_KEY_COMPLETED,
+            vhsm::notification::NotificationEvent::Severity::INFO,
+            slot_id, token_label, key_info,
+            "C_WrapKey completed using key " + key_info,
+            detail_ss.str(),
+            std::nullopt,
+            "C_WrapKey");
     }
     return rv;
 }
@@ -121,10 +161,10 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
                   CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulAttributeCount, CK_OBJECT_HANDLE_PTR phKey) {
     if (!p11_is_initialized()) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (!pMechanism || !pWrappedKey || !phKey) return CKR_ARGUMENTS_BAD;
-    Session* s = p11_sessions().getSession(hSession);
+    auto s = p11_sessions().getSession(hSession);
     if (!s) return CKR_SESSION_HANDLE_INVALID;
 
-    HsmObject* ukey = p11_get_object(hSession, hUnwrappingKey);
+    auto ukey = p11_get_object(hSession, hUnwrappingKey);
     if (!ukey) return CKR_UNWRAPPING_KEY_HANDLE_INVALID;
 
     std::vector<u8> raw;
@@ -139,7 +179,7 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
         } catch (...) { return CKR_WRAPPED_KEY_INVALID; }
     } else if (pMechanism->mechanism == CKM_RSA_PKCS ||
                pMechanism->mechanism == CKM_RSA_PKCS_OAEP) {
-        EVP_PKEY* uk = p11_evp_from_object(ukey);
+        EVP_PKEY* uk = p11_evp_from_object(ukey.get());
         if (!uk) return CKR_UNWRAPPING_KEY_HANDLE_INVALID;
         int padding = (pMechanism->mechanism == CKM_RSA_PKCS_OAEP) ? RSA_PKCS1_OAEP_PADDING : RSA_PKCS1_PADDING;
         std::string md = (pMechanism->mechanism == CKM_RSA_PKCS_OAEP) ? "SHA-256" : "";
@@ -151,7 +191,32 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
     }
 
     if (rv != CKR_OK) return rv;
-    return create_from_raw(hSession, raw, pTemplate, ulAttributeCount, phKey);
+    CK_RV crv = create_from_raw(hSession, raw, pTemplate, ulAttributeCount, phKey);
+    if (crv == CKR_OK) {
+        // Audit: key unwrap completed
+        auto* token = p11_get_token_for_session(hSession);
+        auto session = p11_get_session(hSession);
+        int slot_id = session ? static_cast<int>(session->getSlotID()) : 0;
+        std::string token_label = token ? token->get_label() : "unknown";
+        std::string ukey_label = ukey->findAttribute(CKA_LABEL)
+            ? std::string(reinterpret_cast<const char*>(ukey->findAttribute(CKA_LABEL)->data()),
+                          ukey->findAttribute(CKA_LABEL)->size())
+            : std::string();
+        std::string key_info = ukey_label.empty() ? std::to_string(hUnwrappingKey) : ukey_label;
+
+        std::stringstream detail_ss;
+        detail_ss << R"({"mechanism":")" << mech_label(pMechanism->mechanism) << R"(",)"
+                  << R"("new_key_handle":)" << *phKey << R"(})";
+        p11_publish_event(
+            vhsm::notification::NotificationEvent::EventType::UNWRAP_KEY_COMPLETED,
+            vhsm::notification::NotificationEvent::Severity::INFO,
+            slot_id, token_label, key_info,
+            "C_UnwrapKey completed using key " + key_info,
+            detail_ss.str(),
+            std::nullopt,
+            "C_UnwrapKey");
+    }
+    return crv;
 }
 
 CK_RV C_DeriveKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
@@ -161,17 +226,19 @@ CK_RV C_DeriveKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
     if (!pMechanism || !phKey) return CKR_ARGUMENTS_BAD;
     if (pMechanism->mechanism != CKM_ECDH1_DERIVE) return CKR_MECHANISM_INVALID;
 
-    Session* s = p11_sessions().getSession(hSession);
+    auto s = p11_sessions().getSession(hSession);
     if (!s) return CKR_SESSION_HANDLE_INVALID;
 
-    HsmObject* bkey = p11_get_object(hSession, hBaseKey);
+    auto bkey = p11_get_object(hSession, hBaseKey);
     if (!bkey) return CKR_KEY_HANDLE_INVALID;
-    EVP_PKEY* priv = p11_evp_from_object(bkey);
+    EVP_PKEY* priv = p11_evp_from_object(bkey.get());
     if (!priv) return CKR_KEY_HANDLE_INVALID;
 
+    if (!pMechanism->pParameter || pMechanism->ulParameterLen < sizeof(CK_ECDH1_DERIVE_PARAMS)) {
+        return CKR_MECHANISM_PARAM_INVALID;
+    }
     auto* params = static_cast<CK_ECDH1_DERIVE_PARAMS*>(pMechanism->pParameter);
-    if (!params || params->ulPublicDataLen == 0 || !params->pPublicData) {
-        EVP_PKEY_free(priv);
+    if (!params->pPublicData || params->ulPublicDataLen == 0) {
         return CKR_MECHANISM_PARAM_INVALID;
     }
     const u8* p = params->pPublicData;
@@ -192,6 +259,23 @@ CK_RV C_DeriveKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
     if (rv == CKR_OK) p11_store_secret(*ptr, secret);
     if (rv != CKR_OK) { store.v_destroy_object(h); return rv; }
     *phKey = h;
+
+    // Audit: ECDH key derivation completed
+    auto* token = p11_get_token_for_session(hSession);
+    int slot_id = static_cast<int>(s->getSlotID());
+    std::string token_label = token ? token->get_label() : "unknown";
+    std::stringstream detail_ss;
+    detail_ss << R"({"mechanism":")" << "CKM_ECDH1_DERIVE" << R"(",)"
+              << R"("new_key_handle":)" << h << R"(})";
+    p11_publish_event(
+        vhsm::notification::NotificationEvent::EventType::KEY_ROTATED,
+        vhsm::notification::NotificationEvent::Severity::INFO,
+        slot_id, token_label,
+        std::to_string(hBaseKey),
+        "C_DeriveKey (ECDH1) completed from base key " + std::to_string(hBaseKey),
+        detail_ss.str(),
+        std::nullopt,
+        "C_DeriveKey");
     return CKR_OK;
 }
 

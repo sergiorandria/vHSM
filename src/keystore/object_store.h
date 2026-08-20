@@ -31,9 +31,12 @@ namespace vhsm::keystore::internal {
  * each time a slot is reused, so old (version, index) pairs no longer match.
  * This prevents a subtle class of bugs where stale handles seem valid.
  *
- * WHY std::unique_ptr<HsmObject>: Objects are owned by the store and outlive
- * any single caller's use. unique_ptr ensures automatic cleanup when destroyed.
- * No reference counting needed; ownership is clear and linear.
+ * WHY std::shared_ptr<HsmObject>: Objects are owned by the store (one strong
+ * reference per entry) but v_get_object/v_create_object/v_find_object_if hand out
+ * additional strong references so the object stays alive for the duration of the
+ * caller's C_* operation even if another thread destroys the handle concurrently.
+ * The store's own reference is what grants/denies future lookups; external
+ * references pin the object in memory past destruction.
  */
 class v_ObjectStore_M1 {
 public:
@@ -47,24 +50,27 @@ public:
     v_ObjectStore_M1& operator=(const v_ObjectStore_M1&) = delete;
 
     // WHY template v_create_object: We want type-safe creation of derived types
-    // (e.g., PrivateKey, Certificate). Returning T* instead of HsmObject* lets
-    // callers avoid casts. The template is instantiated at compile time for each T,
-    // so no runtime overhead.
+    // (e.g., PrivateKey, Certificate). Returning a shared_ptr<T> instead of T* lets
+    // callers avoid casts AND keeps the object alive for the caller. The template is
+    // instantiated at compile time for each T, so no runtime overhead.
     template<typename T, typename... Args>
-    std::pair<CK_OBJECT_HANDLE, T*> v_create_object(Args&&... args);
+    std::pair<CK_OBJECT_HANDLE, std::shared_ptr<T>> v_create_object(Args&&... args);
 
     // WHY nodiscard: A caller that ignores the handle can't access the object again.
     // Forgetting to capture the handle is almost always a bug. [[nodiscard]] makes
     // the compiler warn about silently-discarded handles.
     [[nodiscard]]
-    HsmObject* v_get_object(CK_OBJECT_HANDLE handle);
+    std::shared_ptr<HsmObject> v_get_object(CK_OBJECT_HANDLE handle);
 
     [[nodiscard]]
-    const HsmObject* v_get_object(CK_OBJECT_HANDLE handle) const;
+    std::shared_ptr<const HsmObject> v_get_object(CK_OBJECT_HANDLE handle) const;
 
     // WHY bool v_destroy_object returns true/false instead of CKR_*: Destruction
     // is straightforward (mark slot free). Returning bool is simpler: true = destroyed,
     // false = handle invalid. The Token layer can map this to PKCS#11 error codes.
+    // This drops the store's own strong reference; callers that already hold a
+    // shared_ptr (from v_get_object/v_create_object/v_find_object_if) keep the object
+    // alive until they release it, preventing use-after-free.
     bool v_destroy_object(CK_OBJECT_HANDLE handle);
 
     size_t v_get_object_count() const;
@@ -76,19 +82,19 @@ public:
     // store knowing about specific attributes. This makes search flexible: find by label,
     // by ID, by cryptographic key, etc., all with the same code.
     //
-    // WHY returns (handle, object*) pair: Caller needs both. The handle is opaque and
-    // required for future operations (get, delete). The pointer lets callers immediately
-    // use the object without a second lookup.
+    // WHY returns (handle, shared_ptr) pair: Caller needs both. The handle is opaque and
+    // required for future operations (get, delete). The shared_ptr lets callers immediately
+    // use the object AND keeps it alive for the caller's operation.
     //
     // WHY lock_guard here: The search iterates the entire table. We hold the lock for
     // the whole search to prevent concurrent modifications (object creation/deletion).
     template<typename Predicate>
-    std::pair<CK_OBJECT_HANDLE, HsmObject*> v_find_object_if(Predicate pred) const {
+    std::pair<CK_OBJECT_HANDLE, std::shared_ptr<HsmObject>> v_find_object_if(Predicate pred) const {
         std::lock_guard<std::mutex> lock(v_mutex_);
         for (size_t i = 0; i < v_table_.size(); ++i) {
             if (!v_table_[i].v_is_free && v_table_[i].v_object) {
-                HsmObject* obj = v_table_[i].v_object.get();
-                if (pred(obj)) {
+                std::shared_ptr<HsmObject> obj = v_table_[i].v_object;
+                if (pred(obj.get())) {
                     uint32_t version = v_table_[i].v_version.load();
                     CK_OBJECT_HANDLE handle = v_compose_handle(i, version);
                     return {handle, obj};
@@ -100,9 +106,11 @@ public:
 
 private:
     struct v_ObjectEntry {
-        // WHY unique_ptr: Owns the object exclusively. When the entry is destroyed
-        // or reassigned, the object is automatically deleted. No manual cleanup needed.
-        std::unique_ptr<HsmObject> v_object;
+        // WHY shared_ptr: The store holds one strong reference per live entry. Lookups
+        // copy this pointer out so the object survives concurrent destruction by other
+        // threads. When the entry is freed (v_destroy_object) or erased, this reference
+        // is dropped and the object is reclaimed once external users release theirs.
+        std::shared_ptr<HsmObject> v_object;
         
         // WHY atomic<u32> for version: Version increments each time the slot is reused.
         // Atomic ensures concurrent reads (v_get_object) don't race with version updates.
@@ -179,7 +187,7 @@ inline constexpr CK_OBJECT_HANDLE CK_INVALID_HANDLE = 0;
 namespace vhsm::keystore::internal {
 
 template<typename T, typename... Args>
-std::pair<CK_OBJECT_HANDLE, T*> v_ObjectStore_M1::v_create_object(Args&&... args) {
+std::pair<CK_OBJECT_HANDLE, std::shared_ptr<T>> v_ObjectStore_M1::v_create_object(Args&&... args) {
     // WHY static_assert: Check at compile time that T derives from HsmObject.
     // This prevents misuse (e.g., v_create_object<int>()) from reaching runtime.
     static_assert(std::is_base_of_v<HsmObject, T>, "T must derive from HsmObject");
@@ -197,14 +205,16 @@ std::pair<CK_OBJECT_HANDLE, T*> v_ObjectStore_M1::v_create_object(Args&&... args
             v_table_[index].v_version.fetch_add(1);
             uint32_t version = v_table_[index].v_version.load();
 
-            // WHY make_unique: Construct the object in the managed pointer.
+            // WHY make_shared: Construct the object in the managed pointer.
             // Exception-safe: if the constructor throws, v_object remains nullptr
             // and the entry stays marked free. No memory leak.
-            v_table_[index].v_object = std::make_unique<T>(std::forward<Args>(args)...);
+            // One shared_ptr instance (from make_shared) is stored; the caller receives
+            // a copy of that shared_ptr, so the object outlives the store's entry.
+            v_table_[index].v_object = std::make_shared<T>(std::forward<Args>(args)...);
 
             // WHY compose handle: Combine index + version into an opaque handle.
             CK_OBJECT_HANDLE handle = v_compose_handle(index, version);
-            return {handle, static_cast<T*>(v_table_[index].v_object.get())};
+            return {handle, std::static_pointer_cast<T>(v_table_[index].v_object)};
         }
     }
 
@@ -216,10 +226,10 @@ std::pair<CK_OBJECT_HANDLE, T*> v_ObjectStore_M1::v_create_object(Args&&... args
     v_table_[index].v_version.fetch_add(1);
     uint32_t version = v_table_[index].v_version.load();
 
-    v_table_[index].v_object = std::make_unique<T>(std::forward<Args>(args)...);
+    v_table_[index].v_object = std::make_shared<T>(std::forward<Args>(args)...);
 
     CK_OBJECT_HANDLE handle = v_compose_handle(index, version);
-    return {handle, static_cast<T*>(v_table_[index].v_object.get())};
+    return {handle, std::static_pointer_cast<T>(v_table_[index].v_object)};
 }
 
 } // namespace vhsm::keystore::internal

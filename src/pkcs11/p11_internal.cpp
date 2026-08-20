@@ -17,6 +17,14 @@
 #include "../session/session_manager.h"
 #include "../session/slot_manager.h"
 
+#include "../signature_store/signature_dispatcher.h"
+#include "../signature_store/db_connection.h"
+#include "../notification/notification_bus.h"
+#include "../notification/notification_event.h"
+#include "../notification/bounded_notification_bus.h"
+#include "../audit/audit_log.h"
+#include "../ledger/ledger_worker.h"
+
 #include <openssl/evp.h>
 #include <openssl/rsa.h>
 #include <openssl/ec.h>
@@ -25,6 +33,7 @@
 #include <openssl/kdf.h>
 #include <openssl/rand.h>
 #include <openssl/err.h>
+#include <openssl/x509.h>
 
 #include <algorithm>
 #include <cstring>
@@ -33,14 +42,44 @@
 #include <unordered_map>
 #include <stdexcept>
 #include <memory>
+#include <iostream>
+#include <sstream>
+#include <iomanip>
+#include <optional>
+#include <chrono>
 
 namespace vhsm::pkcs11 {
+using keystore::HsmObject;
+using keystore::ObjectType;
+using session::Session;
+using session::SessionManager;
+
+// WHY g_cka_public_key / g_cka_private_key: Stored as raw bytes to set CKA_CLASS
+// via HsmObject::setAttribute. The attribute interface takes a byte pointer + length,
+// so we need a stable CK_OBJECT_CLASS value to point at.
+static const CK_OBJECT_CLASS g_cka_public_key  = CKO_PUBLIC_KEY;
+static const CK_OBJECT_CLASS g_cka_private_key = CKO_PRIVATE_KEY;
+
+// SignatureDispatcher instance (initialized in C_Initialize)
+std::unique_ptr<vhsm::signature_store::db::SignatureDispatcher> g_signatureDispatcher;
+std::unique_ptr<vhsm::notification::NotificationBus> g_notificationBus;
+std::unique_ptr<vhsm::audit::AuditLog> g_auditLog;
+std::unique_ptr<vhsm::signature_store::db::IDbConnection> g_dbConnection;
+
+// Notification delivery pipeline (bus → dispatcher → subscribers)
+std::unique_ptr<vhsm::signature_store::db::NotificationDispatcher> g_notificationDispatcher;
+std::unique_ptr<vhsm::signature_store::db::NotificationRepository> g_notificationRepo;
+std::unique_ptr<vhsm::notification::BoundedNotificationBus> g_boundedBus;
+
+// Ledger anchoring globals (optional; only populated when a Fabric gateway is configured)
+std::unique_ptr<vhsm::ledger::LedgerClient> g_ledgerClient;
+std::unique_ptr<vhsm::ledger::LedgerWorker> g_ledgerWorker;
 
 // ---------------------------------------------------------------------------
 // Library / session state
 // ---------------------------------------------------------------------------
-static bool                 g_initialized = false;
-static SessionManager       g_sessionManager;
+bool g_initialized = false;
+SessionManager       g_sessionManager;
 
 // Per-session registry of object handles we have created (used for FindObjects
 // enumeration, since the underlying ObjectStore does not expose iteration).
@@ -59,9 +98,65 @@ std::unordered_map<CK_SESSION_HANDLE, std::vector<CK_OBJECT_HANDLE>> g_findResul
 // Login state per session (userType, or CKU_INVALID if not logged in).
 std::unordered_map<CK_SESSION_HANDLE, CK_USER_TYPE> g_loginState;
 
+// Single mutex guarding all g_* per-session maps (see pkcs11_internal.h rationale).
+std::mutex g_stateMutex;
+
 bool p11_is_initialized() { return g_initialized; }
 
 SessionManager& p11_sessions() { return g_sessionManager; }
+
+// ---------------------------------------------------------------------------
+// SignatureDispatcher access
+// ---------------------------------------------------------------------------
+vhsm::signature_store::db::SignatureDispatcher* p11_signature_dispatcher() {
+    return g_signatureDispatcher.get();
+}
+
+vhsm::signature_store::db::IDbConnection* p11_db_connection() {
+    return g_dbConnection.get();
+}
+
+vhsm::notification::NotificationBus* p11_notification_bus() {
+    return g_notificationBus.get();
+}
+
+vhsm::audit::AuditLog* p11_audit_log() {
+    return g_auditLog.get();
+}
+
+void p11_publish_event(
+    vhsm::notification::NotificationEvent::EventType type,
+    vhsm::notification::NotificationEvent::Severity severity,
+    int slot_id, const std::string& token_label,
+    const std::string& key_id, const std::string& summary,
+    const std::string& detail_json,
+    const std::optional<std::string>& user_label,
+    const std::string& audit_event_type) {
+    auto* notification_bus = g_notificationBus.get();
+    auto* audit_log = g_auditLog.get();
+    if (!notification_bus || !audit_log) return;
+
+    try {
+        int64_t created_at = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()
+        ).count();
+
+        vhsm::notification::NotificationEvent event;
+        event.type = type;
+        event.severity = severity;
+        event.timestamp = created_at;
+        event.source = "slot:" + std::to_string(slot_id) + "/token:" + token_label + "/key:" + key_id;
+        event.actor = user_label.value_or("UNKNOWN");
+        event.summary = summary;
+        event.detail_json = detail_json;
+        event.hsm_instance = "";  // TODO: fetch from db_meta
+        notification_bus->publish(event);
+
+        audit_log->append(audit_event_type + "-" + std::to_string(created_at), audit_event_type);
+    } catch (const std::exception&) {
+        // Notification/audit must never raise across the C API boundary.
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Slot / token lookup
@@ -78,30 +173,32 @@ keystore::Token* p11_get_token(CK_SLOT_ID id) {
     return tp.get();
 }
 
+// ---------------------------------------------------------------------------
+// Session lookup
+// ---------------------------------------------------------------------------
 keystore::Token* p11_get_token_for_session(CK_SESSION_HANDLE hSession) {
-    Session* s = p11_get_session(hSession);
+    auto s = g_sessionManager.getSession(hSession);
     if (!s) return nullptr;
     return p11_get_token(s->getSlotID());
 }
 
-// ---------------------------------------------------------------------------
-// Session lookup
-// ---------------------------------------------------------------------------
-Session* p11_get_session(CK_SESSION_HANDLE h) {
+std::shared_ptr<Session> p11_get_session(CK_SESSION_HANDLE h) {
     return g_sessionManager.getSession(h);
 }
 
-HsmObject* p11_get_object(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject) {
-    Session* s = g_sessionManager.getSession(hSession);
+std::shared_ptr<HsmObject> p11_get_object(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject) {
+    auto s = g_sessionManager.getSession(hSession);
     if (!s) return nullptr;
     return s->getObjectStore().v_get_object(hObject);
 }
 
 void p11_register_object(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE h) {
+    std::lock_guard<std::mutex> lock(g_stateMutex);
     g_objectRegistry[hSession].push_back(h);
 }
 
 void p11_unregister_object(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE h) {
+    std::lock_guard<std::mutex> lock(g_stateMutex);
     auto it = g_objectRegistry.find(hSession);
     if (it != g_objectRegistry.end()) {
         auto& v = it->second;
@@ -111,12 +208,14 @@ void p11_unregister_object(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE h) {
 
 void p11_clear_session_objects(CK_SESSION_HANDLE hSession) {
     p11_reset_op(hSession);
+    std::lock_guard<std::mutex> lock(g_stateMutex);
     g_objectRegistry.erase(hSession);
     g_findResults.erase(hSession);
     g_loginState.erase(hSession);
 }
 
 void p11_reset_op(CK_SESSION_HANDLE h) {
+    std::lock_guard<std::mutex> lock(g_stateMutex);
     g_activeMech.erase(h);
     g_opBuf.erase(h);
     g_signKey.erase(h);
@@ -204,13 +303,16 @@ CK_RV p11_store_key(HsmObject& obj, EVP_PKEY* pkey, bool isPrivate, int keyType)
     std::vector<u8> der;
     if (base == EVP_PKEY_RSA) {
         RSA* rsa = EVP_PKEY_get1_RSA(pkey);
+        if (!rsa) return CKR_GENERAL_ERROR;
         if (isPrivate) {
             int len = i2d_RSAPrivateKey(rsa, nullptr);
-            der.resize(len); u8* p = der.data(); i2d_RSAPrivateKey(rsa, &p);
+            if (len <= 0) { RSA_free(rsa); return CKR_GENERAL_ERROR; }
+            der.resize(static_cast<std::size_t>(len)); u8* p = der.data(); i2d_RSAPrivateKey(rsa, &p);
             obj.setAttribute(CKA_VHSM_RSA_PRIV, der.data(), der.size());
         } else {
             int len = i2d_RSAPublicKey(rsa, nullptr);
-            der.resize(len); u8* p = der.data(); i2d_RSAPublicKey(rsa, &p);
+            if (len <= 0) { RSA_free(rsa); return CKR_GENERAL_ERROR; }
+            der.resize(static_cast<std::size_t>(len)); u8* p = der.data(); i2d_RSAPublicKey(rsa, &p);
             obj.setAttribute(CKA_VHSM_RSA_PUB, der.data(), der.size());
         }
         RSA_free(rsa);
@@ -218,23 +320,28 @@ CK_RV p11_store_key(HsmObject& obj, EVP_PKEY* pkey, bool isPrivate, int keyType)
         (void)keyType;
     } else if (base == EVP_PKEY_EC) {
         EC_KEY* ec = EVP_PKEY_get1_EC_KEY(pkey);
+        if (!ec) return CKR_GENERAL_ERROR;
         if (isPrivate) {
             int len = i2d_ECPrivateKey(ec, nullptr);
-            der.resize(len); u8* p = der.data(); i2d_ECPrivateKey(ec, &p);
+            if (len <= 0) { EC_KEY_free(ec); return CKR_GENERAL_ERROR; }
+            der.resize(static_cast<std::size_t>(len)); u8* p = der.data(); i2d_ECPrivateKey(ec, &p);
             obj.setAttribute(CKA_VHSM_EC_PRIV, der.data(), der.size());
         } else {
             int len = i2o_ECPublicKey(ec, nullptr);
-            der.resize(len); u8* p = der.data(); i2o_ECPublicKey(ec, &p);
+            if (len <= 0) { EC_KEY_free(ec); return CKR_GENERAL_ERROR; }
+            der.resize(static_cast<std::size_t>(len)); u8* p = der.data(); i2o_ECPublicKey(ec, &p);
             obj.setAttribute(CKA_VHSM_EC_PUB, der.data(), der.size());
         }
         const EC_GROUP* grp = EC_KEY_get0_group(ec);
         std::vector<u8> params;
         int plen = i2d_ECPKParameters(grp, nullptr);
-        params.resize(plen); u8* pp = params.data(); i2d_ECPKParameters(grp, &pp);
+        if (plen <= 0) { EC_KEY_free(ec); return CKR_GENERAL_ERROR; }
+        params.resize(static_cast<std::size_t>(plen)); u8* pp = params.data(); i2d_ECPKParameters(grp, &pp);
         obj.setAttribute(CKA_EC_PARAMS, params.data(), params.size());
         std::vector<u8> pt;
         int ptlen = EC_POINT_point2oct(grp, EC_KEY_get0_public_key(ec), POINT_CONVERSION_UNCOMPRESSED, nullptr, 0, nullptr);
-        pt.resize(ptlen);
+        if (ptlen <= 0) { EC_KEY_free(ec); return CKR_GENERAL_ERROR; }
+        pt.resize(static_cast<std::size_t>(ptlen));
         EC_POINT_point2oct(grp, EC_KEY_get0_public_key(ec), POINT_CONVERSION_UNCOMPRESSED, pt.data(), ptlen, nullptr);
         obj.setAttribute(CKA_EC_POINT, pt.data(), ptlen);
         EC_KEY_free(ec);
@@ -280,6 +387,7 @@ std::vector<u8> p11_hash(vhsm::crypto::HashAlgorithm h, const std::vector<u8>& d
 
 CK_RV p11_rsa_encrypt(EVP_PKEY* key, const std::vector<u8>& in, std::vector<u8>& out,
                       int padding, const std::vector<u8>* label, const std::string& mgf1_md) {
+    ERR_clear_error();
     EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(key, nullptr);
     if (!ctx) return CKR_HOST_MEMORY;
     if (EVP_PKEY_encrypt_init(ctx) <= 0) { EVP_PKEY_CTX_free(ctx); return CKR_GENERAL_ERROR; }
@@ -307,6 +415,7 @@ CK_RV p11_rsa_encrypt(EVP_PKEY* key, const std::vector<u8>& in, std::vector<u8>&
 
 CK_RV p11_rsa_decrypt(EVP_PKEY* key, const std::vector<u8>& in, std::vector<u8>& out,
                       int padding, const std::vector<u8>* label, const std::string& mgf1_md) {
+    ERR_clear_error();
     EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(key, nullptr);
     if (!ctx) return CKR_HOST_MEMORY;
     if (EVP_PKEY_decrypt_init(ctx) <= 0) { EVP_PKEY_CTX_free(ctx); return CKR_GENERAL_ERROR; }
@@ -334,6 +443,7 @@ CK_RV p11_rsa_decrypt(EVP_PKEY* key, const std::vector<u8>& in, std::vector<u8>&
 
 CK_RV p11_rsa_sign(EVP_PKEY* key, const std::vector<u8>& digest, std::vector<u8>& sig,
                    int padding, const std::string& mdName, const std::string& mgf1_md) {
+    ERR_clear_error();
     EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(key, nullptr);
     if (!ctx) return CKR_HOST_MEMORY;
     if (EVP_PKEY_sign_init(ctx) <= 0) { EVP_PKEY_CTX_free(ctx); return CKR_GENERAL_ERROR; }
@@ -359,6 +469,7 @@ CK_RV p11_rsa_sign(EVP_PKEY* key, const std::vector<u8>& digest, std::vector<u8>
 
 CK_RV p11_rsa_verify(EVP_PKEY* key, const std::vector<u8>& digest, const std::vector<u8>& sig,
                      int padding, const std::string& mdName, const std::string& mgf1_md) {
+    ERR_clear_error();
     EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(key, nullptr);
     if (!ctx) return CKR_HOST_MEMORY;
     if (EVP_PKEY_verify_init(ctx) <= 0) { EVP_PKEY_CTX_free(ctx); return CKR_GENERAL_ERROR; }
@@ -379,6 +490,7 @@ CK_RV p11_rsa_verify(EVP_PKEY* key, const std::vector<u8>& digest, const std::ve
 }
 
 CK_RV p11_ecdsa_sign(EVP_PKEY* key, const std::vector<u8>& digest, std::vector<u8>& sig) {
+    ERR_clear_error();
     EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(key, nullptr);
     if (!ctx) return CKR_HOST_MEMORY;
     if (EVP_PKEY_sign_init(ctx) <= 0) { EVP_PKEY_CTX_free(ctx); return CKR_GENERAL_ERROR; }
@@ -392,6 +504,7 @@ CK_RV p11_ecdsa_sign(EVP_PKEY* key, const std::vector<u8>& digest, std::vector<u
 }
 
 CK_RV p11_ecdsa_verify(EVP_PKEY* key, const std::vector<u8>& digest, const std::vector<u8>& sig) {
+    ERR_clear_error();
     EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(key, nullptr);
     if (!ctx) return CKR_HOST_MEMORY;
     if (EVP_PKEY_verify_init(ctx) <= 0) { EVP_PKEY_CTX_free(ctx); return CKR_GENERAL_ERROR; }
@@ -401,6 +514,7 @@ CK_RV p11_ecdsa_verify(EVP_PKEY* key, const std::vector<u8>& digest, const std::
 }
 
 std::vector<u8> p11_ecdh_derive(EVP_PKEY* priv, EVP_PKEY* peer) {
+    ERR_clear_error();
     EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(priv, nullptr);
     std::vector<u8> secret;
     if (!ctx) return secret;
@@ -418,6 +532,7 @@ std::vector<u8> p11_ecdh_derive(EVP_PKEY* priv, EVP_PKEY* peer) {
 CK_RV p11_aes_gcm_encrypt(const std::vector<u8>& key, const std::vector<u8>& iv,
                            const std::vector<u8>& aad, const std::vector<u8>& pt,
                            std::vector<u8>& ct, std::vector<u8>& tag) {
+    ERR_clear_error();
     const EVP_CIPHER* cipher = (key.size() == 32) ? EVP_aes_256_gcm()
                                    : (key.size() == 24) ? EVP_aes_192_gcm()
                                                         : EVP_aes_128_gcm();
@@ -445,6 +560,8 @@ CK_RV p11_aes_gcm_encrypt(const std::vector<u8>& key, const std::vector<u8>& iv,
 CK_RV p11_aes_gcm_decrypt(const std::vector<u8>& key, const std::vector<u8>& iv,
                            const std::vector<u8>& aad, const std::vector<u8>& ct,
                            const std::vector<u8>& tag, std::vector<u8>& pt) {
+    ERR_clear_error();
+    if (tag.size() != 16) return CKR_ENCRYPTED_DATA_LEN_RANGE;
     const EVP_CIPHER* cipher = (key.size() == 32) ? EVP_aes_256_gcm()
                                    : (key.size() == 24) ? EVP_aes_192_gcm()
                                                         : EVP_aes_128_gcm();
@@ -547,6 +664,89 @@ EVP_PKEY* p11_build_key_from_attrs(HsmObject* obj, bool /*isPrivate*/, int /*key
     }
     (void)isPriv;
     return nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// Helper functions for SignatureDispatcher
+// ---------------------------------------------------------------------------
+std::string p11_key_fingerprint(EVP_PKEY* pkey) {
+    if (!pkey) return "";
+    
+    int base = EVP_PKEY_get_base_id(pkey);
+    std::vector<u8> der;
+    std::string fingerprint;
+    
+    if (base == EVP_PKEY_RSA) {
+        RSA* rsa = EVP_PKEY_get1_RSA(pkey);
+        if (rsa) {
+            int len = i2d_RSAPublicKey(rsa, nullptr);
+            if (len > 0) {
+                der.resize(len);
+                u8* p = der.data();
+                i2d_RSAPublicKey(rsa, &p);
+                // Compute SHA-256 of the DER
+                const EVP_MD* md = EVP_sha256();
+                std::vector<u8> hash(EVP_MD_size(md));
+                unsigned int hash_len = 0;
+                EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+                EVP_DigestInit_ex(ctx, md, nullptr);
+                EVP_DigestUpdate(ctx, der.data(), der.size());
+                EVP_DigestFinal_ex(ctx, hash.data(), &hash_len);
+                EVP_MD_CTX_free(ctx);
+                
+                // Convert to hex
+                std::ostringstream oss;
+                for (unsigned int i = 0; i < hash_len; ++i) {
+                    oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
+                }
+                fingerprint = oss.str();
+            }
+            RSA_free(rsa);
+        }
+    } else if (base == EVP_PKEY_EC) {
+        EC_KEY* ec = EVP_PKEY_get1_EC_KEY(pkey);
+        if (ec) {
+            int len = i2o_ECPublicKey(ec, nullptr);
+            if (len > 0) {
+                der.resize(len);
+                u8* p = der.data();
+                i2o_ECPublicKey(ec, &p);
+                // Compute SHA-256 of the DER
+                const EVP_MD* md = EVP_sha256();
+                std::vector<u8> hash(EVP_MD_size(md));
+                unsigned int hash_len = 0;
+                EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+                EVP_DigestInit_ex(ctx, md, nullptr);
+                EVP_DigestUpdate(ctx, der.data(), der.size());
+                EVP_DigestFinal_ex(ctx, hash.data(), &hash_len);
+                EVP_MD_CTX_free(ctx);
+                
+                // Convert to hex
+                std::ostringstream oss;
+                for (unsigned int i = 0; i < hash_len; ++i) {
+                    oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
+                }
+                fingerprint = oss.str();
+            }
+            EC_KEY_free(ec);
+        }
+    }
+    return fingerprint;
+}
+
+std::string p11_key_id(const HsmObject* obj) {
+    if (!obj) return "";
+    // Use CKA_ID if available, otherwise generate from object handle
+    const std::vector<u8>* id = obj->findAttribute(CKA_ID);
+    if (id && !id->empty()) {
+        std::ostringstream oss;
+        for (u8 b : *id) {
+            oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b);
+        }
+        return oss.str();
+    }
+    // Fallback: use a placeholder based on object type
+    return "key-" + std::to_string(reinterpret_cast<uintptr_t>(obj));
 }
 
 } // namespace vhsm::pkcs11

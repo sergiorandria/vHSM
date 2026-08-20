@@ -38,8 +38,13 @@ struct NotificationEvent {
         DB_WRITE_FAILED,        // Persistence failure
         LEDGER_COMMIT_FAILED,   // Blockchain commit failed (will retry)
         LEDGER_COMMITTED,       // Blockchain commit succeeded
+        LEDGER_VERIFY_FAILED,   // DB row vs. ledger cross-check failed
         VERIFY_COMPLETED,       // Signature verification succeeded
         VERIFY_FAILED,          // Signature verification failed
+        ENCRYPT_COMPLETED,      // Encryption operation completed
+        DECRYPT_COMPLETED,      // Decryption operation completed
+        WRAP_KEY_COMPLETED,     // Key wrapping operation completed
+        UNWRAP_KEY_COMPLETED,   // Key unwrapping operation completed
         KEY_ROTATED,            // Key rotation event
         KEY_DESTROYED,          // Key destruction event
         INTEGRITY_ALERT,        // Integrity check failed (suspicious)

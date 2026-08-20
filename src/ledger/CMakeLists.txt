@@ -16,5 +16,6 @@ target_include_directories(vhsm_ledger
 target_link_libraries(vhsm_ledger
     PUBLIC
         fabric-gateway-cpp
+        vhsm_threadpool
         nlohmann_json::nlohmann_json
 )

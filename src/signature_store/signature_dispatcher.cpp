@@ -13,7 +13,7 @@ SignatureDispatcher::SignatureDispatcher(
      v_core_(conn, token, notification_bus, audit_log, ledger_worker, v_clock_) {
 }
 
-void SignatureDispatcher::dispatch(
+bool SignatureDispatcher::dispatch(
     const vhsm::crypto::SignResult& sign_result,
     int64_t created_at,
     int slot_id,
@@ -31,7 +31,7 @@ void SignatureDispatcher::dispatch(
     if (sign_result.signature.empty() ||
         key_fingerprint.empty() ||
         mechanism.empty()) {
-        return;
+        return false;
     }
 
     vhsm::signature_store::db::internal::v_SignatureDispatchInput_M1 input;
@@ -47,7 +47,7 @@ void SignatureDispatcher::dispatch(
     input.user_label        = user_label;
     input.app_context       = app_context;
 
-    v_core_.v_dispatch(input);
+    return v_core_.v_dispatch(input);
 }
 
 }  // namespace db

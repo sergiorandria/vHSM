@@ -175,6 +175,9 @@ typedef CK_TOKEN_INFO *CK_TOKEN_INFO_PTR;
 #define CKF_SO_PIN_LOCKED                0x00400000UL
 #define CKF_SO_PIN_TO_BE_CHANGED         0x00800000UL
 #define CKF_ERROR_STATE                  0x01000000UL
+// WHY CKF_SO_PIN_INITIALIZED: vHSM-specific token flag indicating the SO PIN
+// has been initialized (similar to CKF_USER_PIN_INITIALIZED but for the SO).
+#define CKF_SO_PIN_INITIALIZED           0x02000000UL
 
 // ---------------------------------------------------------------------------
 // CK_MECHANISM / CK_MECHANISM_INFO
@@ -208,6 +211,7 @@ typedef CK_MECHANISM_INFO *CK_MECHANISM_INFO_PTR;
 // an alternative (e.g., CKM_SHA512_RSA_PKCS).
 
 // Mechanism capability flags
+#define CKF_HW               0x00000001UL
 #define CKF_ENCRYPT             0x00000100UL
 #define CKF_DECRYPT             0x00000200UL
 #define CKF_DIGEST              0x00000400UL
@@ -229,6 +233,11 @@ typedef CK_MECHANISM_INFO *CK_MECHANISM_INFO_PTR;
 #define CKF_EXTENSION           0x80000000UL
 
 #define CKF_DONT_BLOCK          0x00000001UL
+
+// WHY CKF_ARRAY_ATTRIBUTE: Flag bit on attribute types indicating the attribute
+// contains an array of values (not a single value). Used to skip array-type
+// attributes during certain operations where they're not meaningful.
+#define CKF_ARRAY_ATTRIBUTE     0x40000000UL
 
 // ---------------------------------------------------------------------------
 // Object classes (globally-scoped inline constexpr, not macros — see header
@@ -368,6 +377,8 @@ inline constexpr CK_ULONG CKA_VENDOR_DEFINED   = 0x80000000UL;
 #define CKR_GENERATE_KEY_PAIR_RANDOM     ((CK_RV) 0x00000059UL)
 #define CKR_KEY_SIZE_RANGE               ((CK_RV) 0x000000A1UL)
 #define CKR_KEY_TYPE_RANGE               ((CK_RV) 0x000000A3UL)
+#define CKR_KEY_UNEXTRACTABLE            ((CK_RV) 0x00000130UL)
+#define CKR_ACTION_PROHIBITED            ((CK_RV) 0x00000148UL)
 
 // ---------------------------------------------------------------------------
 // PKCS#11 v3.0 mechanism types (additional to the subset in core/types.h)
@@ -384,6 +395,7 @@ inline constexpr CK_ULONG CKA_VENDOR_DEFINED   = 0x80000000UL;
 #define CKM_RSA_X_509              0x00000003UL
 #define CKM_RSA_PKCS_PSS           0x0000000DUL
 #define CKM_RSA_PKCS_OAEP          0x00000009UL
+#define CKM_VENDOR_DEFINED         0x80000000UL
 #define CKM_SHA1_RSA_PKCS          0x00000042UL
 #define CKM_RSA_PKCS_OAEP_SHA256   0x00000088UL
 #define CKM_RSA_PKCS_OAEP_SHA384   0x00000089UL
@@ -409,7 +421,15 @@ inline constexpr CK_ULONG CKA_VENDOR_DEFINED   = 0x80000000UL;
 #define CKM_SHA_384                0x00000260UL
 #define CKM_SHA_512                0x00000270UL
 
-#define CKM_AES_KEY_WRAP           0x00002109UL
+#define CKM_AES_KEY_WRAP         0x00002109UL
+#define CKM_ECDH1_DERIVE         0x00000030UL
+
+typedef CK_ULONG* CK_ULONG_PTR;
+typedef CK_OBJECT_HANDLE* CK_OBJECT_HANDLE_PTR;
+typedef CK_SLOT_ID *CK_SLOT_ID_PTR;
+typedef CK_MECHANISM_TYPE *CK_MECHANISM_TYPE_PTR;
+typedef CK_BYTE *CK_BYTE_PTR;
+typedef CK_UTF8CHAR *CK_UTF8CHAR_PTR;
 
 // ---------------------------------------------------------------------------
 // CK_GCM_PARAMS (used by CKM_AES_GCM)
@@ -428,17 +448,6 @@ typedef struct CK_GCM_PARAMS {
 } CK_GCM_PARAMS;
 
 typedef CK_GCM_PARAMS *CK_GCM_PARAMS_PTR;
-
-// ---------------------------------------------------------------------------
-// C/C++ POD pointer aliases
-// ---------------------------------------------------------------------------
-// WHY pointer typedefs (CK_SLOT_ID_PTR, etc.): PKCS#11 convention for C compatibility.
-// CK_SLOT_ID_PTR = pointer to CK_SLOT_ID. These are used for output parameters (e.g.,
-// C_GetSlotList returns an array of slot IDs via a pointer). Wrapper convenience.
-typedef CK_SLOT_ID *CK_SLOT_ID_PTR;
-typedef CK_MECHANISM_TYPE *CK_MECHANISM_TYPE_PTR;
-typedef CK_BYTE *CK_BYTE_PTR;
-typedef CK_UTF8CHAR *CK_UTF8CHAR_PTR;
 
 // ---------------------------------------------------------------------------
 // CK_FUNCTION_LIST: function pointer table

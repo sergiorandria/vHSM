@@ -72,12 +72,12 @@ CK_BBOOL v_TokenCore_M1::v_is_so_login_required() const noexcept {
     return v_so_login_required_.load();
 }
 
-HsmObject* v_TokenCore_M1::v_get_object(CK_OBJECT_HANDLE handle) {
+std::shared_ptr<HsmObject> v_TokenCore_M1::v_get_object(CK_OBJECT_HANDLE handle) {
     std::shared_lock<std::shared_mutex> lock(v_mutex_);
     return v_object_store_.v_get_object(handle);
 }
 
-const HsmObject* v_TokenCore_M1::v_get_object(CK_OBJECT_HANDLE handle) const {
+std::shared_ptr<const HsmObject> v_TokenCore_M1::v_get_object(CK_OBJECT_HANDLE handle) const {
     std::shared_lock<std::shared_mutex> lock(v_mutex_);
     return v_object_store_.v_get_object(handle);
 }
@@ -170,6 +170,8 @@ CK_RV v_TokenCore_M1::v_initialize_user_pin(const CK_CHAR* pin, CK_ULONG pinLen)
     v_user_pin_.write(0, reinterpret_cast<const u8*>(pin), pinLen);
     v_user_pin_len_ = pinLen;
     v_user_pin_set_.store(CK_TRUE);
+    v_user_failed_attempts_.store(0);
+    v_user_pin_locked_.store(CK_FALSE);
     return CKR_OK;
 }
 
@@ -185,6 +187,8 @@ CK_RV v_TokenCore_M1::v_initialize_so_pin(const CK_CHAR* pin, CK_ULONG pinLen) {
     v_so_pin_.write(0, reinterpret_cast<const u8*>(pin), pinLen);
     v_so_pin_len_ = pinLen;
     v_so_pin_set_.store(CK_TRUE);
+    v_so_failed_attempts_.store(0);
+    v_so_pin_locked_.store(CK_FALSE);
     return CKR_OK;
 }
 
@@ -202,6 +206,8 @@ CK_RV v_TokenCore_M1::v_set_user_pin(const CK_CHAR* oldPin, CK_ULONG oldLen, con
     }
     v_user_pin_.write(0, reinterpret_cast<const u8*>(newPin), newLen);
     v_user_pin_len_ = newLen;
+    v_user_failed_attempts_.store(0);
+    v_user_pin_locked_.store(CK_FALSE);
     return CKR_OK;
 }
 
@@ -219,31 +225,55 @@ CK_RV v_TokenCore_M1::v_set_so_pin(const CK_CHAR* oldPin, CK_ULONG oldLen, const
     }
     v_so_pin_.write(0, reinterpret_cast<const u8*>(newPin), newLen);
     v_so_pin_len_ = newLen;
+    v_so_failed_attempts_.store(0);
+    v_so_pin_locked_.store(CK_FALSE);
+    return CKR_OK;
+}
+
+CK_RV v_TokenCore_M1::v_verify_pin_with_lockout(
+    const SecureBuffer& stored, std::size_t stored_len,
+    const CK_CHAR* candidate, CK_ULONG candidate_len,
+    CK_BBOOL pin_set, CK_RV not_initialized_rv,
+    unsigned max_attempts,
+    std::atomic<unsigned>& counter, std::atomic<CK_BBOOL>& locked,
+    std::mutex& mutex) {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (locked.load() == CK_TRUE) {
+        return CKR_PIN_LOCKED;
+    }
+    if (pin_set == CK_FALSE) {
+        return not_initialized_rv;
+    }
+    if (!v_secure_pin_equals(stored, stored_len, candidate, candidate_len)) {
+        unsigned n = counter.load() + 1;
+        counter.store(n);
+        if (n >= max_attempts) {
+            locked.store(CK_TRUE);
+            return CKR_PIN_LOCKED;
+        }
+        return CKR_PIN_INCORRECT;
+    }
+    counter.store(0);
+    locked.store(CK_FALSE);
     return CKR_OK;
 }
 
 CK_RV v_TokenCore_M1::v_verify_user_pin(const CK_CHAR* pin, CK_ULONG pinLen) {
     v_touch_pin_op();
-    std::lock_guard<std::mutex> lock(v_user_pin_mutex_);
-    if (v_user_pin_set_.load() == CK_FALSE) {
-        return CKR_USER_PIN_NOT_INITIALIZED;
-    }
-    if (!v_secure_pin_equals(v_user_pin_, v_user_pin_len_, pin, pinLen)) {
-        return CKR_PIN_INCORRECT;
-    }
-    return CKR_OK;
+    return v_verify_pin_with_lockout(
+        v_user_pin_, v_user_pin_len_, pin, pinLen,
+        v_user_pin_set_.load(), CKR_USER_PIN_NOT_INITIALIZED,
+        v_max_failed_attempts_.load(),
+        v_user_failed_attempts_, v_user_pin_locked_, v_user_pin_mutex_);
 }
 
 CK_RV v_TokenCore_M1::v_verify_so_pin(const CK_CHAR* pin, CK_ULONG pinLen) {
     v_touch_pin_op();
-    std::lock_guard<std::mutex> lock(v_so_pin_mutex_);
-    if (v_so_pin_set_.load() == CK_FALSE) {
-        return CKR_SO_PIN_NOT_INITIALIZED;
-    }
-    if (!v_secure_pin_equals(v_so_pin_, v_so_pin_len_, pin, pinLen)) {
-        return CKR_PIN_INCORRECT;
-    }
-    return CKR_OK;
+    return v_verify_pin_with_lockout(
+        v_so_pin_, v_so_pin_len_, pin, pinLen,
+        v_so_pin_set_.load(), CKR_SO_PIN_NOT_INITIALIZED,
+        v_max_failed_attempts_.load(),
+        v_so_failed_attempts_, v_so_pin_locked_, v_so_pin_mutex_);
 }
 
 CK_RV v_TokenCore_M1::v_change_user_pin(const CK_CHAR* oldPin, CK_ULONG oldLen, const CK_CHAR* newPin, CK_ULONG newLen) {
@@ -289,6 +319,35 @@ void v_TokenCore_M1::v_decrement_rw_session_count() {
     if (v_rw_session_count_.load() > 0) {
         v_rw_session_count_.fetch_sub(1);
     }
+}
+
+void v_TokenCore_M1::v_set_max_failed_attempts(unsigned max) {
+    v_max_failed_attempts_.store(max);
+    // Raising the threshold never unlocks; lowering it re-evaluates existing
+    // counters against the new bound so a misconfigured threshold alone cannot
+    // permanently brick the token.
+    if (v_user_failed_attempts_.load() >= max) v_user_pin_locked_.store(CK_TRUE);
+    if (v_so_failed_attempts_.load() >= max) v_so_pin_locked_.store(CK_TRUE);
+}
+
+unsigned v_TokenCore_M1::v_max_failed_attempts() const noexcept {
+    return v_max_failed_attempts_.load();
+}
+
+CK_BBOOL v_TokenCore_M1::v_is_user_pin_locked() const noexcept {
+    return v_user_pin_locked_.load();
+}
+
+CK_BBOOL v_TokenCore_M1::v_is_so_pin_locked() const noexcept {
+    return v_so_pin_locked_.load();
+}
+
+unsigned v_TokenCore_M1::v_user_failed_attempts() const noexcept {
+    return v_user_failed_attempts_.load();
+}
+
+unsigned v_TokenCore_M1::v_so_failed_attempts() const noexcept {
+    return v_so_failed_attempts_.load();
 }
 
 } // namespace vhsm::keystore::internal

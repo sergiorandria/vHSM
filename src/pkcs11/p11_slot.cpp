@@ -122,6 +122,7 @@ CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO_PTR pInfo) {
 }
 
 CK_RV C_GetMechanismList(CK_SLOT_ID slotID, CK_MECHANISM_TYPE_PTR pMechanismList, CK_ULONG_PTR pulCount) {
+    (void)slotID;
     if (!pulCount) return CKR_ARGUMENTS_BAD;
     const auto& m = supported_mechanisms();
     if (!pMechanismList) { *pulCount = static_cast<CK_ULONG>(m.size()); return CKR_OK; }
@@ -135,6 +136,7 @@ CK_RV C_GetMechanismList(CK_SLOT_ID slotID, CK_MECHANISM_TYPE_PTR pMechanismList
 }
 
 CK_RV C_GetMechanismInfo(CK_SLOT_ID slotID, CK_MECHANISM_TYPE type, CK_MECHANISM_INFO_PTR pInfo) {
+    (void)slotID;
     if (!pInfo) return CKR_ARGUMENTS_BAD;
     const auto& m = supported_mechanisms();
     if (std::find(m.begin(), m.end(), type) == m.end()) return CKR_MECHANISM_INVALID;

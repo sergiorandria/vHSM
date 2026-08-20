@@ -95,8 +95,7 @@ CREATE TABLE IF NOT EXISTS notification_subscribers (
         CHECK(min_severity IN ('INFO','WARN','CRITICAL')),
     event_filter  TEXT,
     enabled       INTEGER NOT NULL DEFAULT 1
-        CHECK(enabled IN (0,1)),
-    integrity_hmac TEXT   NOT NULL
+        CHECK(enabled IN (0,1))
 );
 )SQL";
 }
@@ -111,8 +110,7 @@ CREATE TABLE IF NOT EXISTS notification_log (
     outcome       TEXT    NOT NULL
         CHECK(outcome IN ('DELIVERED','RETRYING','FAILED','SKIPPED')),
     attempt_count INTEGER NOT NULL DEFAULT 1,
-    error_detail  TEXT,
-    integrity_hmac TEXT   NOT NULL
+    error_detail  TEXT
 );
 )SQL";
 }
@@ -290,6 +288,10 @@ int DbSchema::migrate() {
     // integrity_hmac and the key lifecycle (key_rekor_registry) table.
     migrate_legacy_to_v4();
 
+    // v4 → v5: drop the now-unused integrity_hmac column from the notification
+    // tables (there is no local HMAC chain in the aggregate design).
+    migrate_v4_to_v5();
+
     return from_version;
 }
 
@@ -429,6 +431,75 @@ void DbSchema::migrate_legacy_to_v4() {
 
         // --- Bump schema version ---
         tx.exec("UPDATE db_meta SET value='4' WHERE key='schema_version';");
+    });
+}
+
+// Migration v4 → v5
+//
+// v5 drops integrity_hmac from notification_subscribers and notification_log
+// (matching PLANv4 §8; a single Fabric ledger provides integrity now).  SQLite
+// cannot DROP COLUMN on older versions, so each table is rebuilt: create new →
+// copy the surviving columns → drop → rename.
+void DbSchema::migrate_v4_to_v5() {
+    // Hoist column checks out of the transaction: within with_transaction the
+    // connection mutex is held, so conn_.query() cannot be re-entered.
+    const bool subs_has_hmac  = column_exists("notification_subscribers", "integrity_hmac");
+    const bool log_has_hmac   = column_exists("notification_log", "integrity_hmac");
+
+    conn_.with_transaction([&](IDbTransaction& tx) {
+        // --- notification_subscribers ---
+        if (subs_has_hmac) {
+            tx.exec(R"SQL(
+                CREATE TABLE notification_subscribers_new (
+                    id            TEXT    NOT NULL PRIMARY KEY,
+                    name          TEXT    NOT NULL,
+                    channel       TEXT    NOT NULL
+                        CHECK(channel IN ('email','webhook','grpc_push')),
+                    address       TEXT    NOT NULL,
+                    min_severity  TEXT    NOT NULL
+                        CHECK(min_severity IN ('INFO','WARN','CRITICAL')),
+                    event_filter  TEXT,
+                    enabled       INTEGER NOT NULL DEFAULT 1
+                        CHECK(enabled IN (0,1))
+                );
+            )SQL");
+            tx.exec(R"SQL(
+                INSERT INTO notification_subscribers_new (
+                    id, name, channel, address, min_severity, event_filter, enabled
+                ) SELECT id, name, channel, address, min_severity, event_filter, enabled
+                  FROM notification_subscribers;
+            )SQL");
+            tx.exec("DROP TABLE notification_subscribers;");
+            tx.exec("ALTER TABLE notification_subscribers_new RENAME TO notification_subscribers;");
+            tx.exec(sql_create_indexes());
+        }
+
+        // --- notification_log ---
+        if (log_has_hmac) {
+            tx.exec(R"SQL(
+                CREATE TABLE notification_log_new (
+                    id            TEXT    NOT NULL PRIMARY KEY,
+                    sent_at       INTEGER NOT NULL,
+                    event_id      TEXT    NOT NULL,
+                    subscriber_id TEXT    REFERENCES notification_subscribers(id),
+                    outcome       TEXT    NOT NULL
+                        CHECK(outcome IN ('DELIVERED','RETRYING','FAILED','SKIPPED')),
+                    attempt_count INTEGER NOT NULL DEFAULT 1,
+                    error_detail  TEXT
+                );
+            )SQL");
+            tx.exec(R"SQL(
+                INSERT INTO notification_log_new (
+                    id, sent_at, event_id, subscriber_id, outcome, attempt_count, error_detail
+                ) SELECT id, sent_at, event_id, subscriber_id, outcome, attempt_count, error_detail
+                  FROM notification_log;
+            )SQL");
+            tx.exec("DROP TABLE notification_log;");
+            tx.exec("ALTER TABLE notification_log_new RENAME TO notification_log;");
+            tx.exec(sql_create_indexes());
+        }
+
+        tx.exec("UPDATE db_meta SET value='5' WHERE key='schema_version';");
     });
 }
 

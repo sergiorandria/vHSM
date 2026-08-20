@@ -40,7 +40,7 @@ CK_RV SessionManager::getSessionInfo(CK_SESSION_HANDLE hSession, CK_SESSION_INFO
     return v_core_.v_get_session_info(hSession, pInfo);
 }
 
-Session* SessionManager::getSession(CK_SESSION_HANDLE hSession) {
+std::shared_ptr<Session> SessionManager::getSession(CK_SESSION_HANDLE hSession) {
     return v_core_.v_get_session(hSession);
 }
 

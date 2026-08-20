@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstdint>
 #include <list>
+#include <memory>
 #include <mutex>
 
 namespace vhsm::session::internal {
@@ -36,7 +37,11 @@ public:
 
     CK_RV v_get_session_info(CK_SESSION_HANDLE hSession, CK_SESSION_INFO_PTR pInfo);
 
-    Session* v_get_session(CK_SESSION_HANDLE hSession);
+    // WHY shared_ptr in the registry: Sessions are heap-allocated and referenced by
+    // shared_ptr so v_get_session returns a shared_ptr that keeps the Session alive for
+    // the duration of a C_* call even if another thread closes the session concurrently
+    // (closing only erases the manager's reference; the caller's shared_ptr pins it).
+    std::shared_ptr<Session> v_get_session(CK_SESSION_HANDLE hSession);
 
     bool v_have_session(CK_SLOT_ID slotID);
 
@@ -48,7 +53,7 @@ public:
 private:
     void v_touch_op() noexcept;
 
-    std::list<Session> v_sessions_;
+    std::list<std::shared_ptr<Session>> v_sessions_;
     std::mutex v_mutex_;
     std::atomic<CK_SESSION_HANDLE> v_next_session_id_;
 

@@ -49,7 +49,7 @@ AESGCMResult AESGCM::encrypt(const std::vector<u8>& key, const std::vector<u8>& 
 {
     VHSM_CHECK_MSG(key.size() == 32, "AESGCM::encrypt: key must be 32 bytes (AES-256)");
 
-    int len = 0, final_len = 0;
+int len = 0, final_len = 0;
     AESGCMResult result;
 
     result.nonce.resize(12);
@@ -58,16 +58,16 @@ AESGCMResult AESGCM::encrypt(const std::vector<u8>& key, const std::vector<u8>& 
     result.tag.resize(16);
 
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
-    VHSM_CHECK_PTR_MSG(ctx != nullptr, "EVP_CIPHER_CTX_new failed");
+    VHSM_CHECK_MSG(ctx != nullptr, "EVP_CIPHER_CTX_new failed");
     CtxGuard guard(ctx);
 
     VHSM_CHECK(EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) == 1);
-    VHSM_CHECK(EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, result.nonce.size(), nullptr) == 1);
+    VHSM_CHECK(EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, static_cast<int>(result.nonce.size()), nullptr) == 1);
     VHSM_CHECK(EVP_EncryptInit_ex(ctx, nullptr, nullptr, key.data(), result.nonce.data()) == 1);
 
     result.ciphertext.resize(plaintext.size());
 
-    VHSM_CHECK(EVP_EncryptUpdate(ctx, result.ciphertext.data(), &len, plaintext.data(), plaintext.size()) == 1);
+    VHSM_CHECK(EVP_EncryptUpdate(ctx, result.ciphertext.data(), &len, plaintext.data(), static_cast<int>(plaintext.size())) == 1);
     VHSM_CHECK(EVP_EncryptFinal_ex(ctx, result.ciphertext.data() + len, &final_len) == 1);
 
     // Trim ciphertext to the actual number of bytes written across both calls.
@@ -84,6 +84,9 @@ AESGCMResult AESGCM::encrypt(const std::vector<u8>& key, const std::vector<u8>& 
 std::vector<u8> AESGCM::decrypt(const std::vector<u8>& key, const AESGCMResult& data)
 {
     VHSM_CHECK_MSG(key.size() == 32, "AESGCM::decrypt: key must be 32 bytes (AES-256)");
+    VHSM_CHECK_MSG(data.nonce.size() >= 1 && data.nonce.size() <= 16,
+                   "AESGCM::decrypt: nonce must be 1-16 bytes");
+    VHSM_CHECK_MSG(data.tag.size() == 16, "AESGCM::decrypt: tag must be 16 bytes");
 
     int len = 0, final_len = 0, ret;
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
@@ -91,12 +94,12 @@ std::vector<u8> AESGCM::decrypt(const std::vector<u8>& key, const AESGCMResult& 
     CtxGuard guard(ctx);
 
     VHSM_CHECK(EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) == 1);
-    VHSM_CHECK(EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, data.nonce.size(), nullptr) == 1);
+    VHSM_CHECK(EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, static_cast<int>(data.nonce.size()), nullptr) == 1);
     VHSM_CHECK(EVP_DecryptInit_ex(ctx, nullptr, nullptr, key.data(), data.nonce.data()) == 1);
 
     std::vector<u8> plaintext(data.ciphertext.size());
 
-    VHSM_CHECK(EVP_DecryptUpdate(ctx, plaintext.data(), &len, data.ciphertext.data(), data.ciphertext.size()) == 1);
+    VHSM_CHECK(EVP_DecryptUpdate(ctx, plaintext.data(), &len, data.ciphertext.data(), static_cast<int>(data.ciphertext.size())) == 1);
 
     // Tag must be set before EVP_DecryptFinal_ex, not after — otherwise
     // the final call verifies against uninitialised data and auth is bypassed.

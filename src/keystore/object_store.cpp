@@ -20,7 +20,7 @@ CK_OBJECT_HANDLE v_ObjectStore_M1::v_compose_handle(uint32_t index, uint32_t ver
     return (static_cast<CK_OBJECT_HANDLE>(index) << 32) | version;
 }
 
-HsmObject* v_ObjectStore_M1::v_get_object(CK_OBJECT_HANDLE handle) {
+std::shared_ptr<HsmObject> v_ObjectStore_M1::v_get_object(CK_OBJECT_HANDLE handle) {
     std::lock_guard<std::mutex> lock(v_mutex_);
 
     uint32_t index = v_extract_index(handle);
@@ -35,11 +35,26 @@ HsmObject* v_ObjectStore_M1::v_get_object(CK_OBJECT_HANDLE handle) {
         return nullptr;
     }
 
-    return v_table_[index].v_object.get();
+    // Return a shared_ptr copy: the caller keeps the object alive even if another
+    // thread destroys the handle (which only drops the store's own reference).
+    return v_table_[index].v_object;
 }
 
-const HsmObject* v_ObjectStore_M1::v_get_object(CK_OBJECT_HANDLE handle) const {
-    return const_cast<v_ObjectStore_M1*>(this)->v_get_object(handle);
+std::shared_ptr<const HsmObject> v_ObjectStore_M1::v_get_object(CK_OBJECT_HANDLE handle) const {
+    std::lock_guard<std::mutex> lock(v_mutex_);
+
+    uint32_t index = v_extract_index(handle);
+    uint32_t version = v_extract_version(handle);
+
+    if (index >= v_table_.size() || v_table_[index].v_is_free) {
+        return nullptr;
+    }
+
+    if (v_table_[index].v_version.load() != version) {
+        return nullptr;
+    }
+
+    return std::shared_ptr<const HsmObject>(v_table_[index].v_object);
 }
 
 bool v_ObjectStore_M1::v_destroy_object(CK_OBJECT_HANDLE handle) {
@@ -56,6 +71,8 @@ bool v_ObjectStore_M1::v_destroy_object(CK_OBJECT_HANDLE handle) {
         return false;
     }
 
+    // Drop the store's own strong reference. Any holder of a shared_ptr returned
+    // earlier keeps the object alive until it releases; the handle is now invalid.
     v_table_[index].v_object.reset();
     v_table_[index].v_is_free = true;
     return true;

@@ -4,8 +4,26 @@
 
 #include "../keystore/slot.h"
 #include "../keystore/token.h"
+#include "../signature_store/db_connection.h"
+#include "../signature_store/db_schema.h"
+#include "../signature_store/signature_dispatcher.h"
+#include "../signature_store/signature_repository.h"
+#include "../signature_store/ledger_retry_queue.h"
+#include "../signature_store/notification_repository.h"
+#include "../signature_store/notification_dispatcher.h"
+#include "../notification/bounded_notification_bus.h"
+#include "../notification/email_adapter.h"
+#include "../notification/webhook_adapter.h"
+#include "../notification/grpc_push_adapter.h"
+#include "../ledger/ledger_worker.h"
+#include "../ledger/ledger_client.h"
+#include "../ledger/ledger_entry.h"
 
 #include <cstring>
+#include <cstdlib>
+#include <filesystem>
+#include <memory>
+#include <string>
 
 namespace vhsm::pkcs11 {
 
@@ -19,6 +37,141 @@ static void ensure_default_token() {
     }
 }
 
+// Resolve the file-backed SQLite database path.
+//
+// Precedence:
+//   1. VHSM_DB_PATH  — explicit path (highest precedence; used by tests and admins)
+//   2. VHSM_HOME     — data directory; DB lives at $VHSM_HOME/vhsm.sqlite
+//   3. ~/.vhs        — platform default; DB lives at ~/.vhs/vhsm.sqlite
+//
+// The parent directory is created (recursively) if it does not exist so the
+// module can bootstrap a fresh data store on first run.
+static std::string resolve_db_path() {
+    const char* explicit_path = std::getenv("VHSM_DB_PATH");
+    if (explicit_path && *explicit_path) {
+        return explicit_path;
+    }
+
+    std::filesystem::path base;
+    const char* home = std::getenv("VHSM_HOME");
+    if (home && *home) {
+        base = std::filesystem::path(home);
+    } else {
+        const char* home_dir = std::getenv("HOME");
+        base = std::filesystem::path(home_dir ? home_dir : ".") / ".vhs";
+    }
+
+    std::filesystem::path db_path = base / "vhsm.sqlite";
+    std::error_code ec;
+    std::filesystem::create_directories(base, ec);
+    // If the directory could not be created (e.g., read-only mount), fall back
+    // to a per-process temp DB rather than failing C_Initialize outright.
+    if (ec) {
+        return ":memory:";
+    }
+    return db_path.string();
+}
+
+static void init_signature_dispatcher() {
+    // Open (or create) the file-backed SQLite database and bootstrap the schema.
+    // A second C_Initialize (after C_Finalize) reuses the same file, so
+    // signature records persist across module load/unload cycles.
+    std::string db_path = resolve_db_path();
+    g_dbConnection = vhsm::signature_store::db::make_sqlite_connection(db_path);
+    if (!g_dbConnection) return;
+
+    // Bootstrap the canonical schema (signature_records, verifications, etc.).
+    try {
+        vhsm::signature_store::db::DbSchema schema(*g_dbConnection);
+        schema.bootstrap();
+    } catch (...) {
+        // Schema creation failed, continue without dispatcher
+        return;
+    }
+
+    // Create the in-process notification bus and the background dispatcher.
+    // Producers (signature dispatcher, ledger worker, keystore) publish into
+    // the bounded bus; the dispatcher resolves the DB-backed subscriber list
+    // and delivers via the channel adapters.
+    g_boundedBus = std::make_unique<vhsm::notification::BoundedNotificationBus>(1024);
+    g_notificationBus = std::unique_ptr<vhsm::notification::NotificationBus>(g_boundedBus.get());
+    g_auditLog = std::make_unique<P11AuditLog>();
+
+    // Get the default token for the dispatcher
+    auto* token = p11_get_token(0);
+    if (!token) return;
+
+    // Wire the notification pipeline (optional if the DB is unavailable).
+    if (g_dbConnection) {
+        try {
+            g_notificationRepo = std::make_unique<vhsm::signature_store::db::NotificationRepository>(*g_dbConnection);
+
+            auto dispatcher = std::make_unique<vhsm::signature_store::db::NotificationDispatcher>(
+                *g_boundedBus, *g_notificationRepo);
+            static vhsm::notification::EmailAdapter      email_adapter;
+            static vhsm::notification::WebhookAdapter    webhook_adapter;
+            static vhsm::notification::GrpcPushAdapter   grpc_push_adapter;
+            dispatcher->add_adapter(email_adapter);
+            dispatcher->add_adapter(webhook_adapter);
+            dispatcher->add_adapter(grpc_push_adapter);
+            dispatcher->start();
+            g_notificationDispatcher = std::move(dispatcher);
+        } catch (...) {
+            // Notification pipeline unavailable; events still flow through the
+            // bounded bus and can be drained later.
+        }
+    }
+
+    // Ledger anchoring is optional: only construct the worker + client when a
+    // Fabric gateway endpoint is configured via environment variables.  When
+    // unset, the dispatcher runs in local-only mode (no blockchain anchoring).
+    const char* endpoint = std::getenv("VHSM_LEDGER_ENDPOINT");
+    const char* cert     = std::getenv("VHSM_LEDGER_CERT");
+    const char* key      = std::getenv("VHSM_LEDGER_KEY");
+    if (endpoint && cert && key && *endpoint && *cert && *key) {
+        try {
+            g_ledgerClient = std::make_unique<vhsm::ledger::LedgerClient>(
+                endpoint, cert, key,
+                std::getenv("VHSM_LEDGER_CA") ? std::getenv("VHSM_LEDGER_CA") : "",
+                std::getenv("VHSM_LEDGER_SERVER_NAME") ? std::getenv("VHSM_LEDGER_SERVER_NAME") : "",
+                std::getenv("VHSM_LEDGER_MSP_ID") ? std::getenv("VHSM_LEDGER_MSP_ID") : "vHSMMSP");
+
+            auto* db = g_dbConnection.get();
+            auto* bus = g_notificationBus.get();
+            g_ledgerWorker = std::make_unique<vhsm::ledger::LedgerWorker>(
+                *g_ledgerClient, *bus,
+                [db](const SignatureRecord& record,
+                     const vhsm::ledger::LedgerEntry& entry) {
+                    vhsm::signature_store::db::SignatureRepository repo(*db, *p11_get_token(0));
+                    repo.update_ledger_fields(record.record_id, entry);
+                });
+            g_ledgerWorker->start();
+
+            // Crash recovery: any record left with ledger_status='PENDING'
+            // (e.g. the worker was killed mid-submission) is re-submitted on
+            // startup so the ledger and the DB converge.
+            vhsm::signature_store::db::LedgerRetryQueue retry(*db);
+            for (auto& rec : retry.load_pending_records()) {
+                g_ledgerWorker->submit_record(rec);
+            }
+        } catch (...) {
+            // Ledger setup failed (e.g., unreachable gateway); fall back to
+            // local-only mode.  Signatures are still persisted and audited.
+            g_ledgerClient.reset();
+            g_ledgerWorker.reset();
+        }
+    }
+
+    // Create SignatureDispatcher (may run with or without ledger anchoring).
+    g_signatureDispatcher = std::make_unique<vhsm::signature_store::db::SignatureDispatcher>(
+        *g_dbConnection,
+        *token,
+        *g_notificationBus,
+        *g_auditLog,
+        g_ledgerWorker.get()
+    );
+}
+
 CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
     if (g_initialized) return CKR_CRYPTOKI_ALREADY_INITIALIZED;
     if (pInitArgs != nullptr) {
@@ -28,6 +181,7 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
         }
     }
     ensure_default_token();
+    init_signature_dispatcher();
     g_initialized = true;
     return CKR_OK;
 }
@@ -36,6 +190,22 @@ CK_RV C_Finalize(CK_VOID_PTR pReserved) {
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (pReserved != nullptr) return CKR_ARGUMENTS_BAD;
     g_initialized = false;
+    // Drain the notification pipeline first so queued events flush, then the
+    // ledger worker so in-flight anchoring completes during normal shutdown.
+    if (g_notificationDispatcher) {
+        g_notificationDispatcher->drain_and_stop();
+        g_notificationDispatcher.reset();
+    }
+    g_notificationRepo.reset();
+    if (g_ledgerWorker) {
+        g_ledgerWorker->drain_and_stop();
+        g_ledgerWorker.reset();
+    }
+    g_ledgerClient.reset();
+    g_signatureDispatcher.reset();
+    g_notificationBus.reset();
+    g_boundedBus.reset();
+    g_dbConnection.reset();
     vhsm::session::SlotManager::get_instance().reset();
     return CKR_OK;
 }

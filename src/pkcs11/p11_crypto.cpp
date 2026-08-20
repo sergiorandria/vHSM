@@ -2,6 +2,10 @@
 #include "pkcs11.h"
 #include "pkcs11_types.h"
 
+#include "../crypto/crypto_engine.h"
+#include "../signature_store/signature_dispatcher.h"
+#include "../core/system_hsm_clock.h"
+
 #include <openssl/rsa.h>
 #include <openssl/evp.h>
 
@@ -9,6 +13,10 @@
 #include <string>
 #include <cstring>
 #include <unordered_map>
+#include <optional>
+#include <sstream>
+#include <iomanip>
+#include <chrono>
 
 // PKCS#11 OAEP parameter struct / constants are not in our minimal types header;
 // define a local mirror of the standard layout so we can parse C_EncryptInit params.
@@ -25,8 +33,8 @@ struct CK_RSA_PKCS_OAEP_PARAMS {
     CK_MECHANISM_TYPE hashAlg;
     CK_MECHANISM_TYPE mgf;
     CK_MECHANISM_TYPE source;
-    CK_ULONG          ulSourceDataLen;
     CK_BYTE_PTR       pSourceData;
+    CK_ULONG          ulSourceDataLen;
 };
 
 extern "C" {
@@ -60,7 +68,7 @@ bool is_digest_mech(CK_MECHANISM_TYPE m) {
 
 std::vector<u8> load_secret_key(CK_SESSION_HANDLE h, CK_OBJECT_HANDLE k) {
     std::vector<u8> out;
-    HsmObject* o = p11_get_object(h, k);
+    auto o = p11_get_object(h, k);
     if (!o) return out;
     const std::vector<u8>* v = o->findAttribute(CKA_VALUE);
     if (v) out = *v;
@@ -68,9 +76,9 @@ std::vector<u8> load_secret_key(CK_SESSION_HANDLE h, CK_OBJECT_HANDLE k) {
 }
 
 EVP_PKEY* load_asym_key(CK_SESSION_HANDLE h, CK_OBJECT_HANDLE k) {
-    HsmObject* o = p11_get_object(h, k);
+    auto o = p11_get_object(h, k);
     if (!o) return nullptr;
-    return p11_evp_from_object(o);
+    return p11_evp_from_object(o.get());
 }
 
 CK_RV finish_output(std::vector<u8>& out, CK_BYTE_PTR pOut, CK_ULONG_PTR pOutLen) {
@@ -93,12 +101,14 @@ CK_RV op_begin(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m, CK_OBJECT_HANDLE k, bool
     if (!p11_is_initialized()) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (!m) return CKR_ARGUMENTS_BAD;
     if (needKey && k == CK_INVALID_HANDLE) return CKR_KEY_HANDLE_INVALID;
+    std::lock_guard<std::mutex> lock(g_stateMutex);
     g_activeMech[h] = m->mechanism;
     g_signKey[h]     = k;
     g_opBuf[h].clear();
     return CKR_OK;
 }
 CK_RV op_check(CK_SESSION_HANDLE h) {
+    std::lock_guard<std::mutex> lock(g_stateMutex);
     return (g_activeMech.find(h) == g_activeMech.end())
                ? CKR_OPERATION_NOT_INITIALIZED
                : CKR_OK;
@@ -107,14 +117,25 @@ void op_end(CK_SESSION_HANDLE h) { p11_reset_op(h); }
 
 // ----- Encrypt / Decrypt -----
 CK_RV do_encrypt(CK_SESSION_HANDLE h, const std::vector<u8>& in, std::vector<u8>& out) {
-    CK_MECHANISM_TYPE mech = g_activeMech[h];
-    CK_OBJECT_HANDLE  k    = g_signKey[h];
+    CK_MECHANISM_TYPE mech;
+    CK_OBJECT_HANDLE  k;
+    std::vector<u8> gcm_iv, gcm_aad, oaep_label;
+    std::string oaep_mgf1;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        mech = g_activeMech[h];
+        k    = g_signKey[h];
+        if (g_gcmIv.count(h)) gcm_iv = g_gcmIv[h];
+        if (g_gcmAad.count(h)) gcm_aad = g_gcmAad[h];
+        if (g_oaepMgf1.count(h)) oaep_mgf1 = g_oaepMgf1[h];
+        if (g_oaepLabel.count(h)) oaep_label = g_oaepLabel[h];
+    }
 
     if (mech == CKM_AES_GCM) {
         std::vector<u8> key = load_secret_key(h, k);
         if (key.empty()) return CKR_KEY_HANDLE_INVALID;
         std::vector<u8> ct, tag;
-        CK_RV rv = p11_aes_gcm_encrypt(key, g_gcmIv[h], g_gcmAad[h], in, ct, tag);
+        CK_RV rv = p11_aes_gcm_encrypt(key, gcm_iv, gcm_aad, in, ct, tag);
         if (rv == CKR_OK) { out = ct; out.insert(out.end(), tag.begin(), tag.end()); }
         return rv;
     }
@@ -124,17 +145,28 @@ CK_RV do_encrypt(CK_SESSION_HANDLE h, const std::vector<u8>& in, std::vector<u8>
     int padding = RSA_PKCS1_PADDING;
     std::string md;
     if (mech == CKM_RSA_X_509)       padding = RSA_NO_PADDING;
-    else if (mech == CKM_RSA_PKCS_OAEP) { padding = RSA_PKCS1_OAEP_PADDING; md = g_oaepMgf1[h]; }
-    const std::vector<u8>* labelPtr = (mech == CKM_RSA_PKCS_OAEP && g_oaepLabel.count(h) && !g_oaepLabel[h].empty())
-                                          ? &g_oaepLabel[h] : nullptr;
+    else if (mech == CKM_RSA_PKCS_OAEP) { padding = RSA_PKCS1_OAEP_PADDING; md = oaep_mgf1; }
+    const std::vector<u8>* labelPtr = (mech == CKM_RSA_PKCS_OAEP && !oaep_label.empty())
+                                          ? &oaep_label : nullptr;
     CK_RV rv = p11_rsa_encrypt(pk, in, out, padding, labelPtr, md);
     EVP_PKEY_free(pk);
     return rv;
 }
 
 CK_RV do_decrypt(CK_SESSION_HANDLE h, const std::vector<u8>& in, std::vector<u8>& out) {
-    CK_MECHANISM_TYPE mech = g_activeMech[h];
-    CK_OBJECT_HANDLE  k    = g_signKey[h];
+    CK_MECHANISM_TYPE mech;
+    CK_OBJECT_HANDLE  k;
+    std::vector<u8> gcm_iv, gcm_aad, oaep_label;
+    std::string oaep_mgf1;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        mech = g_activeMech[h];
+        k    = g_signKey[h];
+        if (g_gcmIv.count(h)) gcm_iv = g_gcmIv[h];
+        if (g_gcmAad.count(h)) gcm_aad = g_gcmAad[h];
+        if (g_oaepMgf1.count(h)) oaep_mgf1 = g_oaepMgf1[h];
+        if (g_oaepLabel.count(h)) oaep_label = g_oaepLabel[h];
+    }
 
     if (mech == CKM_AES_GCM) {
         std::vector<u8> key = load_secret_key(h, k);
@@ -143,7 +175,7 @@ CK_RV do_decrypt(CK_SESSION_HANDLE h, const std::vector<u8>& in, std::vector<u8>
         if (in.size() < tagLen) return CKR_ENCRYPTED_DATA_LEN_RANGE;
         std::vector<u8> ct(in.begin(), in.end() - tagLen);
         std::vector<u8> tag(in.end() - tagLen, in.end());
-        return p11_aes_gcm_decrypt(key, g_gcmIv[h], g_gcmAad[h], ct, tag, out);
+        return p11_aes_gcm_decrypt(key, gcm_iv, gcm_aad, ct, tag, out);
     }
 
     EVP_PKEY* pk = load_asym_key(h, k);
@@ -151,9 +183,9 @@ CK_RV do_decrypt(CK_SESSION_HANDLE h, const std::vector<u8>& in, std::vector<u8>
     int padding = RSA_PKCS1_PADDING;
     std::string md;
     if (mech == CKM_RSA_X_509)       padding = RSA_NO_PADDING;
-    else if (mech == CKM_RSA_PKCS_OAEP) { padding = RSA_PKCS1_OAEP_PADDING; md = g_oaepMgf1[h]; }
-    const std::vector<u8>* labelPtr = (mech == CKM_RSA_PKCS_OAEP && g_oaepLabel.count(h) && !g_oaepLabel[h].empty())
-                                          ? &g_oaepLabel[h] : nullptr;
+    else if (mech == CKM_RSA_PKCS_OAEP) { padding = RSA_PKCS1_OAEP_PADDING; md = oaep_mgf1; }
+    const std::vector<u8>* labelPtr = (mech == CKM_RSA_PKCS_OAEP && !oaep_label.empty())
+                                          ? &oaep_label : nullptr;
     CK_RV rv = p11_rsa_decrypt(pk, in, out, padding, labelPtr, md);
     EVP_PKEY_free(pk);
     return rv;
@@ -161,8 +193,13 @@ CK_RV do_decrypt(CK_SESSION_HANDLE h, const std::vector<u8>& in, std::vector<u8>
 
 // ----- Sign / Verify -----
 CK_RV do_sign(CK_SESSION_HANDLE h, const std::vector<u8>& data, std::vector<u8>& sig) {
-    CK_MECHANISM_TYPE mech = g_activeMech[h];
-    CK_OBJECT_HANDLE  k    = g_signKey[h];
+    CK_MECHANISM_TYPE mech;
+    CK_OBJECT_HANDLE  k;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        mech = g_activeMech[h];
+        k    = g_signKey[h];
+    }
     EVP_PKEY* pk = load_asym_key(h, k);
     if (!pk) return CKR_KEY_HANDLE_INVALID;
 
@@ -197,8 +234,13 @@ CK_RV do_sign(CK_SESSION_HANDLE h, const std::vector<u8>& data, std::vector<u8>&
 }
 
 CK_RV do_verify(CK_SESSION_HANDLE h, const std::vector<u8>& data, const std::vector<u8>& sig) {
-    CK_MECHANISM_TYPE mech = g_activeMech[h];
-    CK_OBJECT_HANDLE  k    = g_signKey[h];
+    CK_MECHANISM_TYPE mech;
+    CK_OBJECT_HANDLE  k;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        mech = g_activeMech[h];
+        k    = g_signKey[h];
+    }
     EVP_PKEY* pk = load_asym_key(h, k);
     if (!pk) return CKR_KEY_HANDLE_INVALID;
 
@@ -232,6 +274,186 @@ CK_RV do_verify(CK_SESSION_HANDLE h, const std::vector<u8>& data, const std::vec
     return rv;
 }
 
+// Mechanism constant -> human-readable string (shared by sign/verify/encrypt audit events).
+std::string mech_to_str(CK_MECHANISM_TYPE mech) {
+    switch (mech) {
+        case CKM_RSA_PKCS: return "CKM_RSA_PKCS";
+        case CKM_RSA_X_509: return "CKM_RSA_X_509";
+        case CKM_RSA_PKCS_PSS: return "CKM_RSA_PKCS_PSS";
+        case CKM_RSA_PKCS_OAEP: return "CKM_RSA_PKCS_OAEP";
+        case CKM_SHA256_RSA_PKCS: return "CKM_SHA256_RSA_PKCS";
+        case CKM_SHA384_RSA_PKCS: return "CKM_SHA384_RSA_PKCS";
+        case CKM_SHA512_RSA_PKCS: return "CKM_SHA512_RSA_PKCS";
+        case CKM_SHA256_RSA_PKCS_PSS: return "CKM_SHA256_RSA_PKCS_PSS";
+        case CKM_SHA384_RSA_PKCS_PSS: return "CKM_SHA384_RSA_PKCS_PSS";
+        case CKM_SHA512_RSA_PKCS_PSS: return "CKM_SHA512_RSA_PKCS_PSS";
+        case CKM_ECDSA: return "CKM_ECDSA";
+        case CKM_ECDSA_SHA256: return "CKM_ECDSA_SHA256";
+        case CKM_ECDSA_SHA384: return "CKM_ECDSA_SHA384";
+        case CKM_ECDSA_SHA512: return "CKM_ECDSA_SHA512";
+        case CKM_AES_GCM: return "CKM_AES_GCM";
+        case CKM_AES_ECB: return "CKM_AES_ECB";
+        default: return "CKM_VENDOR_DEFINED";
+    }
+}
+
+std::string digest_to_str(CK_MECHANISM_TYPE mech) {
+    switch (mech) {
+        case CKM_SHA384: case CKM_SHA384_RSA_PKCS: case CKM_ECDSA_SHA384:
+        case CKM_SHA384_HMAC: case CKM_SHA384_RSA_PKCS_PSS: return "SHA-384";
+        case CKM_SHA512: case CKM_SHA512_RSA_PKCS: case CKM_ECDSA_SHA512:
+        case CKM_SHA512_HMAC: case CKM_SHA512_RSA_PKCS_PSS: return "SHA-512";
+        default: return "SHA-256";
+    }
+}
+
+// Build a structured NotificationEvent with the standard session/key context.
+void publish_verify_event(CK_SESSION_HANDLE h, CK_RV rv, const std::vector<u8>& data) {
+    auto* notification_bus = p11_notification_bus();
+    auto* audit_log = p11_audit_log();
+    if (!notification_bus || !audit_log) return;
+
+    // Get session/token info
+    auto* token = p11_get_token_for_session(h);
+    auto session = p11_get_session(h);
+    int slot_id = session ? static_cast<int>(session->getSlotID()) : 0;
+    std::string token_label = token ? token->get_label() : "unknown";
+
+    // Get key info
+    CK_OBJECT_HANDLE k;
+    CK_MECHANISM_TYPE active_mech;
+    std::optional<std::string> user_label;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        k = g_signKey[h];
+        active_mech = g_activeMech[h];
+        auto login_it = g_loginState.find(h);
+        if (login_it != g_loginState.end() && login_it->second != CKU_INVALID) {
+            user_label = "user-" + std::to_string(static_cast<int>(login_it->second));
+        }
+    }
+    auto obj = p11_get_object(h, k);
+    std::string key_id = obj ? p11_key_id(obj.get()) : "unknown";
+
+    EVP_PKEY* pk = load_asym_key(h, k);
+    std::string key_fp = pk ? p11_key_fingerprint(pk) : "unknown";
+    if (pk) EVP_PKEY_free(pk);
+
+    std::string mechanism_str = mech_to_str(active_mech);
+    std::string digest_alg = digest_to_str(active_mech);
+
+    // Compute payload digest
+    auto payload_hash = p11_hash(vhsm::crypto::HashAlgorithm::SHA256, data);
+    std::ostringstream oss;
+    for (u8 b : payload_hash) {
+        oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b);
+    }
+    std::string payload_digest = oss.str();
+
+    int64_t created_at = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    ).count();
+
+    vhsm::notification::NotificationEvent event;
+    event.type = (rv == CKR_OK) ? vhsm::notification::NotificationEvent::EventType::VERIFY_COMPLETED
+                                : vhsm::notification::NotificationEvent::EventType::VERIFY_FAILED;
+    event.severity = (rv == CKR_OK) ? vhsm::notification::NotificationEvent::Severity::INFO
+                                    : vhsm::notification::NotificationEvent::Severity::WARNING;
+    event.timestamp = created_at;
+    event.source = "slot:" + std::to_string(slot_id) + "/token:" + token_label;
+    event.actor = user_label.value_or("UNKNOWN");
+    event.summary = "Signature verification " + std::string(rv == CKR_OK ? "succeeded" : "failed")
+                  + " for key " + key_id + " using " + mechanism_str;
+
+    std::stringstream detail_ss;
+    detail_ss << R"({"mechanism":")" << mechanism_str << R"(",)"
+              << R"("digest_algorithm":")" << digest_alg << R"(",)"
+              << R"("key_fingerprint":")" << key_fp << R"(",)"
+              << R"("payload_digest":")" << payload_digest << R"(",)"
+              << R"("result":")" << (rv == CKR_OK ? "valid" : "invalid") << R"("})";
+    event.detail_json = detail_ss.str();
+    event.hsm_instance = "";  // TODO: fetch from db_meta
+
+    try {
+        notification_bus->publish(event);
+        audit_log->append("verify-" + std::to_string(created_at), rv == CKR_OK ? "C_VERIFY_OK" : "C_VERIFY_FAILED");
+    } catch (const std::exception&) {
+        // Notification/audit must never raise across the C API boundary.
+    }
+}
+
+// Publish an audit event for encrypt/decrypt/wrap/unwrap operations.
+void publish_crypto_op_event(CK_SESSION_HANDLE h, const std::string& op_name,
+                             vhsm::notification::NotificationEvent::EventType type,
+                             const std::vector<u8>& data) {
+    auto* notification_bus = p11_notification_bus();
+    auto* audit_log = p11_audit_log();
+    if (!notification_bus || !audit_log) return;
+
+    // Get session/token info
+    auto* token = p11_get_token_for_session(h);
+    auto session = p11_get_session(h);
+    int slot_id = session ? static_cast<int>(session->getSlotID()) : 0;
+    std::string token_label = token ? token->get_label() : "unknown";
+
+    // Get key info
+    CK_OBJECT_HANDLE k;
+    CK_MECHANISM_TYPE active_mech;
+    std::optional<std::string> user_label;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        k = g_signKey[h];
+        active_mech = g_activeMech[h];
+        auto login_it = g_loginState.find(h);
+        if (login_it != g_loginState.end() && login_it->second != CKU_INVALID) {
+            user_label = "user-" + std::to_string(static_cast<int>(login_it->second));
+        }
+    }
+    auto obj = p11_get_object(h, k);
+    std::string key_id = obj ? p11_key_id(obj.get()) : "unknown";
+
+    EVP_PKEY* pk = load_asym_key(h, k);
+    std::string key_fp = pk ? p11_key_fingerprint(pk) : "unknown";
+    if (pk) EVP_PKEY_free(pk);
+
+    std::string mechanism_str = mech_to_str(active_mech);
+
+    // Compute payload digest
+    auto payload_hash = p11_hash(vhsm::crypto::HashAlgorithm::SHA256, data);
+    std::ostringstream oss;
+    for (u8 b : payload_hash) {
+        oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b);
+    }
+    std::string payload_digest = oss.str();
+
+    int64_t created_at = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    ).count();
+
+    vhsm::notification::NotificationEvent event;
+    event.type = type;
+    event.severity = vhsm::notification::NotificationEvent::Severity::INFO;
+    event.timestamp = created_at;
+    event.source = "slot:" + std::to_string(slot_id) + "/token:" + token_label;
+    event.actor = user_label.value_or("UNKNOWN");
+    event.summary = op_name + " completed for key " + key_id + " using " + mechanism_str;
+
+    std::stringstream detail_ss;
+    detail_ss << R"({"operation":")" << op_name << R"(",)"
+              << R"("mechanism":")" << mechanism_str << R"(",)"
+              << R"("key_fingerprint":")" << key_fp << R"(",)"
+              << R"("payload_digest":")" << payload_digest << R"("})";
+    event.detail_json = detail_ss.str();
+    event.hsm_instance = "";  // TODO: fetch from db_meta
+
+    try {
+        notification_bus->publish(event);
+        audit_log->append(op_name + "-" + std::to_string(created_at), op_name);
+    } catch (const std::exception&) {
+        // Notification/audit must never raise across the C API boundary.
+    }
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -251,6 +473,7 @@ CK_RV C_EncryptInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m, CK_OBJECT_HANDLE hK
             return CKR_MECHANISM_PARAM_INVALID;
         auto* g = static_cast<CK_GCM_PARAMS_PTR>(m->pParameter);
         if (!g->pIv || g->ulIvLen == 0) return CKR_MECHANISM_PARAM_INVALID;
+        std::lock_guard<std::mutex> lock(g_stateMutex);
         g_gcmIv[h].assign(g->pIv, g->pIv + g->ulIvLen);
         if (g->pAAD && g->ulAADLen)
             g_gcmAad[h].assign(g->pAAD, g->pAAD + g->ulAADLen);
@@ -259,10 +482,12 @@ CK_RV C_EncryptInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m, CK_OBJECT_HANDLE hK
     } else if (m->mechanism == CKM_RSA_PKCS_OAEP) {
         if (m->pParameter && m->ulParameterLen >= sizeof(CK_RSA_PKCS_OAEP_PARAMS)) {
             auto* o = static_cast<CK_RSA_PKCS_OAEP_PARAMS*>(m->pParameter);
+            std::lock_guard<std::mutex> lock(g_stateMutex);
             g_oaepMgf1[h] = oaep_md_name(o->hashAlg);
             if (o->source == CKZ_DATA_SPECIFIED && o->pSourceData && o->ulSourceDataLen)
                 g_oaepLabel[h].assign(o->pSourceData, o->pSourceData + o->ulSourceDataLen);
         } else {
+            std::lock_guard<std::mutex> lock(g_stateMutex);
             g_oaepMgf1[h] = "SHA-256";
         }
     }
@@ -272,10 +497,17 @@ CK_RV C_EncryptInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m, CK_OBJECT_HANDLE hK
 CK_RV C_Encrypt(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
                 CK_BYTE_PTR pEncryptedData, CK_ULONG_PTR pulEncryptedDataLen) {
     if (op_check(h) != CKR_OK) return CKR_OPERATION_NOT_INITIALIZED;
+    if (pData == nullptr && ulDataLen > 0) return CKR_ARGUMENTS_BAD;
     std::vector<u8> in(pData, pData + ulDataLen);
     std::vector<u8> out;
     CK_RV rv = do_encrypt(h, in, out);
-    if (rv == CKR_OK) rv = finish_output(out, pEncryptedData, pulEncryptedDataLen);
+    if (rv == CKR_OK) {
+        rv = finish_output(out, pEncryptedData, pulEncryptedDataLen);
+        if (rv == CKR_OK) {
+            publish_crypto_op_event(h, "C_Encrypt",
+                vhsm::notification::NotificationEvent::EventType::ENCRYPT_COMPLETED, in);
+        }
+    }
     op_end(h);
     return rv;
 }
@@ -283,7 +515,11 @@ CK_RV C_Encrypt(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
 CK_RV C_EncryptUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart, CK_ULONG ulPartLen,
                       CK_BYTE_PTR pEncryptedPart, CK_ULONG_PTR pulEncryptedPartLen) {
     if (op_check(h) != CKR_OK) return CKR_OPERATION_NOT_INITIALIZED;
-    g_opBuf[h].insert(g_opBuf[h].end(), pPart, pPart + ulPartLen);
+    if (pPart == nullptr && ulPartLen > 0) return CKR_ARGUMENTS_BAD;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        g_opBuf[h].insert(g_opBuf[h].end(), pPart, pPart + ulPartLen);
+    }
     if (pEncryptedPart == nullptr) { if (pulEncryptedPartLen) *pulEncryptedPartLen = 0; return CKR_OK; }
     if (pulEncryptedPartLen) *pulEncryptedPartLen = 0;
     return CKR_OK;
@@ -291,9 +527,20 @@ CK_RV C_EncryptUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart, CK_ULONG ulPartLen
 
 CK_RV C_EncryptFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pLastEncryptedPart, CK_ULONG_PTR pulLastEncryptedPartLen) {
     if (op_check(h) != CKR_OK) return CKR_OPERATION_NOT_INITIALIZED;
+    std::vector<u8> in;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        in = g_opBuf[h];
+    }
     std::vector<u8> out;
-    CK_RV rv = do_encrypt(h, g_opBuf[h], out);
-    if (rv == CKR_OK) rv = finish_output(out, pLastEncryptedPart, pulLastEncryptedPartLen);
+    CK_RV rv = do_encrypt(h, in, out);
+    if (rv == CKR_OK) {
+        rv = finish_output(out, pLastEncryptedPart, pulLastEncryptedPartLen);
+        if (rv == CKR_OK) {
+            publish_crypto_op_event(h, "C_EncryptFinal",
+                vhsm::notification::NotificationEvent::EventType::ENCRYPT_COMPLETED, in);
+        }
+    }
     op_end(h);
     return rv;
 }
@@ -315,6 +562,7 @@ CK_RV C_DecryptInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m, CK_OBJECT_HANDLE hK
             return CKR_MECHANISM_PARAM_INVALID;
         auto* g = static_cast<CK_GCM_PARAMS_PTR>(m->pParameter);
         if (!g->pIv || g->ulIvLen == 0) return CKR_MECHANISM_PARAM_INVALID;
+        std::lock_guard<std::mutex> lock(g_stateMutex);
         g_gcmIv[h].assign(g->pIv, g->pIv + g->ulIvLen);
         if (g->pAAD && g->ulAADLen)
             g_gcmAad[h].assign(g->pAAD, g->pAAD + g->ulAADLen);
@@ -323,10 +571,12 @@ CK_RV C_DecryptInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m, CK_OBJECT_HANDLE hK
     } else if (m->mechanism == CKM_RSA_PKCS_OAEP) {
         if (m->pParameter && m->ulParameterLen >= sizeof(CK_RSA_PKCS_OAEP_PARAMS)) {
             auto* o = static_cast<CK_RSA_PKCS_OAEP_PARAMS*>(m->pParameter);
+            std::lock_guard<std::mutex> lock(g_stateMutex);
             g_oaepMgf1[h] = oaep_md_name(o->hashAlg);
             if (o->source == CKZ_DATA_SPECIFIED && o->pSourceData && o->ulSourceDataLen)
                 g_oaepLabel[h].assign(o->pSourceData, o->pSourceData + o->ulSourceDataLen);
         } else {
+            std::lock_guard<std::mutex> lock(g_stateMutex);
             g_oaepMgf1[h] = "SHA-256";
         }
     }
@@ -336,10 +586,17 @@ CK_RV C_DecryptInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m, CK_OBJECT_HANDLE hK
 CK_RV C_Decrypt(CK_SESSION_HANDLE h, CK_BYTE_PTR pEncryptedData, CK_ULONG ulEncryptedDataLen,
                 CK_BYTE_PTR pData, CK_ULONG_PTR pulDataLen) {
     if (op_check(h) != CKR_OK) return CKR_OPERATION_NOT_INITIALIZED;
+    if (pEncryptedData == nullptr && ulEncryptedDataLen > 0) return CKR_ARGUMENTS_BAD;
     std::vector<u8> in(pEncryptedData, pEncryptedData + ulEncryptedDataLen);
     std::vector<u8> out;
     CK_RV rv = do_decrypt(h, in, out);
-    if (rv == CKR_OK) rv = finish_output(out, pData, pulDataLen);
+    if (rv == CKR_OK) {
+        rv = finish_output(out, pData, pulDataLen);
+        if (rv == CKR_OK) {
+            publish_crypto_op_event(h, "C_Decrypt",
+                vhsm::notification::NotificationEvent::EventType::DECRYPT_COMPLETED, in);
+        }
+    }
     op_end(h);
     return rv;
 }
@@ -347,7 +604,11 @@ CK_RV C_Decrypt(CK_SESSION_HANDLE h, CK_BYTE_PTR pEncryptedData, CK_ULONG ulEncr
 CK_RV C_DecryptUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pEncryptedPart, CK_ULONG ulEncryptedPartLen,
                       CK_BYTE_PTR pPart, CK_ULONG_PTR pulPartLen) {
     if (op_check(h) != CKR_OK) return CKR_OPERATION_NOT_INITIALIZED;
-    g_opBuf[h].insert(g_opBuf[h].end(), pEncryptedPart, pEncryptedPart + ulEncryptedPartLen);
+    if (pEncryptedPart == nullptr && ulEncryptedPartLen > 0) return CKR_ARGUMENTS_BAD;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        g_opBuf[h].insert(g_opBuf[h].end(), pEncryptedPart, pEncryptedPart + ulEncryptedPartLen);
+    }
     if (pPart == nullptr) { if (pulPartLen) *pulPartLen = 0; return CKR_OK; }
     if (pulPartLen) *pulPartLen = 0;
     return CKR_OK;
@@ -355,9 +616,20 @@ CK_RV C_DecryptUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pEncryptedPart, CK_ULONG 
 
 CK_RV C_DecryptFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pLastPart, CK_ULONG_PTR pulLastPartLen) {
     if (op_check(h) != CKR_OK) return CKR_OPERATION_NOT_INITIALIZED;
+    std::vector<u8> in;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        in = g_opBuf[h];
+    }
     std::vector<u8> out;
-    CK_RV rv = do_decrypt(h, g_opBuf[h], out);
-    if (rv == CKR_OK) rv = finish_output(out, pLastPart, pulLastPartLen);
+    CK_RV rv = do_decrypt(h, in, out);
+    if (rv == CKR_OK) {
+        rv = finish_output(out, pLastPart, pulLastPartLen);
+        if (rv == CKR_OK) {
+            publish_crypto_op_event(h, "C_DecryptFinal",
+                vhsm::notification::NotificationEvent::EventType::DECRYPT_COMPLETED, in);
+        }
+    }
     op_end(h);
     return rv;
 }
@@ -374,7 +646,13 @@ CK_RV C_DigestInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m) {
 CK_RV C_Digest(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
                CK_BYTE_PTR pDigest, CK_ULONG_PTR pulDigestLen) {
     if (op_check(h) != CKR_OK) return CKR_OPERATION_NOT_INITIALIZED;
-    std::vector<u8> out = p11_hash(mech_to_hash(g_activeMech[h]),
+    if (pData == nullptr && ulDataLen > 0) return CKR_ARGUMENTS_BAD;
+    CK_MECHANISM_TYPE mech;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        mech = g_activeMech[h];
+    }
+    std::vector<u8> out = p11_hash(mech_to_hash(mech),
                                    std::vector<u8>(pData, pData + ulDataLen));
     CK_RV rv = finish_output(out, pDigest, pulDigestLen);
     op_end(h);
@@ -383,6 +661,8 @@ CK_RV C_Digest(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
 
 CK_RV C_DigestUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart, CK_ULONG ulPartLen) {
     if (op_check(h) != CKR_OK) return CKR_OPERATION_NOT_INITIALIZED;
+    if (pPart == nullptr && ulPartLen > 0) return CKR_ARGUMENTS_BAD;
+    std::lock_guard<std::mutex> lock(g_stateMutex);
     g_opBuf[h].insert(g_opBuf[h].end(), pPart, pPart + ulPartLen);
     return CKR_OK;
 }
@@ -391,13 +671,21 @@ CK_RV C_DigestKey(CK_SESSION_HANDLE h, CK_OBJECT_HANDLE hKey) {
     if (op_check(h) != CKR_OK) return CKR_OPERATION_NOT_INITIALIZED;
     std::vector<u8> key = load_secret_key(h, hKey);
     if (key.empty()) return CKR_KEY_INDIGESTIBLE;
+    std::lock_guard<std::mutex> lock(g_stateMutex);
     g_opBuf[h].insert(g_opBuf[h].end(), key.begin(), key.end());
     return CKR_OK;
 }
 
 CK_RV C_DigestFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pDigest, CK_ULONG_PTR pulDigestLen) {
     if (op_check(h) != CKR_OK) return CKR_OPERATION_NOT_INITIALIZED;
-    std::vector<u8> out = p11_hash(mech_to_hash(g_activeMech[h]), g_opBuf[h]);
+    std::vector<u8> buf;
+    CK_MECHANISM_TYPE mech;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        buf = g_opBuf[h];
+        mech = g_activeMech[h];
+    }
+    std::vector<u8> out = p11_hash(mech_to_hash(mech), buf);
     CK_RV rv = finish_output(out, pDigest, pulDigestLen);
     op_end(h);
     return rv;
@@ -416,24 +704,247 @@ CK_RV C_SignInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m, CK_OBJECT_HANDLE hKey)
 CK_RV C_Sign(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
              CK_BYTE_PTR pSignature, CK_ULONG_PTR pulSignatureLen) {
     if (op_check(h) != CKR_OK) return CKR_OPERATION_NOT_INITIALIZED;
+    if (pData == nullptr && ulDataLen > 0) return CKR_ARGUMENTS_BAD;
+    std::vector<u8> data(pData, pData + ulDataLen);
     std::vector<u8> sig;
-    CK_RV rv = do_sign(h, std::vector<u8>(pData, pData + ulDataLen), sig);
-    if (rv == CKR_OK) rv = finish_output(sig, pSignature, pulSignatureLen);
+    CK_RV rv = do_sign(h, data, sig);
+    if (rv == CKR_OK) {
+        rv = finish_output(sig, pSignature, pulSignatureLen);
+        
+        // Dispatch to SignatureDispatcher for persistence/audit/notification
+        if (rv == CKR_OK) {
+            auto* dispatcher = p11_signature_dispatcher();
+            if (dispatcher) {
+                // Reload key to get EVP_PKEY for fingerprint
+                CK_OBJECT_HANDLE k;
+                CK_MECHANISM_TYPE active_mech;
+                {
+                    std::lock_guard<std::mutex> lock(g_stateMutex);
+                    k = g_signKey[h];
+                    active_mech = g_activeMech[h];
+                }
+                EVP_PKEY* pk = load_asym_key(h, k);
+                if (pk) {
+                    vhsm::crypto::SignResult sign_result;
+                    sign_result.signature = sig;
+                    sign_result.mechanism_str = [&]() -> std::string {
+                        switch (active_mech) {
+                            case CKM_RSA_PKCS: return "CKM_RSA_PKCS";
+                            case CKM_RSA_X_509: return "CKM_RSA_X_509";
+                            case CKM_RSA_PKCS_PSS: return "CKM_RSA_PKCS_PSS";
+                            case CKM_SHA256_RSA_PKCS: return "CKM_SHA256_RSA_PKCS";
+                            case CKM_SHA384_RSA_PKCS: return "CKM_SHA384_RSA_PKCS";
+                            case CKM_SHA512_RSA_PKCS: return "CKM_SHA512_RSA_PKCS";
+                            case CKM_SHA256_RSA_PKCS_PSS: return "CKM_SHA256_RSA_PKCS_PSS";
+                            case CKM_SHA384_RSA_PKCS_PSS: return "CKM_SHA384_RSA_PKCS_PSS";
+                            case CKM_SHA512_RSA_PKCS_PSS: return "CKM_SHA512_RSA_PKCS_PSS";
+                            case CKM_ECDSA: return "CKM_ECDSA";
+                            case CKM_ECDSA_SHA256: return "CKM_ECDSA_SHA256";
+                            case CKM_ECDSA_SHA384: return "CKM_ECDSA_SHA384";
+                            case CKM_ECDSA_SHA512: return "CKM_ECDSA_SHA512";
+                            default: return "CKM_VENDOR_DEFINED";
+                        }
+                    }();
+                    sign_result.digest_alg = [&]() -> std::string {
+                        vhsm::crypto::HashAlgorithm ha = mech_to_hash(active_mech);
+                        switch (ha) {
+                            case vhsm::crypto::HashAlgorithm::SHA256: return "SHA-256";
+                            case vhsm::crypto::HashAlgorithm::SHA384: return "SHA-384";
+                            case vhsm::crypto::HashAlgorithm::SHA512: return "SHA-512";
+                        }
+                        return "SHA-256";
+                    }();
+                    
+                    // Compute payload digest (SHA-256 of data)
+                    auto payload_hash = p11_hash(vhsm::crypto::HashAlgorithm::SHA256, data);
+                    std::ostringstream oss;
+                    for (u8 b : payload_hash) {
+                        oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b);
+                    }
+                    sign_result.payload_digest = oss.str();
+                    sign_result.payload_size = data.size();
+                    
+                    // Get key metadata
+                    auto obj = p11_get_object(h, k);
+                    std::string key_id = obj ? p11_key_id(obj.get()) : "unknown";
+                    std::string key_fp = pk ? p11_key_fingerprint(pk) : "unknown";
+                    
+                    // Get session/token info
+                    auto* token = p11_get_token_for_session(h);
+                    auto session = p11_get_session(h);
+                    int slot_id = session ? static_cast<int>(session->getSlotID()) : 0;
+                    std::string token_label = token ? token->get_label() : "unknown";
+                    
+                    // Get user label if logged in
+                    std::optional<std::string> user_label;
+                    {
+                        std::lock_guard<std::mutex> lock(g_stateMutex);
+                        auto login_it = g_loginState.find(h);
+                        if (login_it != g_loginState.end() && login_it->second != CKU_INVALID) {
+                            user_label = "user-" + std::to_string(static_cast<int>(login_it->second));
+                        }
+                    }
+                    
+                    // Dispatch - enforce require_db_write
+                    // Use std::chrono for timestamp (SystemHsmClock::now() is instance method)
+                    int64_t created_at = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch()
+                    ).count();
+                    
+                    bool dispatch_ok = false;
+                    try {
+                        dispatch_ok = dispatcher->dispatch(
+                            sign_result,
+                            created_at,
+                            slot_id,
+                            token_label,
+                            key_id,
+                            key_fp,
+                            sign_result.mechanism_str,
+                            sign_result.digest_alg,
+                            std::to_string(h),
+                            user_label,
+                            std::nullopt
+                        );
+                    } catch (const std::exception&) {
+                        dispatch_ok = false;  // DB write failure must not escape the C ABI.
+                    }
+                    
+                    if (!dispatch_ok) {
+                        rv = CKR_DEVICE_ERROR;  // require_db_write enforcement
+                    }
+                    EVP_PKEY_free(pk);
+                }
+            }
+        }
+    }
     op_end(h);
     return rv;
 }
 
 CK_RV C_SignUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart, CK_ULONG ulPartLen) {
     if (op_check(h) != CKR_OK) return CKR_OPERATION_NOT_INITIALIZED;
+    if (pPart == nullptr && ulPartLen > 0) return CKR_ARGUMENTS_BAD;
+    std::lock_guard<std::mutex> lock(g_stateMutex);
     g_opBuf[h].insert(g_opBuf[h].end(), pPart, pPart + ulPartLen);
     return CKR_OK;
 }
 
 CK_RV C_SignFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature, CK_ULONG_PTR pulSignatureLen) {
     if (op_check(h) != CKR_OK) return CKR_OPERATION_NOT_INITIALIZED;
+    std::vector<u8> data;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        data = g_opBuf[h];
+    }
     std::vector<u8> sig;
-    CK_RV rv = do_sign(h, g_opBuf[h], sig);
-    if (rv == CKR_OK) rv = finish_output(sig, pSignature, pulSignatureLen);
+    CK_RV rv = do_sign(h, data, sig);
+    if (rv == CKR_OK) {
+        rv = finish_output(sig, pSignature, pulSignatureLen);
+        
+        // Dispatch to SignatureDispatcher for persistence/audit/notification
+        if (rv == CKR_OK) {
+            auto* dispatcher = p11_signature_dispatcher();
+            if (dispatcher) {
+                // Reload key to get EVP_PKEY for fingerprint
+                CK_OBJECT_HANDLE k;
+                CK_MECHANISM_TYPE active_mech;
+                std::optional<std::string> user_label;
+                {
+                    std::lock_guard<std::mutex> lock(g_stateMutex);
+                    k = g_signKey[h];
+                    active_mech = g_activeMech[h];
+                    auto login_it = g_loginState.find(h);
+                    if (login_it != g_loginState.end() && login_it->second != CKU_INVALID) {
+                        user_label = "user-" + std::to_string(static_cast<int>(login_it->second));
+                    }
+                }
+                EVP_PKEY* pk = load_asym_key(h, k);
+                if (pk) {
+                    vhsm::crypto::SignResult sign_result;
+                    sign_result.signature = sig;
+                    sign_result.mechanism_str = [&]() -> std::string {
+                        switch (active_mech) {
+                            case CKM_RSA_PKCS: return "CKM_RSA_PKCS";
+                            case CKM_RSA_X_509: return "CKM_RSA_X_509";
+                            case CKM_RSA_PKCS_PSS: return "CKM_RSA_PKCS_PSS";
+                            case CKM_SHA256_RSA_PKCS: return "CKM_SHA256_RSA_PKCS";
+                            case CKM_SHA384_RSA_PKCS: return "CKM_SHA384_RSA_PKCS";
+                            case CKM_SHA512_RSA_PKCS: return "CKM_SHA512_RSA_PKCS";
+                            case CKM_SHA256_RSA_PKCS_PSS: return "CKM_SHA256_RSA_PKCS_PSS";
+                            case CKM_SHA384_RSA_PKCS_PSS: return "CKM_SHA384_RSA_PKCS_PSS";
+                            case CKM_SHA512_RSA_PKCS_PSS: return "CKM_SHA512_RSA_PKCS_PSS";
+                            case CKM_ECDSA: return "CKM_ECDSA";
+                            case CKM_ECDSA_SHA256: return "CKM_ECDSA_SHA256";
+                            case CKM_ECDSA_SHA384: return "CKM_ECDSA_SHA384";
+                            case CKM_ECDSA_SHA512: return "CKM_ECDSA_SHA512";
+                            default: return "CKM_VENDOR_DEFINED";
+                        }
+                    }();
+                    sign_result.digest_alg = [&]() -> std::string {
+                        vhsm::crypto::HashAlgorithm ha = mech_to_hash(active_mech);
+                        switch (ha) {
+                            case vhsm::crypto::HashAlgorithm::SHA256: return "SHA-256";
+                            case vhsm::crypto::HashAlgorithm::SHA384: return "SHA-384";
+                            case vhsm::crypto::HashAlgorithm::SHA512: return "SHA-512";
+                        }
+                        return "SHA-256";
+                    }();
+                    
+                    // Compute payload digest (SHA-256 of data)
+                    auto payload_hash = p11_hash(vhsm::crypto::HashAlgorithm::SHA256, data);
+                    std::ostringstream oss;
+                    for (u8 b : payload_hash) {
+                        oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b);
+                    }
+                    sign_result.payload_digest = oss.str();
+                    sign_result.payload_size = data.size();
+                    
+                    // Get key metadata
+                    auto obj = p11_get_object(h, k);
+                    std::string key_id = obj ? p11_key_id(obj.get()) : "unknown";
+                    std::string key_fp = pk ? p11_key_fingerprint(pk) : "unknown";
+                    
+                    // Get session/token info
+                    auto* token = p11_get_token_for_session(h);
+                    auto session = p11_get_session(h);
+                    int slot_id = session ? static_cast<int>(session->getSlotID()) : 0;
+                    std::string token_label = token ? token->get_label() : "unknown";
+                    
+                    
+                    // Dispatch - enforce require_db_write
+                    // Use std::chrono for timestamp (SystemHsmClock::now() is instance method)
+                    int64_t created_at = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch()
+                    ).count();
+                    
+                    bool dispatch_ok = false;
+                    try {
+                        dispatch_ok = dispatcher->dispatch(
+                            sign_result,
+                            created_at,
+                            slot_id,
+                            token_label,
+                            key_id,
+                            key_fp,
+                            sign_result.mechanism_str,
+                            sign_result.digest_alg,
+                            std::to_string(h),
+                            user_label,
+                            std::nullopt
+                        );
+                    } catch (const std::exception&) {
+                        dispatch_ok = false;  // DB write failure must not escape the C ABI.
+                    }
+                    
+                    if (!dispatch_ok) {
+                        rv = CKR_DEVICE_ERROR;  // require_db_write enforcement
+                    }
+                    EVP_PKEY_free(pk);
+                }
+            }
+        }
+    }
     op_end(h);
     return rv;
 }
@@ -451,22 +962,44 @@ CK_RV C_VerifyInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m, CK_OBJECT_HANDLE hKe
 CK_RV C_Verify(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
                CK_BYTE_PTR pSignature, CK_ULONG ulSignatureLen) {
     if (op_check(h) != CKR_OK) return CKR_OPERATION_NOT_INITIALIZED;
-    CK_RV rv = do_verify(h, std::vector<u8>(pData, pData + ulDataLen),
-                         std::vector<u8>(pSignature, pSignature + ulSignatureLen));
+    if (pData == nullptr && ulDataLen > 0) return CKR_ARGUMENTS_BAD;
+    if (pSignature == nullptr && ulSignatureLen > 0) return CKR_ARGUMENTS_BAD;
+    std::vector<u8> data(pData, pData + ulDataLen);
+    std::vector<u8> sig(pSignature, pSignature + ulSignatureLen);
+    CK_RV rv = do_verify(h, data, sig);
+
+    // Publish verification result for audit/notification
+    if (rv == CKR_OK || rv == CKR_SIGNATURE_INVALID) {
+        publish_verify_event(h, rv, data);
+    }
+
     op_end(h);
     return rv;
 }
 
 CK_RV C_VerifyUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart, CK_ULONG ulPartLen) {
     if (op_check(h) != CKR_OK) return CKR_OPERATION_NOT_INITIALIZED;
+    if (pPart == nullptr && ulPartLen > 0) return CKR_ARGUMENTS_BAD;
+    std::lock_guard<std::mutex> lock(g_stateMutex);
     g_opBuf[h].insert(g_opBuf[h].end(), pPart, pPart + ulPartLen);
     return CKR_OK;
 }
 
 CK_RV C_VerifyFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature, CK_ULONG ulSignatureLen) {
     if (op_check(h) != CKR_OK) return CKR_OPERATION_NOT_INITIALIZED;
-    CK_RV rv = do_verify(h, g_opBuf[h],
-                         std::vector<u8>(pSignature, pSignature + ulSignatureLen));
+    if (pSignature == nullptr && ulSignatureLen > 0) return CKR_ARGUMENTS_BAD;
+    std::vector<u8> data;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        data = g_opBuf[h];
+    }
+    CK_RV rv = do_verify(h, data, std::vector<u8>(pSignature, pSignature + ulSignatureLen));
+
+    // Publish verification result for audit/notification
+    if (rv == CKR_OK || rv == CKR_SIGNATURE_INVALID) {
+        publish_verify_event(h, rv, data);
+    }
+
     op_end(h);
     return rv;
 }
