@@ -1,7 +1,8 @@
-# vHSM admin — gRPC management + signature query API (PLAN.md §9).
+# vHSM admin — gRPC management + signature query API (PLAN.md §9–§10).
 #
-# This directory builds the HsmAdmin gRPC service.  The first slice is the
-# AdminLogin RPC: SO/USER authentication that publishes an ADMIN_LOGIN event.
+# This directory builds the HsmAdmin gRPC service: SO/USER authentication,
+# token backup/restore, the signature query/verification API, ledger management
+# and notification subscriber management.
 #
 # Proto codegen mirrors the pattern in third_party/fabric-gateway-cpp: protoc
 # emits message stubs and grpc_cpp_plugin emits the service stubs.  Generated
@@ -48,11 +49,6 @@ add_library(vhsm_admin STATIC
     ${ADMIN_GRPC_SRC}
 )
 
-# AuditLog is an interface consumed by the admin service.  Its vtable is
-# emitted in ../audit/audit_log.cpp (a linkable no-op stub); compiling it here
-# keeps vhsm_admin self-contained for tests and executables.
-target_sources(vhsm_admin PRIVATE ../audit/audit_log.cpp)
-
 target_include_directories(vhsm_admin
     PUBLIC
         ${PROJECT_SOURCE_DIR}
@@ -72,6 +68,7 @@ target_link_libraries(vhsm_admin
         vhsm_persistence
         vhsm_session
         vhsm_notification
+        vhsm_signature_store
         protobuf::libprotobuf
         gRPC::grpc++
 )

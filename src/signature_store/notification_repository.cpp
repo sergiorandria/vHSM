@@ -263,5 +263,68 @@ bool NotificationRepository::update_notification_outcome(
   }
 }
 
+std::vector<NotificationLogRecord> NotificationRepository::query_log(
+    const std::optional<std::string> &subscriber_id, int64_t since,
+    int limit) const {
+  std::vector<NotificationLogRecord> result;
+
+  std::string sql = R"SQL(
+        SELECT id, sent_at, event_id, subscriber_id, outcome, attempt_count,
+               error_detail
+        FROM notification_log
+        WHERE 1=1
+    )SQL";
+  std::vector<std::string> params;
+  if (subscriber_id && !subscriber_id->empty()) {
+    sql += " AND subscriber_id = ?";
+    params.push_back(*subscriber_id);
+  }
+  if (since > 0) {
+    sql += " AND sent_at >= ?";
+    params.push_back(std::to_string(since));
+  }
+  sql += " ORDER BY sent_at DESC";
+  if (limit > 0) {
+    sql += " LIMIT ?";
+    params.push_back(std::to_string(limit));
+  }
+  sql += ";";
+
+  auto to_str = [](const std::optional<std::string> &v) -> std::string {
+    return v.value_or("");
+  };
+
+  try {
+    auto rs = conn_.query(sql, params);
+    for (const auto &row : rs.rows_) {
+      NotificationLogRecord rec;
+      // Column order: 0 id | 1 sent_at | 2 event_id | 3 subscriber_id
+      //               4 outcome | 5 attempt_count | 6 error_detail
+      rec.id = to_str(row.get_string(0));
+      rec.sent_at = 0;
+      try {
+        rec.sent_at = std::stoll(to_str(row.get_string(1)));
+      } catch (const std::exception &) {
+        // keep 0
+      }
+      rec.event_id = to_str(row.get_string(2));
+      rec.subscriber_id = to_str(row.get_string(3));
+      rec.outcome = to_str(row.get_string(4));
+      rec.attempt_count = 0;
+      try {
+        rec.attempt_count = std::stoi(to_str(row.get_string(5)));
+      } catch (const std::exception &) {
+        // keep 0
+      }
+      rec.error_detail = to_str(row.get_string(6));
+      result.push_back(std::move(rec));
+    }
+  } catch (const DbError &) {
+    // No log rows available; return an empty list.
+  }
+
+  return result;
+}
+
 } // namespace db
 } // namespace vhsm::signature_store
