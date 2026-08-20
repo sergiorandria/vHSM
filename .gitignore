@@ -34,6 +34,7 @@ network/fabric_configuration/Conf_with_fabric-CA/network.env
 network/fabric_configuration/peer-data 
 network/fabric_configuration/crypto-config 
 network/fabric_configuration/chaincode
+network/chaincode/signature_ledger/chaincode-signature-ledger
 
 
 # User-specific files (MonoDevelop/Xamarin Studio)
