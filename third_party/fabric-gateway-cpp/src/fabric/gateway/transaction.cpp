@@ -97,7 +97,7 @@ TransactionResult Transaction::evaluate(const std::vector<std::string> &args) {
   auto gateway = contract_->gateway();
   const auto &identity = gateway->identity();
   const std::string channelId = contract_->channelId();
-  const std::string txId = protoutil::createTransactionId(identity);
+  auto [txId, nonce] = protoutil::createTransactionId(identity);
 
   std::vector<std::string> fullArgs;
   fullArgs.reserve(args.size() + 1);
@@ -105,7 +105,7 @@ TransactionResult Transaction::evaluate(const std::vector<std::string> &args) {
   fullArgs.insert(fullArgs.end(), args.begin(), args.end());
 
   ::protos::Proposal proposal = protoutil::createProposal(
-      identity, channelId, txId, contract_->chaincodeName(), fullArgs,
+      identity, channelId, nonce, contract_->chaincodeName(), fullArgs,
       transient_);
   ::protos::SignedProposal signedProposal =
       protoutil::signProposal(identity, proposal);
@@ -131,7 +131,7 @@ TransactionResult Transaction::submit(const std::vector<std::string> &args) {
   auto gateway = contract_->gateway();
   const auto &identity = gateway->identity();
   const std::string channelId = contract_->channelId();
-  const std::string txId = protoutil::createTransactionId(identity);
+  auto [txId, nonce] = protoutil::createTransactionId(identity);
 
   std::vector<std::string> fullArgs;
   fullArgs.reserve(args.size() + 1);
@@ -139,7 +139,7 @@ TransactionResult Transaction::submit(const std::vector<std::string> &args) {
   fullArgs.insert(fullArgs.end(), args.begin(), args.end());
 
   ::protos::Proposal proposal = protoutil::createProposal(
-      identity, channelId, txId, contract_->chaincodeName(), fullArgs,
+      identity, channelId, nonce, contract_->chaincodeName(), fullArgs,
       transient_);
   ::protos::SignedProposal signedProposal =
       protoutil::signProposal(identity, proposal);

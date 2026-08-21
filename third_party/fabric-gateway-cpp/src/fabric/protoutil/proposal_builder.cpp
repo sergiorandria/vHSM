@@ -3,8 +3,11 @@
 #include <openssl/rand.h>
 
 #include <array>
+#include <chrono>
 #include <cstring>
 #include <stdexcept>
+
+#include <google/protobuf/timestamp.pb.h>
 
 #include "fabric/crypto/ec.h"
 #include "fabric/crypto/hash.h"
@@ -19,33 +22,16 @@ namespace protoutil {
 
 namespace {
 
-const char kBase64UrlAlphabet[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-
-std::string base64UrlEncode(const std::string &in) {
+// Fabric computes the transaction ID as the lower-case hex encoding of
+// sha256(nonce || creator). (Historically some builds use base64; this
+// network's peers validate against the hex form.)
+std::string hexEncode(const std::string &in) {
+  static const char kHex[] = "0123456789abcdef";
   std::string out;
-  out.reserve(((in.size() + 2) / 3) * 4);
-  size_t i = 0;
-  for (; i + 2 < in.size(); i += 3) {
-    unsigned b0 = static_cast<unsigned char>(in[i]);
-    unsigned b1 = static_cast<unsigned char>(in[i + 1]);
-    unsigned b2 = static_cast<unsigned char>(in[i + 2]);
-    out.push_back(kBase64UrlAlphabet[b0 >> 2]);
-    out.push_back(kBase64UrlAlphabet[((b0 & 0x03) << 4) | (b1 >> 4)]);
-    out.push_back(kBase64UrlAlphabet[((b1 & 0x0F) << 2) | (b2 >> 6)]);
-    out.push_back(kBase64UrlAlphabet[b2 & 0x3F]);
-  }
-  size_t rem = in.size() - i;
-  if (rem == 1) {
-    unsigned b0 = static_cast<unsigned char>(in[i]);
-    out.push_back(kBase64UrlAlphabet[b0 >> 2]);
-    out.push_back(kBase64UrlAlphabet[(b0 & 0x03) << 4]);
-  } else if (rem == 2) {
-    unsigned b0 = static_cast<unsigned char>(in[i]);
-    unsigned b1 = static_cast<unsigned char>(in[i + 1]);
-    out.push_back(kBase64UrlAlphabet[b0 >> 2]);
-    out.push_back(kBase64UrlAlphabet[((b0 & 0x03) << 4) | (b1 >> 4)]);
-    out.push_back(kBase64UrlAlphabet[(b1 & 0x0F) << 2]);
+  out.reserve(in.size() * 2);
+  for (unsigned char c : in) {
+    out.push_back(kHex[c >> 4]);
+    out.push_back(kHex[c & 0x0F]);
   }
   return out;
 }
@@ -64,8 +50,11 @@ msp::SerializedIdentity
 makeSerializedIdentity(const identity::Identity &identity) {
   msp::SerializedIdentity serialized;
   serialized.set_mspid(identity.getMSPID());
+  // Fabric's MSP deserializes the identity by PEM-decoding id_bytes
+  // (https://github.com/hyperledger/fabric/blob/master/msp/mspimpl.go),
+  // so the certificate MUST be supplied as PEM, not raw DER.
   serialized.set_id_bytes(
-      crypto::X509Certificate(identity.getCertificate()).getDER());
+      crypto::X509Certificate(identity.getCertificate()).getPEM());
   return serialized;
 }
 
@@ -76,18 +65,24 @@ std::string serializeIdentity(const identity::Identity &identity) {
   return serialized.SerializeAsString();
 }
 
-std::string createTransactionId(const identity::Identity &identity) {
+std::pair<std::string, std::string>
+createTransactionId(const identity::Identity &identity) {
   const std::string nonce = randomNonce(24);
   const std::string creator = serializeIdentity(identity);
-  return base64UrlEncode(crypto::sha256(nonce + creator));
+  return {hexEncode(crypto::sha256(nonce + creator)), nonce};
 }
 
 ::protos::Proposal
 createProposal(const identity::Identity &identity, const std::string &channelId,
-               const std::string &txId, const std::string &chaincodeName,
+               const std::string &nonce, const std::string &chaincodeName,
                const std::vector<std::string> &args,
                const std::map<std::string, std::string> &transient) {
   msp::SerializedIdentity serialized = makeSerializedIdentity(identity);
+  const std::string creator = serialized.SerializeAsString();
+
+  // The txId is derived from the SAME nonce that seeds the SignatureHeader,
+  // so the peer recomputes an identical txId when validating the proposal.
+  const std::string txId = hexEncode(crypto::sha256(nonce + creator));
 
   ::common::ChannelHeader channelHeader;
   channelHeader.set_type(::common::ENDORSER_TRANSACTION);
@@ -95,9 +90,29 @@ createProposal(const identity::Identity &identity, const std::string &channelId,
   channelHeader.set_channel_id(channelId);
   channelHeader.set_epoch(0);
 
+  // Fabric's peer/chaincode derive GetTxTimestamp() from the ChannelHeader
+  // timestamp. Without it, chaincodes that read the transaction time (e.g. via
+  // ctx.GetStub().GetTxTimestamp()) get a nil *timestamp.Timestamp and panic.
+  const auto now = std::chrono::system_clock::now().time_since_epoch();
+  const auto secs =
+      std::chrono::duration_cast<std::chrono::seconds>(now).count();
+  const auto nanos =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(now).count() %
+      1000000000;
+  channelHeader.mutable_timestamp()->set_seconds(
+      static_cast<google::protobuf::int64>(secs));
+  channelHeader.mutable_timestamp()->set_nanos(static_cast<int32_t>(nanos));
+
+  // Fabric's peer validates the proposal against the chaincode named in the
+  // ChannelHeader extension (ChaincodeHeaderExtension.ChaincodeId). Without
+  // it the endorser rejects with "ChaincodeHeaderExtension.ChaincodeId is nil".
+  ::protos::ChaincodeHeaderExtension che;
+  che.mutable_chaincode_id()->set_name(chaincodeName);
+  channelHeader.set_extension(che.SerializeAsString());
+
   ::common::SignatureHeader signatureHeader;
-  signatureHeader.set_creator(serialized.SerializeAsString());
-  signatureHeader.set_nonce(randomNonce(24));
+  signatureHeader.set_creator(creator);
+  signatureHeader.set_nonce(nonce);
 
   ::common::Header header;
   header.set_channel_header(channelHeader.SerializeAsString());
@@ -172,14 +187,21 @@ std::string signBytes(const identity::Identity &identity,
     return empty;
   }
 
-  if (!actionPayload.has_action() ||
-      actionPayload.action().proposal_response_payload().empty()) {
+  if (!actionPayload.has_action()) {
+    return empty;
+  }
+
+  // action() is a ChaincodeEndorsedAction whose proposal_response_payload is a
+  // (marshaled) ProposalResponsePayload. Its extension field is a (marshaled)
+  // ChaincodeAction, which finally carries the chaincode Response.
+  const ::protos::ChaincodeEndorsedAction &endorsed = actionPayload.action();
+  ::protos::ProposalResponsePayload responsePayload;
+  if (!responsePayload.ParseFromString(endorsed.proposal_response_payload())) {
     return empty;
   }
 
   ::protos::ChaincodeAction chaincodeAction;
-  if (!chaincodeAction.ParseFromString(
-          actionPayload.action().proposal_response_payload())) {
+  if (!chaincodeAction.ParseFromString(responsePayload.extension())) {
     return empty;
   }
 

@@ -34,6 +34,7 @@ mkdir -p "$HOST_ORG_ROOT"
 fca_client() {
     local HOME_REL="$1"; shift
     docker run --rm --network "$NETWORK_NAME" \
+        --user "$(id -u):$(id -g)" \
         -e FABRIC_CA_CLIENT_HOME="/organizations/${HOME_REL}" \
         -v "${HOST_ORG_ROOT}:/organizations" \
         "$CA_CLIENT_IMAGE" fabric-ca-client "$@"
