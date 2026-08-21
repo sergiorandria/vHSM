@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -22,6 +23,34 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// loadDotEnv reads a simple KEY=VALUE .env file (no shell interpolation) and
+// exports each entry into the process environment if not already set. This lets
+// the API be configured via a gitignored .env instead of hardcoding secrets.
+func loadDotEnv(path string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.Trim(line, "\"")
+		idx := strings.Index(line, "=")
+		if idx < 0 {
+			continue
+		}
+		key := strings.TrimSpace(line[:idx])
+		val := strings.TrimSpace(line[idx+1:])
+		if os.Getenv(key) == "" {
+			_ = os.Setenv(key, val)
+		}
+	}
+}
 
 const maxUploadSize = 50 << 20 // 50 MiB
 
@@ -125,6 +154,10 @@ func signHashHex(hsmSvc *internal.HSMService, hashHex string) (string, error) {
 }
 
 func main() {
+	// Load configuration from a gitignored .env if present (secrets live there,
+	// not in source). Existing process env vars take precedence.
+	loadDotEnv(".env")
+
 	// Env
 	minioEndpoint := os.Getenv("MINIO_ENDPOINT")
 	minioAccess := os.Getenv("MINIO_ACCESS_KEY")

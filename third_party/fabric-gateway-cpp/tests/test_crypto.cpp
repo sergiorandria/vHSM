@@ -7,10 +7,15 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <cstdlib>
+#include <fstream>
 #include <filesystem>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
+
+#include <sys/stat.h>
 
 #include "fabric/crypto/csr.h"
 #include "fabric/crypto/ec.h"
@@ -20,27 +25,52 @@
 namespace fs = std::filesystem;
 using fabric::crypto::CSR;
 using fabric::crypto::ECKeyPair;
-using fabric::identity::FileSystemWallet;
+using fabric::identity::CustomHardenedWallet;
 using fabric::identity::Identity;
 using fabric::identity::InMemoryWallet;
 
 namespace {
 
+const char *kMasterKey =
+    "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+
 bool contains(const std::string &haystack, const std::string &needle) {
   return haystack.find(needle) != std::string::npos;
 }
 
-// Unique temp directory for file-system-wallet tests, created in SetUp and
-// removed after the fixture is done.
-class FileSystemWalletTest : public ::testing::Test {
+bool contains(const std::vector<std::string> &haystack, const std::string &needle) {
+  for (const auto &s : haystack) {
+    if (s == needle) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool readFileHelper(const std::string &path, std::string &out) {
+  std::ifstream in(path, std::ios::binary);
+  if (!in) {
+    return false;
+  }
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  out = ss.str();
+  return true;
+}
+
+// Unique temp directory for hardened-wallet tests, created in SetUp and
+// removed after the fixture is done. The master key is injected via the
+// environment so put()/get() have an at-rest wrapping key available.
+class HardenedWalletTest : public ::testing::Test {
 protected:
   void SetUp() override {
+    setenv("FABRIC_WALLET_MASTER_KEY", kMasterKey, 1);
     dir_ = fs::temp_directory_path() /
            ("fabric_wallet_test_" +
             std::to_string(
                 std::chrono::system_clock::now().time_since_epoch().count()));
     fs::remove_all(dir_);
-    wallet_ = std::make_unique<FileSystemWallet>(dir_.string());
+    wallet_ = std::make_unique<CustomHardenedWallet>(dir_.string());
   }
 
   void TearDown() override {
@@ -49,7 +79,7 @@ protected:
   }
 
   fs::path dir_;
-  std::unique_ptr<FileSystemWallet> wallet_;
+  std::unique_ptr<CustomHardenedWallet> wallet_;
 };
 
 } // namespace
@@ -250,10 +280,14 @@ TEST(InMemoryWalletTest, PutGetExistsListDelete) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FileSystemWallet
+// CustomHardenedWallet (encrypted, access-controlled file wallet)
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_F(FileSystemWalletTest, PutGetExistsDelete) {
+TEST_F(HardenedWalletTest, HasMasterKey) {
+  EXPECT_TRUE(wallet_->hasMasterKey());
+}
+
+TEST_F(HardenedWalletTest, PutGetExistsDelete) {
   Identity id("Org1MSP", "CERTIFICATE-PEM", "PRIVATE-KEY-PEM");
 
   ASSERT_TRUE(wallet_->put("alice", id));
@@ -266,18 +300,75 @@ TEST_F(FileSystemWalletTest, PutGetExistsDelete) {
   EXPECT_EQ(got->getCertificate(), "CERTIFICATE-PEM");
   EXPECT_EQ(got->getPrivateKey(), "PRIVATE-KEY-PEM");
 
-  // Files were persisted on disk under the wallet directory.
-  fs::path base = dir_ / "alice.id";
-  EXPECT_TRUE(fs::exists(base.string() + ".cert"));
-  EXPECT_TRUE(fs::exists(base.string() + ".key"));
-  EXPECT_TRUE(fs::exists(base.string() + ".msp"));
-
   EXPECT_TRUE(wallet_->deleteIdentity("alice"));
   EXPECT_FALSE(wallet_->exists("alice"));
   EXPECT_EQ(wallet_->get("alice"), nullptr);
 }
 
-TEST_F(FileSystemWalletTest, GetUnknownLabelReturnsNull) {
+TEST_F(HardenedWalletTest, GetUnknownLabelReturnsNull) {
   EXPECT_EQ(wallet_->get("nobody"), nullptr);
   EXPECT_FALSE(wallet_->exists("nobody"));
+}
+
+TEST_F(HardenedWalletTest, ListReturnsStoredLabels) {
+  ASSERT_TRUE(wallet_->put("alice", Identity("msp", "c", "k")));
+  ASSERT_TRUE(wallet_->put("bob", Identity("msp", "c", "k")));
+
+  auto labels = wallet_->list();
+  ASSERT_EQ(labels.size(), 2u);
+  EXPECT_TRUE(contains(labels, "alice"));
+  EXPECT_TRUE(contains(labels, "bob"));
+}
+
+TEST_F(HardenedWalletTest, PrivateKeyIsEncryptedAtRest) {
+  Identity id("Org1MSP", "CERTIFICATE-PEM", "PRIVATE-KEY-PEM");
+  ASSERT_TRUE(wallet_->put("alice", id));
+
+  std::string blob;
+  ASSERT_TRUE(readFileHelper(dir_.string() + "/alice.id", blob));
+  // The on-disk blob must carry the magic header and must NOT contain the
+  // plaintext private key.
+  EXPECT_TRUE(contains(blob, "FHWM"));
+  EXPECT_FALSE(contains(blob, "PRIVATE-KEY-PEM"));
+}
+
+TEST_F(HardenedWalletTest, FilesUseRestrictedPermissions) {
+  ASSERT_TRUE(wallet_->put("alice", Identity("msp", "c", "k")));
+  std::string path = dir_.string() + "/alice.id";
+
+  struct stat st {};
+  ASSERT_EQ(stat(path.c_str(), &st), 0);
+  EXPECT_EQ(st.st_mode & 0777, 0600);
+
+  struct stat dst {};
+  ASSERT_EQ(stat(dir_.string().c_str(), &dst), 0);
+  EXPECT_EQ(dst.st_mode & 0777, 0700);
+}
+
+TEST_F(HardenedWalletTest, RejectsPathTraversalLabels) {
+  Identity id("msp", "c", "k");
+  // Labels containing separators or ".." must be refused and must not create
+  // any file outside the wallet directory.
+  EXPECT_FALSE(wallet_->put("../../escape", id));
+  EXPECT_FALSE(wallet_->put("a/b", id));
+  EXPECT_FALSE(wallet_->get("../../escape"));
+  EXPECT_FALSE(wallet_->exists("../.."));
+
+  fs::path parent = dir_.parent_path();
+  EXPECT_FALSE(fs::exists(parent / "escape.id"));
+  EXPECT_FALSE(fs::exists(parent / "escape.id.tmp"));
+}
+
+TEST_F(HardenedWalletTest, TamperedBlobFailsToDecrypt) {
+  ASSERT_TRUE(wallet_->put("alice", Identity("msp", "c", "k")));
+  std::string path = dir_.string() + "/alice.id";
+  std::string blob;
+  ASSERT_TRUE(readFileHelper(path, blob));
+  ASSERT_FALSE(blob.empty());
+  blob[blob.size() / 2] ^= 0xFF;  // flip a bit in the ciphertext
+  {
+    std::ofstream out(path, std::ios::binary);
+    out.write(blob.data(), blob.size());
+  }
+  EXPECT_EQ(wallet_->get("alice"), nullptr);
 }

@@ -3,6 +3,7 @@
 
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "fabric/identity/identity.h"
@@ -24,12 +25,15 @@ namespace protoutil {
 std::string serializeIdentity(const identity::Identity &identity);
 
 /**
- * Generate a transaction ID in the same fashion as the SDKs:
- * base64(sha256(nonce || serializedIdentity)).
+ * Generate a transaction ID and the nonce it was derived from, in the same
+ * fashion as the SDKs: txId = base64(sha256(nonce || serializedIdentity)).
+ * The same nonce MUST be reused when building the proposal (it seeds the
+ * SignatureHeader) so the peer recomputes an identical txId.
  * @param identity The signing identity
- * @return Transaction ID string
+ * @return {txId, nonce}
  */
-std::string createTransactionId(const identity::Identity &identity);
+std::pair<std::string, std::string>
+createTransactionId(const identity::Identity &identity);
 
 /**
  * Build an unsigned protos.Proposal for a chaincode invocation: a combined
@@ -37,7 +41,8 @@ std::string createTransactionId(const identity::Identity &identity);
  * ChaincodeInvocationSpec payload.
  * @param identity The signing identity
  * @param channelId Channel name
- * @param txId Transaction ID
+ * @param nonce Nonce (returned by createTransactionId) used for both the
+ *               SignatureHeader and the txId embedded in the ChannelHeader
  * @param chaincodeName Chaincode to invoke
  * @param args Chaincode function name followed by arguments
  * @param transient Optional transient data (private data, never persisted)
@@ -45,7 +50,7 @@ std::string createTransactionId(const identity::Identity &identity);
  */
 ::protos::Proposal
 createProposal(const identity::Identity &identity, const std::string &channelId,
-               const std::string &txId, const std::string &chaincodeName,
+               const std::string &nonce, const std::string &chaincodeName,
                const std::vector<std::string> &args,
                const std::map<std::string, std::string> &transient = {});
 

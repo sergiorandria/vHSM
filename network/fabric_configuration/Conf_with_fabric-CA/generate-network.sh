@@ -393,6 +393,9 @@ echo "   ✓ Fichiers écrits dans ${FABRIC_CA_DIR}/<org>/"
 # 3. GÉNÉRATION DOCKER-COMPOSE (CA + POSTGRES + LDAP + PEERS + ORDERER)
 # =================================================================
 DOCKER_FILE="docker-compose.yaml"
+# Accumulated infra secrets, written to a gitignored .env at the end
+ENV_ENTRIES=""
+CUR_PREFIX=""
 echo "==> Génération de ${DOCKER_FILE}..."
 
 cat <<EOF > $DOCKER_FILE
@@ -419,6 +422,7 @@ append_ca_stack() {
     local LDAP_ORG_DISPLAY="${10}"
     local LDAP_DOMAIN="${11}"   # ex: org1.example.com
     local LDAP_BASE_DN="${12}"
+    local PREFIX="$CUR_PREFIX"
 
     cat <<EOF >> $DOCKER_FILE
   postgres.${SHORTNAME}:
@@ -426,12 +430,10 @@ append_ca_stack() {
     container_name: postgres.${SHORTNAME}
     environment:
       POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_USER: \${${PREFIX}_DB_USER}
+      POSTGRES_PASSWORD: \${${PREFIX}_DB_PASS}
     volumes:
       - pgdata.${SHORTNAME}:/var/lib/postgresql/data
-    ports:
-      - "${DB_PORT}:5432"
     networks:
       - fabric
 
@@ -441,14 +443,12 @@ append_ca_stack() {
     environment:
       LDAP_ORGANISATION: "${LDAP_ORG_DISPLAY}"
       LDAP_DOMAIN: "${LDAP_DOMAIN}"
-      LDAP_ADMIN_PASSWORD: "${LDAP_ADMIN_PASS}"
+      LDAP_ADMIN_PASSWORD: "\${${PREFIX}_LDAP_ADMIN_PASS}"
       LDAP_BASE_DN: "${LDAP_BASE_DN}"
     volumes:
       - ${FABRIC_CA_DIR}/${SHORTNAME}/ldap-bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom
       - ldapdata.${SHORTNAME}:/var/lib/ldap
       - ldapconfig.${SHORTNAME}:/etc/ldap/slapd.d
-    ports:
-      - "${LDAP_PORT}:389"
     networks:
       - fabric
 
@@ -461,9 +461,6 @@ append_ca_stack() {
     volumes:
       - ${FABRIC_CA_DIR}/${SHORTNAME}/fabric-ca-server-config.yaml:/etc/hyperledger/fabric-ca-server/fabric-ca-server-config.yaml
       - ca-data.${SHORTNAME}:/etc/hyperledger/fabric-ca-server/msp
-    ports:
-      - "${CA_PORT}:${CA_PORT}"
-      - "${OP_PORT}:${OP_PORT}"
     networks:
       - fabric
     depends_on:
@@ -471,10 +468,16 @@ append_ca_stack() {
       - ldap.${SHORTNAME}
 
 EOF
+
+    ENV_ENTRIES="${ENV_ENTRIES}
+${PREFIX}_DB_USER=${DB_USER}
+${PREFIX}_DB_PASS=${DB_PASS}
+${PREFIX}_LDAP_ADMIN_PASS=${LDAP_ADMIN_PASS}"
 }
 
 # CA/DB/LDAP de l'Orderer
 ORDERER_LDAP_DN=$(domain_to_dn "$ORDERER_DOMAIN")
+CUR_PREFIX="ORDERER"
 append_ca_stack "orderer" "$ORDERER_CA_PORT" "$ORDERER_CA_OPERATIONS_PORT" "$ORDERER_DB_PORT" \
     "$ORDERER_DB_NAME" "$ORDERER_DB_USER" "$ORDERER_DB_PASS" \
     "$ORDERER_LDAP_PORT" "$ORDERER_LDAP_ADMIN_PASS" "OrdererOrg" "$ORDERER_DOMAIN" "$ORDERER_LDAP_DN"
@@ -488,6 +491,7 @@ for ((i=1; i<=NUM_ORGS; i++)); do
     LDAP_PORT_VAR="ORG${i}_LDAP_PORT"; LDAP_PASS_VAR="ORG${i}_LDAP_ADMIN_PASS"
 
     ORG_LDAP_DN=$(domain_to_dn "${!DOMAIN_VAR}")
+    CUR_PREFIX="ORG${i}"
     append_ca_stack "${!NAME_VAR}" "${!CA_PORT_VAR}" "${!OP_PORT_VAR}" "${!DB_PORT_VAR}" \
         "${!DB_NAME_VAR}" "${!DB_USER_VAR}" "${!DB_PASS_VAR}" \
         "${!LDAP_PORT_VAR}" "${!LDAP_PASS_VAR}" "${!NAME_VAR}" "${!DOMAIN_VAR}" "$ORG_LDAP_DN"
@@ -504,6 +508,7 @@ for ((i=1;i<=NUM_ORGS;i++)); do
     PEER_HOST_VAR="ORG${i}_PEER${p}_HOST"
     PEER_PORT_VAR="ORG${i}_PEER${p}_PORT"
     PEER_EXTERNAL_PORT_VAR="ORG${i}_PEER${p}_EXTERNAL_PORT"
+    PEER0_PORT_VAR="ORG${i}_PEER0_PORT"
 
     cat <<EOF >> $DOCKER_FILE
   peer${p}.${!DOMAIN_VAR}:
@@ -511,8 +516,6 @@ for ((i=1;i<=NUM_ORGS;i++)); do
     container_name: peer${p}.${!DOMAIN_VAR}
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric/peer
     environment:
-      CORE_VM_ENDPOINT: unix:///host/var/run/docker.sock
-      CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE: fabric
       CORE_PEER_ID: peer${p}.${!DOMAIN_VAR}
       CORE_PEER_ADDRESS: ${!PEER_HOST_VAR}:${!PEER_PORT_VAR}
       CORE_PEER_LISTENADDRESS: 0.0.0.0:${!PEER_PORT_VAR}
@@ -526,13 +529,12 @@ for ((i=1;i<=NUM_ORGS;i++)); do
       CORE_PEER_TLS_ROOTCERT_FILE: /etc/hyperledger/fabric/tls/ca.crt
       ORDERER_CA: /etc/hyperledger/orderer/tls/ca.crt
       FABRIC_CFG_PATH: /etc/hyperledger/fabric
-      CORE_PEER_GOSSIP_BOOTSTRAP: peer0.${!DOMAIN_VAR}:${!PEER_PORT_VAR}
+      CORE_PEER_GOSSIP_BOOTSTRAP: peer0.${!DOMAIN_VAR}:${!PEER0_PORT_VAR}
       CORE_PEER_GOSSIP_EXTERNALENDPOINT: ${!PEER_HOST_VAR}:${!PEER_PORT_VAR}
       CORE_PEER_GOSSIP_USELEADERELECTION: "true"
       CORE_PEER_GOSSIP_ORGLEADER: "false"
       CORE_LEDGER_STATE_STATEDATABASE: goleveldb
     volumes:
-      - /var/run/docker.sock:/host/var/run/docker.sock
       - ${ORG_ROOT_DIR}/peerOrganizations/${!DOMAIN_VAR}/peers/peer${p}.${!DOMAIN_VAR}/msp:/etc/hyperledger/fabric/msp:ro
       - ${ORG_ROOT_DIR}/peerOrganizations/${!DOMAIN_VAR}/peers/peer${p}.${!DOMAIN_VAR}/tls:/etc/hyperledger/fabric/tls:ro
       - ${ORG_ROOT_DIR}/ordererOrganizations/${ORDERER_DOMAIN}/orderers/orderer.${ORDERER_DOMAIN}/tls:/etc/hyperledger/orderer/tls:ro
@@ -568,8 +570,6 @@ for ((i=1;i<=NUM_ORGS;i++)); do
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric/peer
     environment:
       GOPATH: /opt/gopath
-      CORE_VM_ENDPOINT: unix:///host/var/run/docker.sock
-      CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE: fabric
       FABRIC_LOGGING_SPEC: INFO
       CORE_PEER_TLS_ENABLED: true
       CORE_PEER_LOCALMSPID: ${!MSP_VAR}
@@ -578,7 +578,6 @@ for ((i=1;i<=NUM_ORGS;i++)); do
       CORE_PEER_ADDRESS: ${!PEER0_HOST_VAR}:${!PEER0_PORT_VAR}
       ORDERER_CA: /etc/hyperledger/orderer/tls/ca.crt
     volumes:
-      - /var/run/docker.sock:/host/var/run/docker.sock
       - ${ORG_ROOT_DIR}/peerOrganizations/${!DOMAIN_VAR}/users/Admin@${!DOMAIN_VAR}/msp:/etc/hyperledger/fabric/admin-msp:ro
       - ${ORG_ROOT_DIR}/peerOrganizations/${!DOMAIN_VAR}/peers/peer0.${!DOMAIN_VAR}/tls:/etc/hyperledger/fabric/tls:ro
       - ${ORG_ROOT_DIR}/ordererOrganizations/${ORDERER_DOMAIN}/orderers/orderer.${ORDERER_DOMAIN}/tls:/etc/hyperledger/orderer/tls:ro
@@ -788,6 +787,26 @@ done
 # 5. ÉTAPES SUIVANTES
 # =================================================================
 mkdir -p "$ARTIFACTS_DIR" "$ORG_ROOT_DIR"
+
+# ── Fichiers de secrets : .env (réel, gitignored) + .env.example (commité) ──
+# docker compose interpole ${VAR} depuis ./env ; on évite ainsi de committer
+# les mots de passe en clair dans docker-compose.yaml.
+{
+  echo "# Auto-généré par generate-network.sh — NE PAS COMMITTER (gitignored)"
+  echo "# Source: docker compose lit ./env automatiquement."
+  echo "${ENV_ENTRIES}"
+  echo "CA_ADMIN_PASS=${CA_ADMIN_PASS}"
+} > .env
+
+{
+  echo "# Template de secrets — copier en .env et renseigner les valeurs."
+  echo "# .env est gitignored ; ce fichier .env.example est committé."
+  echo "${ENV_ENTRIES}" | sed 's/=.*/=CHANGE_ME/'
+  echo "CA_ADMIN_PASS=CHANGE_ME"
+} > .env.example
+
+echo "✓ .env (secret, gitignored) et .env.example générés"
+
 
 echo ""
 echo "✅ Configuration et docker-compose générés avec succès !"
