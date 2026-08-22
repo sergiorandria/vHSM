@@ -1,0 +1,105 @@
+[38;2;216;222;233mDEAD CODE - DETAILED FILE LOCATIONS AND LINE NUMBERS[0m
+[38;2;216;222;233m====================================================[0m
+
+[38;2;216;222;233m1. DISABLED FUNCTIONS IN TEMPLATE CHAINCODE[0m
+[38;2;216;222;233mFile: network/fabric_configuration/template_chaincode/chaincode.go[0m
+
+[38;2;216;222;233m  Line 242-245: GetAllThesesRaw()[0m
+[38;2;216;222;233m    return shim.Error("GetAllThesesRaw is for debugging only. Use GetAllTheses instead.")[0m
+[38;2;216;222;233m    [0m
+[38;2;216;222;233m  Line 252-263: NotarizeThesis()[0m
+[38;2;216;222;233m    return shim.Error("NotarizeThesis is disabled: use NotarizeDocument instead")[0m
+[38;2;216;222;233m    [0m
+[38;2;216;222;233m  Line 276-283: SubmitGrade()[0m
+[38;2;216;222;233m    return shim.Error("SubmitGrade is disabled: grading now requires one submission per jury member via SubmitJuryGrade")[0m
+[38;2;216;222;233m    [0m
+[38;2;216;222;233m  Line 322-330: NotarizePv()[0m
+[38;2;216;222;233m    return shim.Error("NotarizePv is disabled: the PV now requires one signature per jury member via SignPv")[0m
+
+
+[38;2;216;222;233m2. INCOMPLETE FUNCTION IN SIGNATURE LEDGER CHAINCODE[0m
+[38;2;216;222;233mFile: network/chaincode/signature_ledger/signature_ledger.go[0m
+
+[38;2;216;222;233m  Line 28-69: Design debate in comments[0m
+[38;2;216;222;233m    [42-line comment block discussing internal design decisions][0m
+[38;2;216;222;233m    [0m
+[38;2;216;222;233m  Line 70-115: UpdateBlockNumber() function[0m
+[38;2;216;222;233m    func (s *SignatureContract) UpdateBlockNumber()[0m
+[38;2;216;222;233m        ctx contractapi.TransactionContextInterface,[0m
+[38;2;216;222;233m        recordID string,[0m
+[38;2;216;222;233m        blockNumber int64,[0m
+[38;2;216;222;233m    ) error {}[0m
+[38;2;216;222;233m        // [explanation of why incomplete][0m
+[38;2;216;222;233m        return nil  // DOES NOTHING[0m
+[38;2;216;222;233m    }[0m
+
+
+[38;2;216;222;233m3. DUPLICATE UTILITY FUNCTIONS[0m
+[38;2;216;222;233mFile A: src/persistence/vault.cpp[0m
+[38;2;216;222;233m  Line 31-61: put_le32() and put_le64() functions[0m
+[38;2;216;222;233m  Line 61-90: get_le32() and get_le64() functions[0m
+
+[38;2;216;222;233mFile B: src/persistence/token_serializer.cpp[0m
+[38;2;216;222;233m  Line 48-75: put_le32() and put_le64() functions (IDENTICAL)[0m
+[38;2;216;222;233m  Line 76-105: get_le32() and get_le64() functions (IDENTICAL)[0m
+
+[38;2;216;222;233mThese should be unified in src/persistence/utils.h[0m
+
+
+[38;2;216;222;233m4. COMMENTED-OUT CODE[0m
+[38;2;216;222;233mFile: src/keystore/hsm_object.h[0m
+[38;2;216;222;233m  Line 110-111: Commented setter methods[0m
+[38;2;216;222;233m    // void setSensitive(bool value) { sensitive_ = value; } }[0m
+[38;2;216;222;233m    // void setExtractable(bool value) { extractable_ = value; } }[0m
+
+
+[38;2;216;222;233m5. TODO - INCOMPLETE IMPLEMENTATION[0m
+[38;2;216;222;233mFile: src/admin/admin_service.cpp[0m
+[38;2;216;222;233m  Line 53: event.hsm_instance = "";  // TODO: fetch from db_meta[0m
+[38;2;216;222;233m  [0m
+[38;2;216;222;233m  Impact: HSM instance field not populated in audit events[0m
+
+
+[38;2;216;222;233m6. DEPRECATED VENDOR FUNCTIONS (LOW PRIORITY)[0m
+[38;2;216;222;233mFile: network/chaincode/signature_ledger/vendor/google.golang.org/grpc/*.go[0m
+[38;2;216;222;233m  - WithMaxMsgSize() [Deprecated][0m
+[38;2;216;222;233m  - WithCodec() [Deprecated][0m
+[38;2;216;222;233m  - WithCompressor() [Deprecated][0m
+[38;2;216;222;233m  - WithDecompressor() [Deprecated][0m
+[38;2;216;222;233m  - WithTimeout() [Deprecated][0m
+[38;2;216;222;233m  - WithDialer() [Deprecated][0m
+[38;2;216;222;233m  [0m
+[38;2;216;222;233m  These are acceptable in vendored code; consider upgrading gRPC[0m
+
+
+[38;2;216;222;233m7. LARGE COMMENT BLOCKS[0m
+[38;2;216;222;233mFile: network/chaincode/signature_ledger/signature_ledger.go[0m
+[38;2;216;222;233m  Line 28-69: Extensive comments in RecordSignature() showing design debate[0m
+[38;2;216;222;233m  [0m
+[38;2;216;222;233m  Suggestions:[0m
+[38;2;216;222;233m  - Line 28-40: "We'll update BlockNumber..." - remove[0m
+[38;2;216;222;233m  - Line 41-55: "Previously we thought..." - remove  [0m
+[38;2;216;222;233m  - Line 56-69: "The challenge is..." - condense to 2-3 lines[0m
+[38;2;216;222;233m  [0m
+[38;2;216;222;233m  Replace with concise final design explanation[0m
+
+
+[38;2;216;222;233m8. STATISTICS[0m
+
+[38;2;216;222;233mTotal Dead Code Items: 15+[0m
+[38;2;216;222;233mSeverity Breakdown:[0m
+[38;2;216;222;233m  - HIGH (must fix): 3 items[0m
+[38;2;216;222;233m  - MEDIUM (should fix): 3 items[0m
+[38;2;216;222;233m  - LOW (optional): 2+ items[0m
+
+[38;2;216;222;233mFiles Affected:[0m
+[38;2;216;222;233m  1. network/fabric_configuration/template_chaincode/chaincode.go[0m
+[38;2;216;222;233m  2. network/chaincode/signature_ledger/signature_ledger.go[0m
+[38;2;216;222;233m  3. src/persistence/vault.cpp[0m
+[38;2;216;222;233m  4. src/persistence/token_serializer.cpp[0m
+[38;2;216;222;233m  5. src/keystore/hsm_object.h[0m
+[38;2;216;222;233m  6. src/admin/admin_service.cpp[0m
+[38;2;216;222;233m  7. vendor/* (multiple)[0m
+
+[38;2;216;222;233mTotal Lines of Dead Code: ~200+[0m
+[38;2;216;222;233mLines of Duplicate Code: ~60[0m

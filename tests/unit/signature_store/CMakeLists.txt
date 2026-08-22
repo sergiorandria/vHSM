@@ -7,10 +7,11 @@ add_executable(vhsm_signature_store_test
     sqlite_connection_tests.cpp
     sqlite_transaction_tests.cpp
     signature_repository_test.cpp
-    signature_store_core_test.cpp
-    signature_store_integration_test.cpp
     notification_dispatcher_test.cpp
 )
+if(VHSM_LEDGER)
+    target_sources(vhsm_signature_store_test PRIVATE signature_store_core_test.cpp signature_store_integration_test.cpp)
+endif()
 
 target_include_directories(vhsm_signature_store_test
     PRIVATE
@@ -25,12 +26,14 @@ target_link_libraries(vhsm_signature_store_test
         vhsm_signature_store
         vhsm_keystore
         vhsm_notification
-        vhsm_ledger
         GTest::gtest
         GTest::gtest_main
         sqlite3
         pthread
 )
+if(VHSM_LEDGER)
+    target_link_libraries(vhsm_signature_store_test PRIVATE vhsm_ledger)
+endif()
 
 # Disable some warnings for test build
 target_compile_options(vhsm_signature_store_test PRIVATE -O1 -g -Wno-self-move -Wno-format-truncation)

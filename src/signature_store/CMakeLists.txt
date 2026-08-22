@@ -35,6 +35,8 @@ target_link_libraries(vhsm_signature_store
     vhsm_keystore
     vhsm_persistence
     vhsm_notification
-    vhsm_ledger
     OpenSSL::SSL
 )
+if(VHSM_LEDGER)
+    target_link_libraries(vhsm_signature_store PUBLIC vhsm_ledger)
+endif()

@@ -215,9 +215,9 @@ private:
 };
 
 // Static method implementation
-std::pair<std::string, std::string> ECKeyPair::generate() {
+std::pair<SecureString, std::string> ECKeyPair::generate() {
   Impl impl;
-  return {impl.getPrivateKeyPEM(), impl.getPublicKeyPEM()};
+  return {SecureString(impl.getPrivateKeyPEM()), impl.getPublicKeyPEM()};
 }
 
 // Constructor
@@ -228,8 +228,8 @@ ECKeyPair::ECKeyPair(const std::string &pem)
 ECKeyPair::~ECKeyPair() = default;
 
 // Getters
-std::string ECKeyPair::getPrivateKeyPEM() const {
-  return pimpl_->getPrivateKeyPEM();
+SecureString ECKeyPair::getPrivateKeyPEM() const {
+  return SecureString(pimpl_->getPrivateKeyPEM());
 }
 
 std::string ECKeyPair::getPublicKeyPEM() const {

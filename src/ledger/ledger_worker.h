@@ -19,11 +19,20 @@ namespace vhsm::ledger {
 // Retry policy for transient submission failures.  Defaults match
 // production (1 s, 2 s, 4 s, ... capped at 60 s); tests inject tiny
 // values so the exponential backoff completes quickly.
+// Static constants are defaults for production; instance fields allow
+// per-worker customization (used by tests).
 struct RetryPolicy {
-  int max_retries = 5;      // retries beyond the first attempt
-  int base_delay_ms = 1000; // delay before the first retry
-  int max_delay_ms = 60000; // cap on each backoff step
-  int delay_multiplier = 2; // exponential growth factor
+  static inline constexpr int MAX_RETRIES =
+      5; // retries beyond the first attempt
+  static inline constexpr int BASE_DELAY_MS =
+      1000; // delay before the first retry
+  static inline constexpr int MAX_DELAY_MS = 60000; // cap on each backoff step
+  static inline constexpr int DELAY_MULTIPLIER = 2; // exponential growth factor
+
+  int max_retries = MAX_RETRIES;
+  int base_delay_ms = BASE_DELAY_MS;
+  int max_delay_ms = MAX_DELAY_MS;
+  int delay_multiplier = DELAY_MULTIPLIER;
 };
 
 // Anchors signature records to the ledger asynchronously.  Instead of spinning

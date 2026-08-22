@@ -3,4 +3,5 @@ add_library(vhsm_core
     utils.cpp
     frozen_hsm_clock.cpp
     system_hsm_clock.cpp
+    hsm_instance.cpp
 )

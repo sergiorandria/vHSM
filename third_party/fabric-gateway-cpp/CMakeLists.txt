@@ -216,4 +216,18 @@ if(BUILD_TESTING)
     target_include_directories(fabric_gateway_cpp_live_client PRIVATE ${FABRIC_SDK_INCLUDE_DIR})
     target_compile_definitions(fabric_gateway_cpp_live_client PRIVATE OPENSSL_SUPPRESS_DEPRECATED)
     target_link_libraries(fabric_gateway_cpp_live_client PRIVATE fabric-gateway-cpp OpenSSL::Crypto OpenSSL::SSL)
+
+  # When building under AddressSanitizer, point LeakSanitizer at the
+  # suppressions file for OpenSSL's intentional one-time (process-lifetime)
+  # allocations so sanitizer runs stay green and surface only application
+  # leaks.  ASan itself rejects `leak:`-type suppressions — LSan needs them via
+  # LSAN_OPTIONS, not ASAN_OPTIONS.
+  if(CMAKE_CXX_FLAGS MATCHES "-fsanitize=address")
+    set(_lsan_supp "${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp")
+    foreach(_t fabric_gateway_cpp_unit_tests fabric_gateway_cpp_ca_tests
+                fabric_gateway_cpp_grpc_tests fabric_gateway_cpp_gateway_tests)
+      set_property(TEST ${_t} PROPERTY ENVIRONMENT
+                   "LSAN_OPTIONS=detect_leaks=1:suppressions=${_lsan_supp}")
+    endforeach()
+  endif()
 endif()

@@ -4,6 +4,8 @@
 #include <memory>
 #include <string>
 
+#include "fabric/crypto/secure_string.h"
+
 namespace fabric {
 namespace crypto {
 
@@ -17,7 +19,7 @@ public:
    * Generate a new EC key pair using P-256 curve
    * @return Pair of (privateKeyPEM, publicKeyPEM) as strings
    */
-  static std::pair<std::string, std::string> generate();
+  static std::pair<SecureString, std::string> generate();
 
   /**
    * Load a private key from PEM format
@@ -31,7 +33,7 @@ public:
    * Get the private key in PEM format
    * @return Private key as PEM string
    */
-  std::string getPrivateKeyPEM() const;
+  SecureString getPrivateKeyPEM() const;
 
   /**
    * Get the public key in PEM format

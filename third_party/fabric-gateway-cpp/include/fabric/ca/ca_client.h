@@ -187,8 +187,10 @@ private:
   parseCertChainFromResponse(const std::string &response);
 
   // Generates a fresh EC keypair + CSR, submits it to `endpoint`, and
-  // returns {certificatePEM, privateKeyPEM}.
-  std::pair<std::string, std::string> enrollCommon(
+  // returns {certificatePEM, privateKeyPEM}.  The private key stays in a
+  // self-wiping buffer (crypto::SecureString) so it is never exposed as a
+  // plaintext std::string copy on the enrollment path.
+  std::pair<std::string, crypto::SecureString> enrollCommon(
       const std::string &enrollmentId, const std::string &enrollmentSecret,
       const std::string &endpoint,
       const std::optional<std::string> &profile = std::nullopt,

@@ -13,15 +13,20 @@
 #include <utility>
 #include <vector>
 
+#define _VHSMXX_HAVE_ATTRIBUTE_VISIBILITY
+
+#include "../core/macros.h"
 #include "capability_token.h"
 #include "task_concept.h"
 #include "task_worker.h"
 
 namespace vhsm::threadpool {
 
+_VHSMXX_BEGIN_NAMESPACE
+
 // Per-tier queue bound: beyond this many pending tasks a submission is
 // dropped (and counted) instead of growing memory without limit.
-constexpr std::size_t k_default_queue_capacity = 1024;
+constexpr std::size_t K_DEFAULT_QUEUE_CAPACITY = 1024;
 
 // Tuning knobs for constructing a pool.  worker_count == 0 selects a
 // hardware-concurrency-derived default; queue_capacity == 0 disables the
@@ -29,7 +34,7 @@ constexpr std::size_t k_default_queue_capacity = 1024;
 // in-flight work before force-joining.
 struct PoolConfig {
   std::size_t worker_count = 0;
-  std::size_t queue_capacity = k_default_queue_capacity;
+  std::size_t queue_capacity = K_DEFAULT_QUEUE_CAPACITY;
   std::chrono::milliseconds shutdown_grace = std::chrono::milliseconds(5000);
 };
 
@@ -49,6 +54,7 @@ struct PoolConfig {
 // for draining and diagnostics.  enqueue()/enqueue_batch() return how much
 // was accepted; submit() throws when the queue is full because the caller
 // has no other way to learn that its std::future was silently discarded.
+
 class ThreadPool {
 public:
   explicit ThreadPool(PoolConfig config = PoolConfig{});
@@ -82,23 +88,23 @@ public:
   void shutdown(std::chrono::milliseconds timeout);
 
   // Diagnostics.
-  std::size_t thread_count() const { return worker_count_; }
-  std::size_t queued_count() const noexcept {
+  _VHSMXX_NODISCARD std::size_t thread_count() const { return worker_count_; }
+  _VHSMXX_NODISCARD std::size_t queued_count() const noexcept {
     return counters_.queued.load(std::memory_order_acquire);
   }
-  std::size_t running_count() const noexcept {
+  _VHSMXX_NODISCARD std::size_t running_count() const noexcept {
     return counters_.running.load(std::memory_order_acquire);
   }
-  std::size_t enqueued_count() const noexcept {
+  _VHSMXX_NODISCARD std::size_t enqueued_count() const noexcept {
     return counters_.enqueued.load(std::memory_order_acquire);
   }
-  std::size_t executed_count() const noexcept {
+  _VHSMXX_NODISCARD std::size_t executed_count() const noexcept {
     return counters_.executed.load(std::memory_order_acquire);
   }
-  std::size_t dropped_count() const noexcept {
+  _VHSMXX_NODISCARD std::size_t dropped_count() const noexcept {
     return counters_.dropped.load(std::memory_order_acquire);
   }
-  std::size_t stolen_count() const noexcept {
+  _VHSMXX_NODISCARD std::size_t stolen_count() const noexcept {
     return counters_.stolen.load(std::memory_order_acquire);
   }
 

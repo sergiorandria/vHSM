@@ -17,6 +17,7 @@
 #include "fabric/gateway/transaction.h"
 #include "fabric/grpc/grpc_connection.h"
 #include "fabric/grpc/grpc_status.h"
+#include "fabric/crypto/secure_string.h"
 #include "fabric/identity/identity.h"
 #include "fabric/protoutil/proposal_builder.h"
 
@@ -53,8 +54,8 @@ LedgerClient::LedgerClient(const std::string &gateway_endpoint,
 
   fabric::grpc::TlsCredentials tls;
   tls.rootCert = loadFile(ca_path);
-  tls.clientCert = loadFile(cert_path);
-  tls.clientKey = loadFile(key_path);
+  tls.clientCert = fabric::crypto::SecureString(loadFile(cert_path));
+  tls.clientKey = fabric::crypto::SecureString(loadFile(key_path));
   tls.serverNameOverride = server_name_override;
   std::shared_ptr<fabric::grpc::GrpcConnection> connection =
       fabric::grpc::GrpcConnection::connect(gateway_endpoint, tls,
@@ -67,8 +68,10 @@ LedgerClient::LedgerClient(const std::string &gateway_endpoint,
   connection->waitForReady();
 
   const std::string certPem = loadFile(cert_path);
-  const std::string keyPem = loadFile(key_path);
-  fabric::identity::Identity identity(msp_id_, certPem, keyPem);
+  // The private key is moved straight into a self-wiping buffer; we avoid
+  // keeping a named plaintext std::string copy of it in this scope.
+  fabric::identity::Identity identity(
+      msp_id_, certPem, fabric::crypto::SecureString(loadFile(key_path)));
   if (!identity.isValid()) {
     throw std::runtime_error(
         "Invalid Fabric identity: certificate or key is empty");

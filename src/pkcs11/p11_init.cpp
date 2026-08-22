@@ -20,12 +20,15 @@
 #include "../signature_store/notification_repository.h"
 #include "../signature_store/signature_dispatcher.h"
 #include "../signature_store/signature_repository.h"
+#include "../core/hsm_instance.h"
 
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <memory>
 #include <string>
+
+#include "vhsm/version.h"
 
 namespace vhsm::pkcs11 {
 
@@ -104,8 +107,18 @@ static std::string resolve_db_path() {
   if (home && *home) {
     base = std::filesystem::path(home);
   } else {
+#ifdef _WIN32
+    const char *local = std::getenv("LOCALAPPDATA");
+    if (local && *local) {
+      base = std::filesystem::path(local) / "vHSM";
+    } else {
+      const char *up = std::getenv("USERPROFILE");
+      base = std::filesystem::path(up ? up : ".") / "vHSM";
+    }
+#else
     const char *home_dir = std::getenv("HOME");
     base = std::filesystem::path(home_dir ? home_dir : ".") / ".vhs";
+#endif
   }
 
   std::filesystem::path db_path = base / "vhsm.sqlite";
@@ -132,6 +145,7 @@ static void init_signature_dispatcher() {
   try {
     vhsm::signature_store::db::DbSchema schema(*g_dbConnection);
     schema.bootstrap();
+    vhsm::core::set_hsm_instance_id(schema.get_instance_id());
   } catch (...) {
     // Schema creation failed, continue without dispatcher
     return;
@@ -289,8 +303,8 @@ CK_RV C_GetInfo(CK_INFO_PTR pInfo) {
   std::memset(pInfo, 0, sizeof(CK_INFO));
   pInfo->cryptokiVersion.major = 2;
   pInfo->cryptokiVersion.minor = 40;
-  pInfo->libraryVersion.major = 1;
-  pInfo->libraryVersion.minor = 0;
+  pInfo->libraryVersion.major = VHSM_VERSION_MAJOR;
+  pInfo->libraryVersion.minor = VHSM_VERSION_MINOR;
   const char *m = "vHSM";
   const char *d = "vHSM PKCS#11 Module";
   std::memcpy(pInfo->manufacturerID, m,

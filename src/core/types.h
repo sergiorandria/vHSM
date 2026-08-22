@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-// WHY fixed-width integer aliases: C++ standard library types (uint8_t, etc.)
+// Fixed-width integer aliases: C++ standard library types (uint8_t, etc.)
 // are verbose. Short aliases (u8, u16, u32, u64) are used throughout vHSM for
 // brevity and clarity. They're also familiar to systems programmers (Go, Rust
 // use the same convention). Centralizing them here ensures consistent naming
@@ -17,7 +17,7 @@ typedef std::uint16_t u16;
 typedef std::uint32_t u32;
 typedef std::uint64_t u64;
 
-// WHY atomic type aliases (ts8, ts16, ts32, ts64): Marked for future
+// Atomic type aliases (ts8, ts16, ts32, ts64): Marked for future
 // multi-threaded use. This file establishes the naming convention so that when
 // we migrate to atomics, the change is localized. Current code uses non-atomic
 // versions (i8, i16, etc.); future code can switch to ts* by changing two lines
@@ -28,7 +28,7 @@ typedef std::atomic_int16_t ts16;
 typedef std::atomic_int32_t ts32;
 typedef std::atomic_int64_t ts64;
 
-// WHY signed integer aliases: Needed for loop counters, offsets, and arithmetic
+// Signed integer aliases: Needed for loop counters, offsets, and arithmetic
 // where negative values make semantic sense. Kept separate from unsigned to
 // prevent implicit conversion bugs (signed + unsigned arithmetic is a classic C
 // pitfall).
@@ -37,7 +37,7 @@ typedef std::int16_t i16;
 typedef std::int32_t i32;
 typedef std::int64_t i64;
 
-// WHY PKCS#11 types centralized here: vHSM is a PKCS#11 implementation.
+// PKCS#11 types centralized here: vHSM is a PKCS#11 implementation.
 // The standard defines fixed type mappings (CK_ULONG, CK_OBJECT_HANDLE, etc.).
 // Centralizing them prevents duplication and makes it easy to adapt if a
 // platform uses different types. Every PKCS#11 call uses these types directly
@@ -51,7 +51,7 @@ typedef CK_ULONG CK_KEY_TYPE;
 typedef CK_ULONG CK_MECHANISM_TYPE;
 typedef CK_ULONG CK_OBJECT_CLASS;
 
-// WHY attribute types are separate typedef: CKA_* attributes (CKA_CLASS,
+// Attribute types are separate typedef: CKA_* attributes (CKA_CLASS,
 // CKA_LABEL, etc.) use the same underlying type (CK_ULONG) but are semantically
 // distinct from handles. Separate typedef makes the distinction clear and
 // allows future specialization.
@@ -61,7 +61,7 @@ typedef CK_ULONG *CK_ULONG_PTR;
 typedef CK_ULONG *CK_OBJECT_HANDLE_PTR;
 typedef CK_ULONG *CK_SESSION_HANDLE_PTR;
 
-// WHY AES mechanism types from PKCS#11 v3.0: vHSM uses AES for key wrapping
+// AES mechanism types from PKCS#11 v3.0: vHSM uses AES for key wrapping
 // (RFC 3394). Defining these constants here (rather than inline in code) makes
 // them discoverable and aligns with PKCS#11 spec references. Applications
 // calling C_Encrypt with CKM_AES_GCM can verify the mechanism constant is
@@ -83,7 +83,7 @@ typedef CK_ULONG *CK_SESSION_HANDLE_PTR;
 #define CKM_AES_CMAC 0x0000108AUL
 #define CKM_SHA256_RSA_PKCS 0x00000241UL
 
-// WHY additional PKCS#11 v3.0 mechanism constants: These are used by the
+// Additional PKCS#11 v3.0 mechanism constants: These are used by the
 // PKCS#11 module to advertise supported algorithms in C_GetMechanismList and to
 // match incoming mechanism requests in C_SignInit/C_VerifyInit.
 #define CKM_SHA384_RSA_PKCS 0x00000242UL
@@ -97,7 +97,7 @@ typedef CK_ULONG *CK_SESSION_HANDLE_PTR;
 #define CKM_SHA384_HMAC 0x00000291UL
 #define CKM_SHA512_HMAC 0x00000292UL
 
-// WHY CK_ATTRIBUTE structure defined here: PKCS#11 API uses this struct for
+// CK_ATTRIBUTE structure defined here: PKCS#11 API uses this struct for
 // get/set attribute operations (C_GetObjectAttribute, C_SetObjectAttribute).
 // Defining it here ensures vHSM's internal code matches the standard exactly.
 // Any deviation would be a compliance bug.
@@ -109,7 +109,7 @@ typedef struct CK_ATTRIBUTE {
 
 typedef CK_ATTRIBUTE *CK_ATTRIBUTE_PTR;
 
-// WHY separate CK_FALSE/CK_TRUE macros: PKCS#11 boolean type is CK_BBOOL
+// Separate CK_FALSE/CK_TRUE macros: PKCS#11 boolean type is CK_BBOOL
 // (unsigned char). Languages vary in boolean representation; defining these
 // constants makes it explicit that vHSM uses 0/1 (not 0xFF for true, which some
 // legacy systems do). Prevents accidental comparison bugs (if (ck_bool ==
@@ -117,7 +117,7 @@ typedef CK_ATTRIBUTE *CK_ATTRIBUTE_PTR;
 #define CK_FALSE 0
 #define CK_TRUE 1
 
-// WHY CK_BYTE, CK_CHAR, CK_UTF8CHAR are all unsigned char: PKCS#11 treats them
+// CK_BYTE, CK_CHAR, CK_UTF8CHAR are all unsigned char: PKCS#11 treats them
 // as distinct semantic types (raw bytes, ASCII characters, UTF-8 bytes), but
 // all map to the same C representation. The names are for documentation;
 // runtime behavior is identical.
@@ -125,11 +125,11 @@ typedef unsigned char CK_BYTE;
 typedef CK_BYTE CK_CHAR;
 typedef CK_BYTE CK_UTF8CHAR;
 
-// WHY CK_BBOOL is separate: A boolean flag that fits in a byte, but named
+// CK_BBOOL is separate: A boolean flag that fits in a byte, but named
 // distinctly to signal "this is a PKCS#11 boolean, not a C++ bool".
 typedef CK_BYTE CK_BBOOL;
 
-// WHY CK_LONG and CK_FLAGS have comments: CK_LONG is a signed value (used in
+// CK_LONG and CK_FLAGS have comments: CK_LONG is a signed value (used in
 // parameters); CK_FLAGS is a bitmask (used for capability bits like
 // CKF_RW_SESSION). The names alone might not make this distinction clear to
 // someone unfamiliar with PKCS#11.
@@ -287,7 +287,7 @@ struct SignResult {
   size_t payload_size;
 };
 
-// WHY HashAlgorithm enum: Standardizes digest selection across crypto and
+// HashAlgorithm enum: Standardizes digest selection across crypto and
 // PKCS#11 layers. The PKCS#11 mechanism constants map to one of these hash
 // algorithms. Centralizing makes it easy to add new algorithms or audit hash
 // usage.

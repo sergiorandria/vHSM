@@ -144,19 +144,25 @@ HttpResponse CurlHttpClient::request(
 }
 
 void CurlHttpClient::setTLSOptions(const std::optional<std::string> &caCertPath,
-                                   const std::optional<std::string> &certPath,
-                                   const std::optional<std::string> &keyPath) {
-
+                                    const std::optional<std::string> &certPath,
+                                    const std::optional<std::string> &keyPath,
+                                    bool allowInsecure) {
   if (caCertPath.has_value()) {
     caCertPath_ = caCertPath.value();
     curl_easy_setopt(curl_, CURLOPT_CAINFO, caCertPath_.c_str());
     curl_easy_setopt(curl_, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(curl_, CURLOPT_SSL_VERIFYHOST, 2L);
-  } else {
-    // If no CA cert provided, disable verification (not recommended for
-    // production)
+  } else if (allowInsecure) {
+    // Explicit opt-in for local/test networks only: connect without verifying
+    // the server certificate. This must never be the default.
     curl_easy_setopt(curl_, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(curl_, CURLOPT_SSL_VERIFYHOST, 0L);
+  } else {
+    // No CA configured and verification not explicitly disabled: refuse to
+    // establish an unauthenticated TLS channel (fail closed).
+    throw std::runtime_error(
+        "TLS configured without a CA bundle and insecure mode is not enabled; "
+        "refusing to connect without server certificate verification");
   }
 
   if (certPath.has_value() && keyPath.has_value()) {

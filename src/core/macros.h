@@ -1,12 +1,34 @@
 #ifndef VHSM_MACROS_H
 #define VHSM_MACROS_H
 
-#define VHSM_CORE_VERSION 0.1L
+// Unused — kept for backward compat with _VHSMXX_BEGIN_NAMESPACE blocks
+#define _VHSMXX_BEGIN_NAMESPACE
+#define _VHSMXX_END_NAMESPACE
 
-#ifdef __GNUC__
-#define VHSM_NODISCARD [[nodiscard]]
-#elif defined(_MSVC)
-#define VHSM_NODISCARD __nodiscard
+#if defined(__GNUC__) || defined(__clang__)
+#define _VHSMXX_NODISCARD [[nodiscard]]
+#elif defined(_MSC_VER)
+#define _VHSMXX_NODISCARD [[nodiscard]]
+#else
+#define _VHSMXX_NODISCARD
+#endif
+
+// Visibility: hidden by default on ELF (GCC/Clang), empty on MSVC/Windows
+#if defined(__GNUC__) || defined(__clang__)
+#define _VHSMXX_VISIBILITY(V) __attribute__((visibility(#V)))
+#define _VHSMXX_VISIBILITY_VALUE
+#define _VHSM_VISIBILITY_VALUE_HIDDEN ("hidden")
+#define _VHSM_VISIBILITY_VALUE_DEFAULT ("default")
+#else
+#define _VHSMXX_VISIBILITY(V)
+#define _VHSMXX_VISIBILITY_VALUE
+#define _VHSM_VISIBILITY_VALUE_HIDDEN ("hidden")
+#define _VHSM_VISIBILITY_VALUE_DEFAULT ("default")
+#endif
+
+// Core version — used for optional version-gated APIs (e.g. hsm_instance)
+#ifndef _VHSMXX_CORE_VERSION
+#define _VHSMXX_CORE_VERSION 1ULL
 #endif
 
 #endif // VHSM_MACROS_H
