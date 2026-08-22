@@ -88,6 +88,13 @@ public:
   // Returns -1 if db_meta does not exist (uninitialized DB).
   int current_version();
 
+  // get_instance_id()
+  //
+  // Returns the instance_id seeded in db_meta (a UUID v4 that identifies this
+  // HSM/DB instance). Audit and notification producers tag events with it so
+  // multi-instance deployments can correlate activity.
+  std::string get_instance_id();
+
   // verify_schema()
   //
   // Checks that every expected table and column exists.

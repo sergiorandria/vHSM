@@ -4,7 +4,17 @@
 
 #include <cstring>
 #include <openssl/crypto.h>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
 #include <sys/mman.h>
+#endif
 
 namespace vhsm::keystore {
 
@@ -18,23 +28,26 @@ KeyWrap::KeyWrap(const std::vector<u8> &master_kek) {
   // memory.
   internal_kek = master_kek;
 
-  // WHY mlock: Prevent the OS from swapping the KEK to disk. If the system is
-  // compromised and the disk is forensically analyzed, the KEK won't be found
-  // in swap files. This is defense-in-depth: even if memory is dumped, the
-  // attacker can't recover keys if we've locked them in RAM.
-  mlock(internal_kek.data(), internal_kek.size());
+  // WHY mlock/VirtualLock: Prevent the OS from swapping the KEK to disk.
+#ifdef _WIN32
+  ::VirtualLock(internal_kek.data(), internal_kek.size());
+#else
+  ::mlock(internal_kek.data(), internal_kek.size());
+#endif
 }
 
 KeyWrap::~KeyWrap() {
   // WHY explicit destroy: The KEK is sensitive and must not linger in memory
   // after the destructor. OPENSSL_cleanse overwrites with zeros using a method
-  // the compiler can't optimize away. Then munlock releases the page lock.
+  // the compiler can't optimize away. Then unlock releases the page lock.
   if (!internal_kek.empty()) {
     // WHY OPENSSL_cleanse first: Before unlocking, overwrite the memory.
-    // If we munlock first, the OS could swap the key to disk before cleanse
-    // runs.
     OPENSSL_cleanse(internal_kek.data(), internal_kek.size());
-    munlock(internal_kek.data(), internal_kek.size());
+#ifdef _WIN32
+    ::VirtualUnlock(internal_kek.data(), internal_kek.size());
+#else
+    ::munlock(internal_kek.data(), internal_kek.size());
+#endif
   }
 }
 
@@ -51,11 +64,13 @@ std::vector<u8> KeyWrap::wrap(const std::vector<u8> &plaintext_key) const {
   // the n semi-blocks of encrypted key material. Total: (n+1) semi-blocks.
   std::vector<u8> result((n + 1) * 8);
 
-  // WHY mlock result: The result vector holds the wrapped key, which is still
-  // sensitive (it's encrypted with the KEK). If the OS swaps it, an attacker
-  // could potentially recover both the wrapped key and the KEK from disk
-  // analysis.
-  mlock(result.data(), result.size());
+  // WHY mlock/VirtualLock result: The result vector holds the wrapped key,
+  // which is still sensitive (it's encrypted with the KEK).
+#ifdef _WIN32
+  ::VirtualLock(result.data(), result.size());
+#else
+  ::mlock(result.data(), result.size());
+#endif
 
   // WHY A = AIV: Start with the recommended IV from RFC 3394.
   u64 A = AIV;
@@ -105,7 +120,11 @@ std::vector<u8> KeyWrap::wrap(const std::vector<u8> &plaintext_key) const {
 
   // WHY wipe temporary block: Don't leave the plaintext block in stack memory.
   OPENSSL_cleanse(block, sizeof(block));
-  munlock(result.data(), result.size());
+#ifdef _WIN32
+  ::VirtualUnlock(result.data(), result.size());
+#else
+  ::munlock(result.data(), result.size());
+#endif
 
   return result;
 }
@@ -123,7 +142,11 @@ std::vector<u8> KeyWrap::unwrap(const std::vector<u8> &ciphertext_key) const {
   // ICV).
   std::vector<u8> result(n * 8);
 
-  mlock(result.data(), result.size());
+#ifdef _WIN32
+  ::VirtualLock(result.data(), result.size());
+#else
+  ::mlock(result.data(), result.size());
+#endif
 
   // WHY memcpy first 8 bytes to A: Extract the ICV from the wrapped key.
   u64 A;
@@ -169,17 +192,24 @@ std::vector<u8> KeyWrap::unwrap(const std::vector<u8> &ciphertext_key) const {
   if (A != AIV) {
     // WHY cleanse before throwing: If integrity check fails, wipe the
     // partially-unwrapped key from memory before propagating the error.
-    // This prevents a corrupted key from being used or leaked.
     OPENSSL_cleanse(result.data(), result.size());
     OPENSSL_cleanse(block, sizeof(block));
-    munlock(result.data(), result.size());
+#ifdef _WIN32
+    ::VirtualUnlock(result.data(), result.size());
+#else
+    ::munlock(result.data(), result.size());
+#endif
     throw std::runtime_error(
         "CRITICAL SECURITY ERROR: Integrity verification failed.");
   }
 
   // WHY wipe temporary block: Don't leave plaintext in the stack.
   OPENSSL_cleanse(block, sizeof(block));
-  munlock(result.data(), result.size());
+#ifdef _WIN32
+  ::VirtualUnlock(result.data(), result.size());
+#else
+  ::munlock(result.data(), result.size());
+#endif
 
   return result;
 }

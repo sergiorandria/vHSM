@@ -1,35 +1,43 @@
 #!/usr/bin/env bash
 #
-# Build a C++ program against the in-tree fabric-gateway-cpp SDK.
+# Build one or all C++ examples against the in-tree fabric-gateway-cpp SDK.
 #
-#   ./examples/build.sh examples/hello_gateway.cpp
+#   ./examples/build.sh                 # builds every examples/*.cpp
+#   ./examples/build.sh hello_gateway   # builds a single example by name
 #
-# Produces build/third_party/fabric-gateway-cpp/<name> and reuses the exact
-# link line already used for the project's live client (so gRPC/protobuf/
-# abseil/openssl transitive deps are wired correctly without hand-tuning).
+# Output binaries land next to the SDK static libs in
+# build/third_party/fabric-gateway-cpp/<name> and reuse the exact link line
+# already used for the project's live client (so gRPC/protobuf/abseil/openssl
+# transitive deps are wired correctly without hand-tuning).
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$REPO/build/third_party/fabric-gateway-cpp"
-
-SRC="${1:?usage: build.sh path/to/your.cpp}"
-NAME="$(basename "${SRC%.cpp}")"
-OBJ="/tmp/opencode/${NAME}.o"
-OUT="$BUILD/$NAME"
+EXAMPLES="$REPO/examples"
+LINKTXT="$BUILD/CMakeFiles/fabric_gateway_cpp_live_client.dir/link.txt"
 
 INCLUDES="-I$REPO/third_party/fabric-gateway-cpp/include -I$BUILD/generated"
 
-echo "Compiling $SRC ..."
-c++ -std=c++17 -Wall $INCLUDES -c "$SRC" -o "$OBJ"
+build_one() {
+  local SRC="$1"
+  local NAME="$(basename "${SRC%.cpp}")"
+  local OBJ="/tmp/opencode/${NAME}.o"
+  local OUT="$BUILD/$NAME"
+  echo ">> Compiling $SRC"
+  c++ -std=c++23 -Wall $INCLUDES -c "$SRC" -o "$OBJ"
+  local LINK="$(tr '\n' ' ' < "$LINKTXT")"
+  LINK="$(echo "$LINK" | sed "s|CMakeFiles/fabric_gateway_cpp_live_client.dir/tests/live_gateway_client.cpp.o|$OBJ|")"
+  LINK="$(echo "$LINK" | sed "s|-o fabric_gateway_cpp_live_client|-o $OUT|")"
+  echo ">> Linking $OUT"
+  ( cd "$BUILD" && eval "$LINK" )
+  echo "Built: $OUT"
+}
 
-LINK="$(tr '\n' ' ' < \
-  "$BUILD/CMakeFiles/fabric_gateway_cpp_live_client.dir/link.txt")"
-LINK="$(echo "$LINK" | \
-  sed "s|CMakeFiles/fabric_gateway_cpp_live_client.dir/tests/live_gateway_client.cpp.o|$OBJ|")"
-LINK="$(echo "$LINK" | \
-  sed "s|-o fabric_gateway_cpp_live_client|-o $OUT|")"
+if [ "$#" -ge 1 ]; then
+  build_one "$EXAMPLES/$1.cpp"
+  exit 0
+fi
 
-echo "Linking $OUT ..."
-( cd "$BUILD" && eval "$LINK" )
-
-echo "Built: $OUT"
+for f in "$EXAMPLES"/*.cpp; do
+  build_one "$f"
+done

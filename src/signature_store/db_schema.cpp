@@ -201,6 +201,10 @@ int DbSchema::current_version() {
   }
 }
 
+std::string DbSchema::get_instance_id() {
+  return get_meta(std::string(meta_key::kInstanceId));
+}
+
 void DbSchema::bootstrap() {
   int version = current_version();
 

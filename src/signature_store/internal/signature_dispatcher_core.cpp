@@ -1,6 +1,7 @@
 #include "signature_dispatcher_core.h"
 
 #include "../../core/utils.h"
+#include "../../core/hsm_instance.h"
 
 #include <chrono>
 #include <sstream>
@@ -47,7 +48,7 @@ bool v_SignatureDispatcherCore_M1::v_dispatch(
     event.actor = input.user_label.value_or("UNKNOWN");
     event.summary = "Failed to write signature record to DB";
     event.detail_json = "{}"; // TODO: include more details
-    event.hsm_instance = "";  // TODO: fetch from db_meta
+    event.hsm_instance = vhsm::core::hsm_instance_id();
     v_notification_bus_.publish(event);
     return false;
   }
@@ -76,7 +77,7 @@ bool v_SignatureDispatcherCore_M1::v_dispatch(
             << R"(",)"
             << R"("ledger_block_num":0)";
   sign_event.detail_json = detail_ss.str();
-  sign_event.hsm_instance = ""; // TODO: fetch from db_meta
+  sign_event.hsm_instance = vhsm::core::hsm_instance_id();
   v_notification_bus_.publish(sign_event);
 
   // Asynchronously anchor the record on the Hyperledger Fabric ledger.  The

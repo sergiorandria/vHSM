@@ -139,8 +139,9 @@ Identity testIdentity(const std::string &cn) {
     PEM_write_bio_X509(out, x);
   char *data = nullptr;
   long len = BIO_get_mem_data(out, &data);
-  Identity ident = ok != 0 ? Identity(cn, std::string(data, len), privateKeyPEM)
-                           : Identity(cn, "", privateKeyPEM);
+  Identity ident = ok != 0 ? Identity(cn, std::string(data, len),
+                                       privateKeyPEM.str())
+                           : Identity(cn, "", privateKeyPEM.str());
 
   EVP_PKEY_free(pkey);
   X509_free(x);
@@ -217,7 +218,8 @@ struct FakeHttpClient : public HttpClient {
   void
   setTLSOptions(const std::optional<std::string> &,
                 const std::optional<std::string> & = std::nullopt,
-                const std::optional<std::string> & = std::nullopt) override {
+                const std::optional<std::string> & = std::nullopt,
+                bool = false) override {
     tlsCalls++;
   }
 
@@ -443,6 +445,28 @@ TEST(CaClientUnitTest, Constructor_WiresTlsOptions) {
   CaClient client(http, "http://ca:7054",
                   std::optional<std::string>("/tmp/ca.pem"));
   EXPECT_EQ(http->tlsCalls, 1);
+}
+
+// TLS must fail closed: with no CA bundle configured, the client refuses to
+// connect rather than silently disabling certificate verification.  This is a
+// security regression guard — the previous implementation set VERIFYPEER=0 in
+// this case, exposing callers to MITM.  allowInsecure=true is the only
+// sanctioned escape hatch and must be set explicitly.
+TEST(CaClientUnitTest, SetTLSOptionsWithoutCAFailsClosed) {
+  fabric::ca::CurlHttpClient http;
+
+  // No CA, default (insecure not allowed): must reject.
+  EXPECT_THROW(http.setTLSOptions(), std::runtime_error);
+  EXPECT_THROW(http.setTLSOptions(std::nullopt, std::nullopt, std::nullopt,
+                                  false),
+               std::runtime_error);
+
+  // Explicit opt-in for local test networks: must not throw.
+  EXPECT_NO_THROW(http.setTLSOptions(std::nullopt, std::nullopt, std::nullopt,
+                                     true));
+
+  // A provided CA bundle is always accepted.
+  EXPECT_NO_THROW(http.setTLSOptions("/tmp/ca.pem"));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

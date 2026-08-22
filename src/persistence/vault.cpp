@@ -1,7 +1,18 @@
 #include "vault.h"
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <io.h>
+#else
 #include <fcntl.h>
 #include <unistd.h>
+#endif
 
 #include <atomic>
 #include <cerrno>
@@ -16,6 +27,7 @@
 #include "../core/macros.h"
 #include "../crypto/aes_gcm.h"
 #include "kdf.h"
+#include "le_bytes.h"
 #include "vault_format.h"
 
 // Vault I/O layering: The class reads/writes the raw file bytes itself (using
@@ -23,40 +35,6 @@
 // crypto::AESGCM plus the key derivation to persistence::derive_vault_key.
 // Keeping the byte-level marshalling here means the crypto module sees only
 // simple byte vectors and never touches files — a clean separation of concerns.
-
-namespace {
-
-// Little-endian helpers. The vault format is explicitly LE so the same file
-// can be read on x86_64 and ARM64 without a conversion flag.
-void put_le32(std::vector<std::uint8_t> &out, std::uint32_t v) {
-  out.push_back(static_cast<std::uint8_t>(v & 0xFF));
-  out.push_back(static_cast<std::uint8_t>((v >> 8) & 0xFF));
-  out.push_back(static_cast<std::uint8_t>((v >> 16) & 0xFF));
-  out.push_back(static_cast<std::uint8_t>((v >> 24) & 0xFF));
-}
-
-std::uint32_t get_le32(const std::uint8_t *p) {
-  return static_cast<std::uint32_t>(p[0]) |
-         (static_cast<std::uint32_t>(p[1]) << 8) |
-         (static_cast<std::uint32_t>(p[2]) << 16) |
-         (static_cast<std::uint32_t>(p[3]) << 24);
-}
-
-void put_le64(std::vector<std::uint8_t> &out, std::uint64_t v) {
-  for (int i = 0; i < 8; ++i) {
-    out.push_back(static_cast<std::uint8_t>((v >> (8 * i)) & 0xFF));
-  }
-}
-
-std::uint64_t get_le64(const std::uint8_t *p) {
-  std::uint64_t v = 0;
-  for (int i = 7; i >= 0; --i) {
-    v = (v << 8) | p[i];
-  }
-  return v;
-}
-
-} // namespace
 
 namespace vhsm::persistence {
 
@@ -169,28 +147,96 @@ void Vault::save(const std::vector<u8> &payload) {
   // the directory. Readers never observe a partially-written vault.
   static std::atomic<unsigned> temp_counter{0};
   const unsigned seq = temp_counter.fetch_add(1);
+#ifdef _WIN32
+  const int pid = ::_getpid();
+#else
+  const int pid = ::getpid();
+#endif
   const std::filesystem::path tmp_path =
       path_.parent_path() /
-      (path_.filename().string() + ".tmp" + std::to_string(::getpid()) + "-" +
+      (path_.filename().string() + ".tmp" + std::to_string(pid) + "-" +
        std::to_string(seq));
 
+  // Build the vault image once — reused by both platform branches.
+  std::vector<std::uint8_t> out;
+  out.reserve(kVaultHeaderLen + enc.ciphertext.size());
+  out.insert(out.end(), kVaultMagic, kVaultMagic + 8);
+  put_le32(out, kVaultFormatVersion);
+  out.insert(out.end(), salt.begin(), salt.end());
+  put_le32(out, kVaultPbkdf2Iterations);
+  out.insert(out.end(), enc.nonce.begin(), enc.nonce.end());
+  out.insert(out.end(), enc.tag.begin(), enc.tag.end());
+  put_le64(out, enc.ciphertext.size());
+  out.insert(out.end(), enc.ciphertext.begin(), enc.ciphertext.end());
+
+#ifdef _WIN32
+  // Windows branch: use low-level _open/_write/_commit and MoveFileExW for
+  // atomic replace. _commit flushes to disk (fsync equivalent).
+  {
+    const int fd = ::_open(tmp_path.string().c_str(),
+                           _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY,
+                           _S_IREAD | _S_IWRITE);
+    if (fd < 0) {
+      throw std::runtime_error("Vault::save: cannot create temp file: " +
+                               tmp_path.string());
+    }
+    const std::size_t total = out.size();
+    std::size_t written = 0;
+    while (written < total) {
+      int n = ::_write(fd, out.data() + written,
+                       static_cast<unsigned>(total - written));
+      if (n < 0) {
+        const int err = errno;
+        ::_close(fd);
+        ::_unlink(tmp_path.string().c_str());
+        throw std::runtime_error("Vault::save: write failed: " +
+                                 std::string(std::strerror(err)));
+      }
+      written += static_cast<std::size_t>(n);
+    }
+    if (::_commit(fd) != 0) {
+      const int err = errno;
+      ::_close(fd);
+      ::_unlink(tmp_path.string().c_str());
+      throw std::runtime_error("Vault::save: commit failed: " +
+                               std::string(std::strerror(err)));
+    }
+    if (::_close(fd) != 0) {
+      const int err = errno;
+      ::_unlink(tmp_path.string().c_str());
+      throw std::runtime_error("Vault::save: close failed: " +
+                               std::string(std::strerror(err)));
+    }
+  }
+  // Atomic replace on Windows: MoveFileExW with REPLACE_EXISTING is atomic
+  // when source and target are on the same volume (we kept tmp in same dir).
+  if (!::MoveFileExW(tmp_path.wstring().c_str(), path_.wstring().c_str(),
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+    const DWORD err = ::GetLastError();
+    ::_unlink(tmp_path.string().c_str());
+    throw std::runtime_error("Vault::save: MoveFileExW failed: " +
+                             std::to_string(err));
+  }
+  // Flush directory via CreateFileW + FlushFileBuffers
+  {
+    std::filesystem::path dir_path = path_.parent_path();
+    if (dir_path.empty()) dir_path = ".";
+    HANDLE hDir = ::CreateFileW(
+        dir_path.wstring().c_str(), GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (hDir != INVALID_HANDLE_VALUE) {
+      ::FlushFileBuffers(hDir);
+      ::CloseHandle(hDir);
+    }
+  }
+#else
   {
     const int fd = ::open(tmp_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (fd < 0) {
       throw std::runtime_error("Vault::save: cannot create temp file: " +
                                tmp_path.string());
     }
-
-    std::vector<std::uint8_t> out;
-    out.reserve(kVaultHeaderLen + enc.ciphertext.size());
-    out.insert(out.end(), kVaultMagic, kVaultMagic + 8);
-    put_le32(out, kVaultFormatVersion);
-    out.insert(out.end(), salt.begin(), salt.end());
-    put_le32(out, kVaultPbkdf2Iterations);
-    out.insert(out.end(), enc.nonce.begin(), enc.nonce.end());
-    out.insert(out.end(), enc.tag.begin(), enc.tag.end());
-    put_le64(out, enc.ciphertext.size());
-    out.insert(out.end(), enc.ciphertext.begin(), enc.ciphertext.end());
 
     const std::size_t total = out.size();
     std::size_t written = 0;
@@ -235,6 +281,7 @@ void Vault::save(const std::vector<u8> &payload) {
     ::fsync(dfd);
     ::close(dfd);
   }
+#endif
 
   // A successful write means the vault on disk is authentic and readable.
   valid_ = true;

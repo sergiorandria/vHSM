@@ -47,7 +47,7 @@ The core module provides abstractions that everything else depends on: types, er
 - Why separate wipe() method: Allow explicit zeroing before destruction
 - Why write()/read() take offset+length: Bounds checking prevents overruns
 - Why equals() method (not operator==): Distinguish content equality from identity
-- Why VHSM_NODISCARD on getters: Catch accidental non-use of pointer
+- Why _VHSMXX_NODISCARD on getters: Catch accidental non-use of pointer
 
 **Design principle**: Memory-safe-by-design. Every byte of sensitive data is tracked, locked, and wiped.
 

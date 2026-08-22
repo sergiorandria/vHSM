@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(VirtualHSM LANGUAGES C CXX)
+project(VirtualHSM VERSION 1.0.0 LANGUAGES C CXX)
 
 # ---------------------------------------------------------------------------
 # Options
@@ -11,6 +11,16 @@ option(VHSM_ADMIN_GRPC       "Build gRPC admin server"                  ON)
 option(VHSM_NOTIFY_EMAIL     "Build email notification adapter"         ON)
 option(VHSM_NOTIFY_WEBHOOK   "Build webhook notification adapter"       ON)
 set(VHSM_NOTIFY_BUS_SIZE "1024" CACHE STRING "Notification ring buffer capacity")
+
+# ---------------------------------------------------------------------------
+# Version header generation
+# ---------------------------------------------------------------------------
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/vhsm/version.h
+    @ONLY
+)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/generated)
 
 # ---------------------------------------------------------------------------
 # C++ standard
@@ -184,3 +194,14 @@ add_subdirectory(tests)
 # Install
 # ---------------------------------------------------------------------------
 install(DIRECTORY include/ DESTINATION include)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/generated/vhsm/version.h DESTINATION include/vhsm)
+
+# Version info for downstream find_package
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/VirtualHSMConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/VirtualHSMConfigVersion.cmake"
+        DESTINATION lib/cmake/VirtualHSM)

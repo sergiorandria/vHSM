@@ -1,10 +1,9 @@
 #include <cstdlib>
-#include <fstream>
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <vector>
 
+#include "util.h"
 #include "fabric/grpc/grpc_connection.h"
 #include "fabric/identity/identity.h"
 #include "fabric/gateway/gateway.h"
@@ -13,16 +12,6 @@
 #include "fabric/gateway/transaction.h"
 
 namespace {
-
-std::string readFile(const std::string &path) {
-  std::ifstream in(path, std::ios::binary);
-  if (!in) {
-    throw std::runtime_error("cannot open " + path);
-  }
-  std::stringstream ss;
-  ss << in.rdbuf();
-  return ss.str();
-}
 
 std::string toHex(const std::string &s) {
   static const char *h = "0123456789abcdef";
@@ -46,9 +35,11 @@ int main(int argc, char **argv) {
   }
 
   const std::string target = argv[1];
-  const std::string tlsCa = readFile(argv[2]);
-  const std::string cert = readFile(argv[3]);
-  const std::string key = readFile(argv[4]);
+  const std::string tlsCa = examples::readFile(argv[2]);
+  const std::string cert = examples::readFile(argv[3]);
+  examples::expectPem(cert, "certificate");
+  examples::SecureString key = examples::readSecureFile(argv[4]);
+  examples::expectPem(std::string(key.data(), key.size()), "private key");
   const std::string mspId = argv[5];
   const std::string channel = argv[6];
   const std::string chaincode = argv[7];
@@ -77,7 +68,8 @@ int main(int argc, char **argv) {
       conn->waitForReady();
     }
 
-    fabric::identity::Identity id(mspId, cert, key);
+    fabric::identity::Identity id(mspId, cert, std::string(key.data(), key.size()));
+    key.wipe();  // the example no longer needs its copy; Identity holds its own
     auto gw = fabric::gateway::Gateway::connect(conn, id);
     auto net = gw->getNetwork(channel);
     auto contract = net->getContract(chaincode);

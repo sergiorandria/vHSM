@@ -7,7 +7,11 @@
 #include <cstring>
 #include <new>
 #include <stdexcept>
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <sys/mman.h>
+#endif
 
 #include "macros.h"
 #include "types.h"
@@ -57,26 +61,26 @@ public:
   SecureBuffer(SecureBuffer &&other) noexcept;
   SecureBuffer &operator=(SecureBuffer &&other) noexcept;
 
-  // WHY VHSM_NODISCARD on all getters: Forgetting to use the returned pointer
+  // WHY _VHSMXX_NODISCARD on all getters: Forgetting to use the returned pointer
   // is a bug.
   // [[nodiscard]] makes the compiler warn if you call data() and ignore the
   // result. This catches mistakes like: buffer.data(); buffer.write(...) — the
   // pointer is generated but unused, suggesting a logic error. Pointer to the
   // locked memory
-  VHSM_NODISCARD u8 *data() noexcept;
+  _VHSMXX_NODISCARD u8 *data() noexcept;
 
   // Const pointer to the locked memory
-  VHSM_NODISCARD const u8 *data() const noexcept;
+  _VHSMXX_NODISCARD const u8 *data() const noexcept;
 
   // WHY size() is in elements, byte_size() is in bytes: size() matches
   // container semantics (std::vector::size() returns element count).
   // byte_size() is explicit for those who need byte accuracy. Having both
   // avoids off-by-one errors from manual multiplication. Size of the buffer in
   // elements
-  VHSM_NODISCARD std::size_t size() const noexcept;
+  _VHSMXX_NODISCARD std::size_t size() const noexcept;
 
   // Size of the buffer in bytes
-  VHSM_NODISCARD std::size_t byte_size() const noexcept;
+  _VHSMXX_NODISCARD std::size_t byte_size() const noexcept;
 
   // WHY write/read take offset + length: Allows precise byte-level manipulation
   // without requiring callers to do pointer arithmetic. The methods validate
@@ -95,7 +99,7 @@ public:
   // another object). Using a named method (equals()) makes it explicit that
   // we're comparing contents, not identity. This avoids the pitfall of
   // accidental pointer comparison.
-  VHSM_NODISCARD
+  _VHSMXX_NODISCARD
   bool equals(const SecureBuffer &other) const noexcept;
 
   // WHY provide operator== and operator!=: Some contexts require these (e.g.,
@@ -120,9 +124,13 @@ private:
   // This symbol isn't exported from the shared
   // object, so it can't be interposed via LD_PRELOAD by an attacker
   // with code-execution-adjacent access to the process
+#if defined(__GNUC__) || defined(__clang__)
   __attribute__((nonnull(1))) __attribute__((warn_unused_result))
   __attribute__((noinline)) __attribute__((visibility("hidden"))) static bool
   v_sb_lock_pages(void *addr, std::size_t len);
+#else
+  static bool v_sb_lock_pages(void *addr, std::size_t len);
+#endif
 
   // Platform-specific: unlock pages.
   // All major platform have different way to handle pages.
@@ -136,11 +144,16 @@ private:
   // code-execution-adjacent access to the process (mirrors v_sb_lock_pages).
   // The public read()/write() perform all bounds/null validation before
   // calling these; they must never be invoked with unvalidated arguments.
+#if defined(__GNUC__) || defined(__clang__)
   __attribute__((visibility("hidden"))) __attribute__((noinline)) void
   __v_sb_write(std::size_t offset, const u8 *src, std::size_t len);
 
   __attribute__((visibility("hidden"))) __attribute__((noinline)) void
   __v_sb_read(std::size_t offset, u8 *dst, std::size_t len) const;
+#else
+  void __v_sb_write(std::size_t offset, const u8 *src, std::size_t len);
+  void __v_sb_read(std::size_t offset, u8 *dst, std::size_t len) const;
+#endif
 
   // Free the full mmap/VirtualAlloc region and reset all members to null.
   void v_sb_release() noexcept;

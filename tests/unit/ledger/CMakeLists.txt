@@ -1,4 +1,7 @@
-# Ledger Unit Tests
+# Ledger Unit Tests — only when ledger integration is enabled
+if(NOT VHSM_LEDGER)
+    return()
+endif()
 
 add_executable(vhsm_ledger_test
     ledger_client_test.cpp

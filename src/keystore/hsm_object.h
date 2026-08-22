@@ -106,9 +106,6 @@ public:
 
   virtual std::vector<u8> getPublicKeyInfo() const { return {}; }
   virtual size_t getKeySize() const noexcept { return 0; }
-  // virtual void            setSensitive(bool sensitive) noexcept { sensitive_
-  // = sensitive; } virtual void            setExtractable(bool extractable)
-  // noexcept { extractable_ = extractable; }
 
 protected:
   // WHY separate wipe() method (not just in destructor): Derived classes must

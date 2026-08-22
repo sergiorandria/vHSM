@@ -50,11 +50,16 @@ public:
    * @param caCertPath Path to CA certificate file for verification
    * @param certPath Path to client certificate file (for mTLS)
    * @param keyPath Path to client private key file (for mTLS)
+   * @param allowInsecure When false (default) a TLS connection requires a CA
+   *        bundle to verify the server against; with no CA configured the
+   *        client refuses to connect rather than falling back to an
+   *        unverified channel. Set true only for explicit local testing.
    */
   virtual void
   setTLSOptions(const std::optional<std::string> &caCertPath = std::nullopt,
                 const std::optional<std::string> &certPath = std::nullopt,
-                const std::optional<std::string> &keyPath = std::nullopt) = 0;
+                const std::optional<std::string> &keyPath = std::nullopt,
+                bool allowInsecure = false) = 0;
 };
 
 } // namespace ca

@@ -20,6 +20,7 @@
 #include "../persistence/vault.h"
 
 #include "../audit/audit_log.h"
+#include "../core/hsm_instance.h"
 #include "../ledger/ledger_worker.h"
 #include "../notification/bounded_notification_bus.h"
 #include "../notification/notification_bus.h"
@@ -161,7 +162,7 @@ void p11_publish_event(vhsm::notification::NotificationEvent::EventType type,
     event.actor = user_label.value_or("UNKNOWN");
     event.summary = summary;
     event.detail_json = detail_json;
-    event.hsm_instance = ""; // TODO: fetch from db_meta
+    event.hsm_instance = vhsm::core::hsm_instance_id();
     notification_bus->publish(event);
 
     audit_log->append(audit_event_type + "-" + std::to_string(created_at),

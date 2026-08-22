@@ -4,6 +4,7 @@
 #include <stdexcept>
 
 #include "../core/error.h"
+#include "le_bytes.h"
 #include "vault.h"
 
 // Serialization layout (all multi-byte integers little-endian):
@@ -44,34 +45,6 @@ enum : uint8_t {
 
 constexpr std::uint32_t KMagic = 0x5648534DU; // "VHSM"
 constexpr std::uint32_t KVersion = 1;
-
-void put_le32(std::vector<u8> &out, std::uint32_t v) {
-  out.push_back(static_cast<u8>(v & 0xFF));
-  out.push_back(static_cast<u8>((v >> 8) & 0xFF));
-  out.push_back(static_cast<u8>((v >> 16) & 0xFF));
-  out.push_back(static_cast<u8>((v >> 24) & 0xFF));
-}
-
-std::uint32_t get_le32(const u8 *p) {
-  return static_cast<std::uint32_t>(p[0]) |
-         (static_cast<std::uint32_t>(p[1]) << 8) |
-         (static_cast<std::uint32_t>(p[2]) << 16) |
-         (static_cast<std::uint32_t>(p[3]) << 24);
-}
-
-void put_le64(std::vector<u8> &out, std::uint64_t v) {
-  for (int i = 0; i < 8; ++i) {
-    out.push_back(static_cast<u8>((v >> (8 * i)) & 0xFF));
-  }
-}
-
-std::uint64_t get_le64(const u8 *p) {
-  std::uint64_t v = 0;
-  for (int i = 7; i >= 0; --i) {
-    v = (v << 8) | p[i];
-  }
-  return v;
-}
 
 } // namespace
 
