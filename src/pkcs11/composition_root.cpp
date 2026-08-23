@@ -19,6 +19,7 @@
 #include "../signature_store/db_schema.h"
 #include "../signature_store/notification_dispatcher.h"
 #include "../signature_store/notification_repository.h"
+#include "../signature_store/outbox_poller.h"
 #include "../signature_store/signature_dispatcher.h"
 
 #include "pkcs11_internal.h"
@@ -108,6 +109,19 @@ std::string resolve_db_path_for_container() {
   if (ec)
     return ":memory:";
   return db_path.string();
+}
+
+std::string resolve_fabric_config_dir() {
+  if (auto* env = std::getenv("VHSM_FABRIC_CONFIG_DIR")) return env;
+  if (std::filesystem::exists("/etc/vhsmd")) return "/etc/vhsmd";
+  // Dev fallback: repo layout when running without generated /etc/vhsmd
+  // (e.g., `ctest` on a fresh checkout). The Conf_with_fabric-CA dir is the
+  // source that `generate.sh` turns into /etc/vhsmd.
+  auto dev = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
+             "network" / "fabric_configuration" / "Conf_with_fabric-CA";
+  std::error_code ec;
+  if (std::filesystem::exists(dev, ec)) return dev.string();
+  return "/etc/vhsmd";
 }
 
 static void ensure_default_token_for_container() {
@@ -225,6 +239,16 @@ std::unique_ptr<AppContainer> create_app_container() {
       c->notif_dispatcher = std::move(disp);
     } catch (...) {
     }
+    // Outbox poller — replays PENDING event_outbox rows written
+    // transactionally by the dispatcher. Started after the dispatcher so
+    // the first poll sees the just-committed rows.
+    try {
+      c->outbox_poller =
+          std::make_unique<vhsm::signature_store::db::OutboxPoller>(
+              *c->db, *c->bus);
+      c->outbox_poller->start();
+    } catch (...) {
+    }
   }
 
 #ifdef VHSM_LEDGER
@@ -332,8 +356,12 @@ std::unique_ptr<AppContainer> create_app_container() {
 }
 
 void destroy_app_container(std::unique_ptr<AppContainer> &container) noexcept {
-  if (!container)
-    return;
+  if (!container) return;
+  // Stop outbox poller first so it doesn't race with dispatcher drain.
+  if (container->outbox_poller) {
+    container->outbox_poller->stop();
+    container->outbox_poller.reset();
+  }
   // Order mirrors p11_init.cpp: dispatcher → ledger → bus → db
   if (container->notif_dispatcher) {
     container->notif_dispatcher->drain_and_stop();

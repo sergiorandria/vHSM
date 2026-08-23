@@ -25,6 +25,7 @@ class AuditLog;
 namespace vhsm::signature_store::db {
 class NotificationDispatcher;
 class NotificationRepository;
+class OutboxPoller;
 class SignatureDispatcher;
 }
 namespace vhsm::persistence {
@@ -72,6 +73,12 @@ struct AppContainer {
   std::unique_ptr<vhsm::audit::AuditLog> audit_log;
   std::unique_ptr<vhsm::signature_store::db::NotificationRepository> notif_repo;
   std::unique_ptr<vhsm::signature_store::db::NotificationDispatcher> notif_dispatcher;
+  // Outbox poller for transactional SIGN_CREATED (replaces direct publish)
+  // WHY poller: The dispatcher writes SIGN_CREATED into `event_outbox` in the
+  // same DB transaction as `signature_records`. The poller replays PENDING rows
+  // on a timer and on C_Initialize, so a crash between DB commit and bus
+  // publish does not lose the event — no distributed transaction needed.
+  std::unique_ptr<vhsm::signature_store::db::OutboxPoller> outbox_poller;
 
   // Unified signature store port — points to either DbSignatureStore or
   // FabricSignatureStore depending on backend. SignatureDispatcher will be
@@ -107,6 +114,7 @@ void destroy_app_container(std::unique_ptr<AppContainer>& container) noexcept;
 
 // Helpers exposed for testing
 std::string resolve_db_path_for_container();
+std::string resolve_fabric_config_dir(); // /etc/vhsmd or network/... fallback
 
 } // namespace vhsm::pkcs11
 

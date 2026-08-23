@@ -11,8 +11,19 @@
 #include <vector>
 
 #include "macros.h"
+#include "../abi/error.h"
+#include "../abi/result.h"
 
 namespace vhsm::utils {
+
+/// WHY try_uuid_v4 returns Result: The original `uuid_v4()` throws on
+/// `BCryptGenRandom`/`getrandom` failure, which would unwind across the
+/// PKCS#11 C ABI boundary (`C_Sign` is `extern "C"` and must not throw).
+/// `try_uuid_v4()` is the ABI-friendly overload that carries the error as
+/// `std::error_code` in `vhsm::v1::Result<std::string>` so the caller can
+/// `if (!r) return CKR_DEVICE_ERROR` without catching, and the compiler
+/// enforces handling via `[[nodiscard]]` on `Result`.
+VHSM_NODISCARD vhsm::v1::Result<std::string> try_uuid_v4() noexcept;
 
 /// Generate a random UUID v4 string in canonical form:
 /// "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
