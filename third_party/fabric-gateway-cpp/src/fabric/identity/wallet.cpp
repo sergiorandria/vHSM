@@ -18,10 +18,22 @@
 #include <thread>
 #include <unordered_map>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <io.h>
+#include <fcntl.h>
+#else
 #include <fcntl.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
@@ -447,13 +459,13 @@ ensureWalletDirectory(const std::filesystem::path &dir) {
   } else if (ec) [[unlikely]] {
     return std::unexpected(ec);
   }
-  // Only the wallet directory itself is touched. The previous implementation
-  // walked and chmod'd every path component, which meant the *first* time it
-  // ran against a not-yet-existing path it would silently narrow permissions
-  // on ancestor directories it neither owns nor understands the purpose of.
+#ifndef _WIN32
+  // On POSIX: 0700 on the wallet directory itself. On Windows: ACLs are used
+  // instead and fs::permissions with owner_all is not meaningful, so skip.
   fs::permissions(dir, fs::perms::owner_all, fs::perm_options::replace, ec);
   if (ec) [[unlikely]]
     return std::unexpected(ec);
+#endif
   return {};
 }
 
@@ -468,6 +480,49 @@ writeFileAtomic(const std::filesystem::path &finalPath,
   fs::remove(tmp,
              ignored); // best-effort: clear a stale temp from a crashed writer
 
+#ifdef _WIN32
+  // Windows: _open/_write/_commit + MoveFileExW atomic replace.
+  const int fd = ::_open(tmp.string().c_str(),
+                         _O_WRONLY | _O_CREAT | _O_EXCL | _O_TRUNC | _O_BINARY,
+                         _S_IREAD | _S_IWRITE);
+  if (fd < 0) [[unlikely]] {
+    return std::unexpected(std::error_code(errno, std::generic_category()));
+  }
+  ScopeExit closeFd([fd] { ::_close(fd); });
+
+  std::size_t off = 0;
+  while (off < data.size()) {
+    const int written = ::_write(fd, data.data() + off,
+                                 static_cast<unsigned>(data.size() - off));
+    if (written < 0) [[unlikely]] {
+      if (errno == EINTR)
+        continue;
+      fs::remove(tmp, ignored);
+      return std::unexpected(std::error_code(errno, std::generic_category()));
+    }
+    off += static_cast<std::size_t>(written);
+  }
+
+  if (::_commit(fd) != 0) [[unlikely]] {
+    fs::remove(tmp, ignored);
+    return std::unexpected(std::error_code(errno, std::generic_category()));
+  }
+  closeFd.release();
+  if (::_close(fd) != 0) [[unlikely]] {
+    fs::remove(tmp, ignored);
+    return std::unexpected(std::error_code(errno, std::generic_category()));
+  }
+
+  // Atomic replace on same volume via MoveFileExW
+  if (!::MoveFileExW(tmp.wstring().c_str(), finalPath.wstring().c_str(),
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+    fs::remove(tmp, ignored);
+    return std::unexpected(
+        std::error_code(static_cast<int>(::GetLastError()),
+                        std::generic_category()));
+  }
+  return {};
+#else
   const int fd = ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_TRUNC,
                         static_cast<mode_t>(0600));
   if (fd < 0) [[unlikely]] {
@@ -512,9 +567,34 @@ writeFileAtomic(const std::filesystem::path &finalPath,
     return std::unexpected(renameEc);
   }
   return {};
+#endif
 }
 
 void secureDelete(const std::filesystem::path &path) noexcept {
+#ifdef _WIN32
+  const int fd = ::_open(path.string().c_str(), _O_WRONLY | _O_BINARY);
+  if (fd >= 0) {
+    std::error_code ec;
+    auto fsize = std::filesystem::file_size(path, ec);
+    if (!ec && fsize > 0) {
+      static constexpr std::size_t kChunk = 4096;
+      const std::array<std::byte, kChunk> zeros{};
+      std::size_t total = static_cast<std::size_t>(fsize);
+      std::size_t off = 0;
+      while (off < total) {
+        const std::size_t chunk = std::min(kChunk, total - off);
+        const int w = ::_write(fd, zeros.data(), static_cast<unsigned>(chunk));
+        if (w <= 0)
+          break;
+        off += static_cast<std::size_t>(w);
+      }
+      ::_commit(fd);
+    }
+    ::_close(fd);
+  }
+  std::error_code ignored;
+  std::filesystem::remove(path, ignored);
+#else
   const int fd = ::open(path.c_str(), O_WRONLY);
   if (fd >= 0) {
     struct stat st{};
@@ -536,6 +616,7 @@ void secureDelete(const std::filesystem::path &path) noexcept {
   }
   std::error_code ignored;
   std::filesystem::remove(path, ignored);
+#endif
 }
 
 // Two independent layers, because they guarantee different things:
@@ -579,6 +660,62 @@ private:
 
 enum class LockMode { Shared, Exclusive };
 
+#ifdef _WIN32
+class ProcessFileLock {
+public:
+  ProcessFileLock(const std::filesystem::path &lockPath, LockMode mode,
+                  std::chrono::milliseconds timeout) {
+    // On Windows use CreateFileW + LockFileEx. The lock file is opened with
+    // FILE_SHARE_READ|WRITE|DELETE so other processes can also open it; the
+    // actual exclusion comes from LockFileEx, not from the open itself.
+    h_ = ::CreateFileW(lockPath.wstring().c_str(), GENERIC_READ | GENERIC_WRITE,
+                       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                       nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h_ == INVALID_HANDLE_VALUE) [[unlikely]]
+      return;
+
+    DWORD flags = LOCKFILE_FAIL_IMMEDIATELY;
+    if (mode == LockMode::Exclusive)
+      flags |= LOCKFILE_EXCLUSIVE_LOCK;
+
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    std::chrono::milliseconds backoff{1};
+    OVERLAPPED ov{};
+    for (;;) {
+      if (::LockFileEx(h_, flags, 0, MAXDWORD, MAXDWORD, &ov) != 0) {
+        locked_ = true;
+        return;
+      }
+      DWORD err = ::GetLastError();
+      if (err != ERROR_LOCK_VIOLATION && err != ERROR_IO_PENDING) [[unlikely]]
+        return;
+      if (std::chrono::steady_clock::now() >= deadline)
+        return;
+      std::this_thread::sleep_for(backoff);
+      backoff = std::min(backoff * 2, std::chrono::milliseconds(50));
+    }
+  }
+
+  ~ProcessFileLock() {
+    if (h_ != INVALID_HANDLE_VALUE) {
+      if (locked_) {
+        OVERLAPPED ov{};
+        ::UnlockFileEx(h_, 0, MAXDWORD, MAXDWORD, &ov);
+      }
+      ::CloseHandle(h_);
+    }
+  }
+
+  ProcessFileLock(const ProcessFileLock &) = delete;
+  ProcessFileLock &operator=(const ProcessFileLock &) = delete;
+
+  [[nodiscard]] bool acquired() const noexcept { return locked_; }
+
+private:
+  HANDLE h_ = INVALID_HANDLE_VALUE;
+  bool locked_ = false;
+};
+#else
 class ProcessFileLock {
 public:
   ProcessFileLock(const std::filesystem::path &lockPath, LockMode mode,
@@ -623,6 +760,7 @@ private:
   int fd_ = -1;
   bool locked_ = false;
 };
+#endif
 
 } // namespace
 
