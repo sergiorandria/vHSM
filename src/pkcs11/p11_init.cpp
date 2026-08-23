@@ -35,7 +35,7 @@
 
 namespace vhsm::pkcs11 {
 
-static void ensure_default_token() {
+[[maybe_unused]] static void ensure_default_token() {
   auto &sm = vhsm::session::SlotManager::get_instance();
   if (!sm.get_slot(0)) {
     auto slot = std::make_shared<vhsm::keystore::Slot>(0);
@@ -56,7 +56,7 @@ static void ensure_default_token() {
 // the token exactly as it was.  Failures are swallowed here — a missing/wrong
 // password must not prevent C_Initialize from succeeding (the token just starts
 // in its fresh state).
-static void init_vault() {
+[[maybe_unused]] static void init_vault() {
   const char *path_cstr = std::getenv("VHSM_VAULT_PATH");
   const char *pass_cstr = std::getenv("VHSM_VAULT_PASSWORD");
   if (!path_cstr || !*path_cstr || !pass_cstr)
@@ -92,11 +92,11 @@ static void init_vault() {
 // Resolve the file-backed SQLite database path — delegates to the composition
 // root (DDD) so the path logic lives in one place (AppContainer). Keeps
 // p11_init as a thin adapter over the composition root.
-static std::string resolve_db_path() {
+[[maybe_unused]] static std::string resolve_db_path() {
   return resolve_db_path_for_container();
 }
 
-static void init_signature_dispatcher() {
+[[maybe_unused]] static void init_signature_dispatcher() {
   // Open (or create) the file-backed SQLite database and bootstrap the schema.
   // A second C_Initialize (after C_Finalize) reuses the same file, so
   // signature records persist across module load/unload cycles.
@@ -121,8 +121,7 @@ static void init_signature_dispatcher() {
   // and delivers via the channel adapters.
   g_boundedBus =
       std::make_unique<vhsm::notification::BoundedNotificationBus>(1024);
-  g_notificationBus =
-      std::unique_ptr<vhsm::notification::NotificationBus>(g_boundedBus.get());
+  g_notificationBus = g_boundedBus.get();
   g_auditLog = std::make_unique<P11AuditLog>();
 
   // Get the default token for the dispatcher
@@ -171,7 +170,7 @@ static void init_signature_dispatcher() {
                                             : "vHSMMSP");
 
       auto *db = g_dbConnection.get();
-      auto *bus = g_notificationBus.get();
+      auto *bus = g_notificationBus;
       g_ledgerWorker = std::make_unique<vhsm::ledger::LedgerWorker>(
           *g_ledgerClient, *bus,
           [db](const SignatureRecord &record,
@@ -214,9 +213,41 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
       // we always support locking; fine
     }
   }
-  ensure_default_token();
-  init_vault();
-  init_signature_dispatcher();
+  // Single wiring via AppContainer (DDD composition root) — eliminates
+  // duplicated resolve_db_path / init_vault / init_dispatcher logic.
+  try {
+    g_appContainer = create_app_container();
+    // Move ownership into legacy globals for ABI compat; g_appContainer
+    // is emptied after the moves and can be discarded.
+    g_dbConnection = std::move(g_appContainer->db);
+    g_boundedBus = std::move(g_appContainer->bounded_bus);
+    g_notificationBus = g_boundedBus.get();
+    g_auditLog = std::move(g_appContainer->audit_log);
+    g_notificationRepo = std::move(g_appContainer->notif_repo);
+    g_notificationDispatcher = std::move(g_appContainer->notif_dispatcher);
+#ifdef VHSM_LEDGER
+    g_ledgerClient = std::move(g_appContainer->ledger_client);
+    g_ledgerWorker = std::move(g_appContainer->ledger_worker);
+#endif
+    g_signatureDispatcher = std::move(g_appContainer->dispatcher);
+    g_vault = std::move(g_appContainer->vault);
+    g_appContainer.reset();
+  } catch (...) {
+    g_appContainer.reset();
+    g_dbConnection.reset();
+    g_boundedBus.reset();
+    g_notificationBus = nullptr;
+    g_auditLog.reset();
+    g_notificationRepo.reset();
+    g_notificationDispatcher.reset();
+#ifdef VHSM_LEDGER
+    g_ledgerClient.reset();
+    g_ledgerWorker.reset();
+#endif
+    g_signatureDispatcher.reset();
+    g_vault.reset();
+    return CKR_GENERAL_ERROR;
+  }
   g_initialized = true;
   return CKR_OK;
 }
@@ -256,9 +287,10 @@ CK_RV C_Finalize(CK_VOID_PTR pReserved) {
   g_ledgerClient.reset();
 #endif
   g_signatureDispatcher.reset();
-  g_notificationBus.reset();
+  g_notificationBus = nullptr;
   g_boundedBus.reset();
   g_dbConnection.reset();
+  g_appContainer.reset();
   vhsm::session::SlotManager::get_instance().reset();
   return CKR_OK;
 }

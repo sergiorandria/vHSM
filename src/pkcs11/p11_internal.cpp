@@ -1,6 +1,7 @@
 #include "pkcs11.h"
 #include "pkcs11_internal.h"
 #include "pkcs11_types.h"
+#include "composition_root.h"
 
 #include "../crypto/SecureRNG.h"
 #include "../crypto/aes_gcm.h"
@@ -65,10 +66,13 @@ using session::SessionManager;
 static const CK_OBJECT_CLASS g_cka_public_key = CKO_PUBLIC_KEY;
 static const CK_OBJECT_CLASS g_cka_private_key = CKO_PRIVATE_KEY;
 
+// AppContainer owns all services when C_Initialize uses composition root
+std::unique_ptr<AppContainer> g_appContainer;
+
 // SignatureDispatcher instance (initialized in C_Initialize)
 std::unique_ptr<vhsm::signature_store::db::SignatureDispatcher>
     g_signatureDispatcher;
-std::unique_ptr<vhsm::notification::NotificationBus> g_notificationBus;
+vhsm::notification::NotificationBus* g_notificationBus = nullptr;
 std::unique_ptr<vhsm::audit::AuditLog> g_auditLog;
 std::unique_ptr<vhsm::signature_store::db::IDbConnection> g_dbConnection;
 
@@ -133,7 +137,7 @@ vhsm::signature_store::db::IDbConnection *p11_db_connection() {
 }
 
 vhsm::notification::NotificationBus *p11_notification_bus() {
-  return g_notificationBus.get();
+  return g_notificationBus;
 }
 
 vhsm::audit::AuditLog *p11_audit_log() { return g_auditLog.get(); }
@@ -145,7 +149,7 @@ void p11_publish_event(vhsm::notification::NotificationEvent::EventType type,
                        const std::string &detail_json,
                        const std::optional<std::string> &user_label,
                        const std::string &audit_event_type) {
-  auto *notification_bus = g_notificationBus.get();
+  auto *notification_bus = g_notificationBus;
   auto *audit_log = g_auditLog.get();
   if (!notification_bus || !audit_log)
     return;
