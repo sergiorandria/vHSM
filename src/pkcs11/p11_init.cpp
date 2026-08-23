@@ -5,9 +5,13 @@
 
 #include "../keystore/slot.h"
 #include "../keystore/token.h"
+#ifdef VHSM_LEDGER
 #include "../ledger/ledger_client.h"
 #include "../ledger/ledger_entry.h"
 #include "../ledger/ledger_worker.h"
+#include "../signature_store/ledger_retry_queue.h"
+#include "../signature_store/signature_repository.h"
+#endif
 #include "../notification/bounded_notification_bus.h"
 #include "../notification/email_adapter.h"
 #include "../notification/grpc_push_adapter.h"
@@ -16,11 +20,9 @@
 #include "../persistence/vault.h"
 #include "../signature_store/db_connection.h"
 #include "../signature_store/db_schema.h"
-#include "../signature_store/ledger_retry_queue.h"
 #include "../signature_store/notification_dispatcher.h"
 #include "../signature_store/notification_repository.h"
 #include "../signature_store/signature_dispatcher.h"
-#include "../signature_store/signature_repository.h"
 #include "../core/hsm_instance.h"
 
 #include <cstdlib>
@@ -152,9 +154,8 @@ static void init_signature_dispatcher() {
     }
   }
 
-  // Ledger anchoring is optional: only construct the worker + client when a
-  // Fabric gateway endpoint is configured via environment variables.  When
-  // unset, the dispatcher runs in local-only mode (no blockchain anchoring).
+  // Ledger anchoring is optional: only when VHSM_LEDGER is ON and env is set.
+#ifdef VHSM_LEDGER
   const char *endpoint = std::getenv("VHSM_LEDGER_ENDPOINT");
   const char *cert = std::getenv("VHSM_LEDGER_CERT");
   const char *key = std::getenv("VHSM_LEDGER_KEY");
@@ -181,26 +182,27 @@ static void init_signature_dispatcher() {
           });
       g_ledgerWorker->start();
 
-      // Crash recovery: any record left with ledger_status='PENDING'
-      // (e.g. the worker was killed mid-submission) is re-submitted on
-      // startup so the ledger and the DB converge.
       vhsm::signature_store::db::LedgerRetryQueue retry(*db);
       for (auto &rec : retry.load_pending_records()) {
         g_ledgerWorker->submit_record(rec);
       }
     } catch (...) {
-      // Ledger setup failed (e.g., unreachable gateway); fall back to
-      // local-only mode.  Signatures are still persisted and audited.
       g_ledgerClient.reset();
       g_ledgerWorker.reset();
     }
   }
+#endif
 
   // Create SignatureDispatcher (may run with or without ledger anchoring).
   g_signatureDispatcher =
       std::make_unique<vhsm::signature_store::db::SignatureDispatcher>(
           *g_dbConnection, *token, *g_notificationBus, *g_auditLog,
-          g_ledgerWorker.get());
+#ifdef VHSM_LEDGER
+          g_ledgerWorker.get()
+#else
+          nullptr
+#endif
+      );
 }
 
 CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
@@ -246,11 +248,13 @@ CK_RV C_Finalize(CK_VOID_PTR pReserved) {
     g_notificationDispatcher.reset();
   }
   g_notificationRepo.reset();
+#ifdef VHSM_LEDGER
   if (g_ledgerWorker) {
     g_ledgerWorker->drain_and_stop();
     g_ledgerWorker.reset();
   }
   g_ledgerClient.reset();
+#endif
   g_signatureDispatcher.reset();
   g_notificationBus.reset();
   g_boundedBus.reset();

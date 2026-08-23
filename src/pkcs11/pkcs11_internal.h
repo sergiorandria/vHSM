@@ -27,9 +27,11 @@
 #include "../crypto/rsa.h"
 
 #include "../audit/audit_log.h"
+#ifdef VHSM_LEDGER
 #include "../ledger/ledger_client.h"
 #include "../ledger/ledger_entry.h"
 #include "../ledger/ledger_worker.h"
+#endif
 #include "../notification/bounded_notification_bus.h"
 #include "../notification/notification_bus.h"
 #include "../notification/notification_event.h"
@@ -109,10 +111,11 @@ extern std::unique_ptr<vhsm::signature_store::db::NotificationRepository>
     g_notificationRepo;
 extern std::unique_ptr<vhsm::notification::BoundedNotificationBus> g_boundedBus;
 
-// Ledger anchoring globals (optional; only populated when a Fabric gateway is
-// configured)
+// Ledger anchoring globals (optional; only when VHSM_LEDGER is ON)
+#ifdef VHSM_LEDGER
 extern std::unique_ptr<vhsm::ledger::LedgerClient> g_ledgerClient;
 extern std::unique_ptr<vhsm::ledger::LedgerWorker> g_ledgerWorker;
+#endif
 
 // Optional encrypted vault backing the default token (PLAN.md Phase 7).
 // Owned by the PKCS#11 module; opened/created in C_Initialize from

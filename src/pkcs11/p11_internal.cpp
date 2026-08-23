@@ -21,7 +21,9 @@
 
 #include "../audit/audit_log.h"
 #include "../core/hsm_instance.h"
+#ifdef VHSM_LEDGER
 #include "../ledger/ledger_worker.h"
+#endif
 #include "../notification/bounded_notification_bus.h"
 #include "../notification/notification_bus.h"
 #include "../notification/notification_event.h"
@@ -77,10 +79,11 @@ std::unique_ptr<vhsm::signature_store::db::NotificationRepository>
     g_notificationRepo;
 std::unique_ptr<vhsm::notification::BoundedNotificationBus> g_boundedBus;
 
-// Ledger anchoring globals (optional; only populated when a Fabric gateway is
-// configured)
+// Ledger anchoring globals (optional; only when VHSM_LEDGER is ON)
+#ifdef VHSM_LEDGER
 std::unique_ptr<vhsm::ledger::LedgerClient> g_ledgerClient;
 std::unique_ptr<vhsm::ledger::LedgerWorker> g_ledgerWorker;
+#endif
 
 // Optional encrypted vault backing the default token (PLAN.md Phase 7).
 std::unique_ptr<vhsm::persistence::Vault> g_vault;

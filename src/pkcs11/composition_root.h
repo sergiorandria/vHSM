@@ -8,10 +8,12 @@
 #include "../signature_store/db_connection.h"
 
 // Forward declares for impl to keep header light
+#ifdef VHSM_LEDGER
 namespace vhsm::ledger {
 class LedgerClient;
 class LedgerWorker;
 }
+#endif
 namespace vhsm::notification {
 class BoundedNotificationBus;
 class NotificationBus;
@@ -50,9 +52,11 @@ struct AppContainer {
   std::unique_ptr<vhsm::signature_store::db::NotificationRepository> notif_repo;
   std::unique_ptr<vhsm::signature_store::db::NotificationDispatcher> notif_dispatcher;
 
-  // Ledger (optional)
+  // Ledger (optional, only when VHSM_LEDGER is ON)
+#ifdef VHSM_LEDGER
   std::unique_ptr<vhsm::ledger::LedgerClient> ledger_client;
   std::unique_ptr<vhsm::ledger::LedgerWorker> ledger_worker;
+#endif
 
   // Signature pipeline
   std::unique_ptr<vhsm::signature_store::db::SignatureDispatcher> dispatcher;

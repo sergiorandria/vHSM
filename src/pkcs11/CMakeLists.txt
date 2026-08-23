@@ -32,8 +32,14 @@ target_link_libraries(vhsm_pkcs11
     vhsm_keystore
     vhsm_persistence
     vhsm_session
+    vhsm_signature_store
+    vhsm_notification
+    vhsm_threadpool
     OpenSSL::SSL
 )
+if(VHSM_LEDGER)
+    target_link_libraries(vhsm_pkcs11 PUBLIC vhsm_ledger)
+endif()
 
 # Shared module that can be loaded as a PKCS#11 .so
 add_library(vhsm_pkcs11_mod SHARED $<TARGET_OBJECTS:vhsm_pkcs11>)
@@ -49,5 +55,11 @@ target_link_libraries(vhsm_pkcs11_mod
     vhsm_keystore
     vhsm_persistence
     vhsm_session
+    vhsm_signature_store
+    vhsm_notification
+    vhsm_threadpool
     OpenSSL::SSL
 )
+if(VHSM_LEDGER)
+    target_link_libraries(vhsm_pkcs11_mod PUBLIC vhsm_ledger)
+endif()
