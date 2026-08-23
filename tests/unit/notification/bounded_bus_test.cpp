@@ -93,8 +93,9 @@ TEST(BoundedNotificationBusTest, PopTimeoutExpiresWithNoEvent) {
   EXPECT_FALSE(got);
   // Must have waited approximately the timeout (upper bound generous to avoid
   // flakes; lower bound shows it actually blocked).
-  EXPECT_GE(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(),
-            80);
+  EXPECT_GE(
+      std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(),
+      80);
 }
 
 TEST(BoundedNotificationBusTest, ZeroCapacityForcesMinimumOfOne) {

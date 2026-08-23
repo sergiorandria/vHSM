@@ -7,8 +7,8 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
-#include <windows.h>
 #include <io.h>
+#include <windows.h>
 #else
 #include <fcntl.h>
 #include <unistd.h>
@@ -153,9 +153,8 @@ void Vault::save(const std::vector<u8> &payload) {
   const int pid = ::getpid();
 #endif
   const std::filesystem::path tmp_path =
-      path_.parent_path() /
-      (path_.filename().string() + ".tmp" + std::to_string(pid) + "-" +
-       std::to_string(seq));
+      path_.parent_path() / (path_.filename().string() + ".tmp" +
+                             std::to_string(pid) + "-" + std::to_string(seq));
 
   // Build the vault image once — reused by both platform branches.
   std::vector<std::uint8_t> out;
@@ -220,7 +219,8 @@ void Vault::save(const std::vector<u8> &payload) {
   // Flush directory via CreateFileW + FlushFileBuffers
   {
     std::filesystem::path dir_path = path_.parent_path();
-    if (dir_path.empty()) dir_path = ".";
+    if (dir_path.empty())
+      dir_path = ".";
     HANDLE hDir = ::CreateFileW(
         dir_path.wstring().c_str(), GENERIC_READ,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,

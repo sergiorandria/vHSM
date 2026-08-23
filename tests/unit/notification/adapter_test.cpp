@@ -77,14 +77,15 @@ TEST(EmailAdapterTest, DeliversViaInjectedSender) {
 
 TEST(EmailAdapterTest, PropagatesSenderFailure) {
   EmailAdapter::Sender always_fail = [](const std::string &,
-                                         const std::string &) { return false; };
+                                        const std::string &) { return false; };
   EmailAdapter adapter(always_fail);
   const auto sub = make_subscriber("email", "bad@example.com");
   EXPECT_FALSE(adapter.deliver(sub, make_event()));
 }
 
 TEST(EmailAdapterTest, RenderMessageIncludesEventFields) {
-  const std::string msg = EmailAdapter::render_message(make_event(), "noreply@vhsm.local");
+  const std::string msg =
+      EmailAdapter::render_message(make_event(), "noreply@vhsm.local");
   EXPECT_NE(msg.find("test event"), std::string::npos);
   EXPECT_NE(msg.find("noreply@vhsm.local"), std::string::npos);
   EXPECT_NE(msg.find("source=signature_store"), std::string::npos);
@@ -176,8 +177,7 @@ TEST(GrpcPushAdapterTest, DeliversToAddressViaInjectedSender) {
 }
 
 TEST(GrpcPushAdapterTest, RenderPayloadIsValidJson) {
-  const std::string payload =
-      GrpcPushAdapter::render_payload(make_event());
+  const std::string payload = GrpcPushAdapter::render_payload(make_event());
   const auto json = nlohmann::json::parse(payload);
   EXPECT_EQ(json["source"], "signature_store");
 }

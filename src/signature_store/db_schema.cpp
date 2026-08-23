@@ -586,7 +586,8 @@ void DbSchema::migrate_v5_to_v6() {
     std::string stmt;
     while (std::getline(idx_stream, stmt, ';')) {
       auto first = stmt.find_first_not_of(" \t\r\n");
-      if (first == std::string::npos) continue;
+      if (first == std::string::npos)
+        continue;
       stmt = stmt.substr(first);
       if (!stmt.empty() && stmt.find("event_outbox") != std::string::npos) {
         tx.exec(stmt + ";");

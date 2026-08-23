@@ -9,40 +9,53 @@
 
 VHSM_ABI_NAMESPACE_BEGIN
 
-enum class VHSM_API Errc {
-  Ok = 0,
-  HostMemory = 1,
-  GeneralError = 2,
-  ArgumentsBad = 3,
-  BufferTooSmall = 4,
-  DeviceError = 5,
-  MechanismInvalid = 6,
-  PinIncorrect = 7,
-  SessionHandleInvalid = 8,
-  OperationNotInitialized = 9,
-  UserNotLoggedIn = 10,
+enum VHSM_API Errc {
+  Ok,
+  HostMemory,
+  GeneralError,
+  ArgumentsBad,
+  BufferTooSmall,
+  DeviceError,
+  MechanismInvalid,
+  PinIncorrect,
+  SessionHandleInvalid,
+  OperationNotInitialized,
+  UserNotLoggedIn,
 };
 
-inline const std::error_category& vhsm_category() noexcept {
+inline const std::error_category &vhsm_category() noexcept {
   struct VHSMErrorCategory : std::error_category {
-    const char* name() const noexcept override { return "vhsm"; }
+    const char *name() const noexcept override { return "vhsm"; }
     std::string message(int ev) const override {
       switch (static_cast<Errc>(ev)) {
-        case Errc::Ok: return "ok";
-        case Errc::HostMemory: return "host memory";
-        case Errc::GeneralError: return "general error";
-        case Errc::ArgumentsBad: return "arguments bad";
-        case Errc::BufferTooSmall: return "buffer too small";
-        case Errc::DeviceError: return "device error";
-        case Errc::MechanismInvalid: return "mechanism invalid";
-        case Errc::PinIncorrect: return "pin incorrect";
-        case Errc::SessionHandleInvalid: return "session handle invalid";
-        case Errc::OperationNotInitialized: return "operation not initialized";
-        case Errc::UserNotLoggedIn: return "user not logged in";
-        default: return "unknown vhsm error";
+      case Errc::Ok:
+        return "ok";
+      case Errc::HostMemory:
+        return "host memory";
+      case Errc::GeneralError:
+        return "general error";
+      case Errc::ArgumentsBad:
+        return "arguments bad";
+      case Errc::BufferTooSmall:
+        return "buffer too small";
+      case Errc::DeviceError:
+        return "device error";
+      case Errc::MechanismInvalid:
+        return "mechanism invalid";
+      case Errc::PinIncorrect:
+        return "pin incorrect";
+      case Errc::SessionHandleInvalid:
+        return "session handle invalid";
+      case Errc::OperationNotInitialized:
+        return "operation not initialized";
+      case Errc::UserNotLoggedIn:
+        return "user not logged in";
+      default:
+        return "unknown vhsm error";
       }
     }
   };
+
   static VHSMErrorCategory c;
   return c;
 }
@@ -53,8 +66,7 @@ inline std::error_code make_error_code(Errc e) noexcept {
 VHSM_ABI_NAMESPACE_END
 
 namespace std {
-template <>
-struct is_error_code_enum<vhsm::v1::Errc> : true_type {};
+template <> struct is_error_code_enum<vhsm::v1::Errc> : true_type {};
 } // namespace std
 
 #endif // VHSM_ABI_ERROR_H

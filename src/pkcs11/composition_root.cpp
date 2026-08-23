@@ -44,23 +44,28 @@ AppContainer &AppContainer::operator=(AppContainer &&) noexcept = default;
 // Keeps the port usable without requiring DB or Fabric.
 class InMemoryStore final : public vhsm::domain::signing::ISignatureStore {
 public:
-  std::optional<std::string> store(const SignatureRecord& rec) override {
+  std::optional<std::string> store(const SignatureRecord &rec) override {
     std::lock_guard<std::mutex> lk(mu_);
-    auto it = std::find_if(data_.begin(), data_.end(),
-                           [&](const auto& r) { return r.record_id == rec.record_id; });
-    if (it != data_.end()) return it->record_id;
+    auto it = std::find_if(data_.begin(), data_.end(), [&](const auto &r) {
+      return r.record_id == rec.record_id;
+    });
+    if (it != data_.end())
+      return it->record_id;
     data_.push_back(rec);
     return rec.record_id;
   }
-  std::optional<SignatureRecord> load(const std::string& id) const override {
+  std::optional<SignatureRecord> load(const std::string &id) const override {
     std::lock_guard<std::mutex> lk(mu_);
-    for (auto& r : data_) if (r.record_id == id) return r;
+    for (auto &r : data_)
+      if (r.record_id == id)
+        return r;
     return std::nullopt;
   }
   std::vector<SignatureRecord> list() const override {
     std::lock_guard<std::mutex> lk(mu_);
     return data_;
   }
+
 private:
   mutable std::mutex mu_;
   std::vector<SignatureRecord> data_;
@@ -72,10 +77,12 @@ static AppContainer::StoreBackend resolve_backend() {
 #else
   AppContainer::StoreBackend def = AppContainer::StoreBackend::Db;
 #endif
-  if (auto* env = std::getenv("VHSM_STORE_BACKEND")) {
+  if (auto *env = std::getenv("VHSM_STORE_BACKEND")) {
     std::string v(env);
-    if (v == "ledger") return AppContainer::StoreBackend::Ledger;
-    if (v == "db") return AppContainer::StoreBackend::Db;
+    if (v == "ledger")
+      return AppContainer::StoreBackend::Ledger;
+    if (v == "db")
+      return AppContainer::StoreBackend::Db;
   }
   return def;
 }
@@ -112,15 +119,21 @@ std::string resolve_db_path_for_container() {
 }
 
 std::string resolve_fabric_config_dir() {
-  if (auto* env = std::getenv("VHSM_FABRIC_CONFIG_DIR")) return env;
-  if (std::filesystem::exists("/etc/vhsmd")) return "/etc/vhsmd";
+  if (auto *env = std::getenv("VHSM_FABRIC_CONFIG_DIR"))
+    return env;
+  if (std::filesystem::exists("/etc/vhsmd"))
+    return "/etc/vhsmd";
   // Dev fallback: repo layout when running without generated /etc/vhsmd
   // (e.g., `ctest` on a fresh checkout). The Conf_with_fabric-CA dir is the
   // source that `generate.sh` turns into /etc/vhsmd.
-  auto dev = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
+  auto dev = std::filesystem::path(__FILE__)
+                 .parent_path()
+                 .parent_path()
+                 .parent_path() /
              "network" / "fabric_configuration" / "Conf_with_fabric-CA";
   std::error_code ec;
-  if (std::filesystem::exists(dev, ec)) return dev.string();
+  if (std::filesystem::exists(dev, ec))
+    return dev.string();
   return "/etc/vhsmd";
 }
 
@@ -197,7 +210,8 @@ std::unique_ptr<AppContainer> create_app_container() {
     // DB backend (default): file DB is primary store.
     c->db_path = resolve_db_path_for_container();
     c->db = vhsm::signature_store::db::make_sqlite_connection(c->db_path);
-    if (!c->db) return c;
+    if (!c->db)
+      return c;
     try {
       vhsm::signature_store::db::DbSchema schema(*c->db);
       schema.bootstrap();
@@ -244,8 +258,8 @@ std::unique_ptr<AppContainer> create_app_container() {
     // the first poll sees the just-committed rows.
     try {
       c->outbox_poller =
-          std::make_unique<vhsm::signature_store::db::OutboxPoller>(
-              *c->db, *c->bus);
+          std::make_unique<vhsm::signature_store::db::OutboxPoller>(*c->db,
+                                                                    *c->bus);
       c->outbox_poller->start();
     } catch (...) {
     }
@@ -265,13 +279,14 @@ std::unique_ptr<AppContainer> create_app_container() {
             std::getenv("VHSM_LEDGER_SERVER_NAME")
                 ? std::getenv("VHSM_LEDGER_SERVER_NAME")
                 : "",
-            std::getenv("VHSM_LEDGER_MSP_ID") ? std::getenv("VHSM_LEDGER_MSP_ID")
-                                              : "vHSMMSP");
+            std::getenv("VHSM_LEDGER_MSP_ID")
+                ? std::getenv("VHSM_LEDGER_MSP_ID")
+                : "vHSMMSP");
         auto *bus = c->bus;
         // For ledger backend, store directly via ledger; no DB retry queue.
         c->ledger_worker = std::make_unique<vhsm::ledger::LedgerWorker>(
             *c->ledger_client, *bus,
-            [](const SignatureRecord&, const vhsm::ledger::LedgerEntry&) {});
+            [](const SignatureRecord &, const vhsm::ledger::LedgerEntry &) {});
         c->ledger_worker->start();
       } catch (...) {
         c->ledger_client.reset();
@@ -293,13 +308,15 @@ std::unique_ptr<AppContainer> create_app_container() {
             std::getenv("VHSM_LEDGER_SERVER_NAME")
                 ? std::getenv("VHSM_LEDGER_SERVER_NAME")
                 : "",
-            std::getenv("VHSM_LEDGER_MSP_ID") ? std::getenv("VHSM_LEDGER_MSP_ID")
-                                              : "vHSMMSP");
+            std::getenv("VHSM_LEDGER_MSP_ID")
+                ? std::getenv("VHSM_LEDGER_MSP_ID")
+                : "vHSMMSP");
         auto *db = c->db.get();
         auto *bus = c->bus;
         c->ledger_worker = std::make_unique<vhsm::ledger::LedgerWorker>(
             *c->ledger_client, *bus,
-            [db](const SignatureRecord &rec, const vhsm::ledger::LedgerEntry &e) {
+            [db](const SignatureRecord &rec,
+                 const vhsm::ledger::LedgerEntry &e) {
               vhsm::signature_store::db::SignatureRepository repo(
                   *db, *p11_get_token(0));
               repo.update_ledger_fields(rec.record_id, e);
@@ -356,7 +373,8 @@ std::unique_ptr<AppContainer> create_app_container() {
 }
 
 void destroy_app_container(std::unique_ptr<AppContainer> &container) noexcept {
-  if (!container) return;
+  if (!container)
+    return;
   // Stop outbox poller first so it doesn't race with dispatcher drain.
   if (container->outbox_poller) {
     container->outbox_poller->stop();

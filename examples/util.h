@@ -101,6 +101,6 @@ inline void expectMasterKeyHex(const std::string &s) {
   }
 }
 
-}  // namespace examples
+} // namespace examples
 
-#endif  // EXAMPLES_UTIL_H
+#endif // EXAMPLES_UTIL_H

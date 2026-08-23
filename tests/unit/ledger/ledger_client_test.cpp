@@ -65,7 +65,8 @@ public:
   explicit MockLedgerClient(std::optional<LedgerEntry> entry = std::nullopt)
       : fake_entry(std::move(entry)) {}
 
-  std::optional<LedgerEntry> submit_record(const SignatureRecord &record) override {
+  std::optional<LedgerEntry>
+  submit_record(const SignatureRecord &record) override {
     ++submit_calls;
     submitted.push_back(record);
     if (fail_submits > 0) {
@@ -101,7 +102,9 @@ public:
 class RecordingBus : public NotificationBus {
 public:
   std::vector<NotificationEvent> events;
-  void publish(const NotificationEvent &event) override { events.push_back(event); }
+  void publish(const NotificationEvent &event) override {
+    events.push_back(event);
+  }
 };
 
 NotificationEvent last_of_type(const RecordingBus &bus,
@@ -189,7 +192,8 @@ TEST(LedgerWorkerTest, PublishesCommittedEventOnSuccess) {
     }
     worker.drain_and_stop();
     EXPECT_TRUE(found);
-    const auto ev = last_of_type(bus, NotificationEvent::EventType::LEDGER_COMMITTED);
+    const auto ev =
+        last_of_type(bus, NotificationEvent::EventType::LEDGER_COMMITTED);
     EXPECT_EQ(ev.source, "LedgerWorker");
     EXPECT_EQ(ev.severity, NotificationEvent::Severity::INFO);
   }
@@ -247,11 +251,10 @@ TEST(LedgerWorkerTest, RetriesTransientFailureThenSucceeds) {
   policy.delay_multiplier = 2;
 
   {
-    LedgerWorker worker(client, bus,
-                        [&](const SignatureRecord &, const LedgerEntry &) {
-                          ++callback_count;
-                        },
-                        policy);
+    LedgerWorker worker(
+        client, bus,
+        [&](const SignatureRecord &, const LedgerEntry &) { ++callback_count; },
+        policy);
     worker.start();
     worker.submit_record(make_record("rec-transient"));
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);

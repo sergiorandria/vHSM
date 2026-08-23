@@ -9,7 +9,7 @@
 *.user
 *.userosscache
 *.sln.docstates
-
+test_*
 .claude/
 .clangd
 .astylerc
@@ -397,3 +397,8 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+network/fabric_configuration/fabric-network/peer-data/
+network/fabric_configuration/fabric-network/channel-artifacts/
+network/fabric_configuration/fabric-network/configtx.yaml
+network/fabric_configuration/fabric-network/fabric-ca/
+network/fabric_configuration/fabric-network/organizations/

@@ -32,41 +32,41 @@ namespace {
 
 // Mock database that mimics sqlite_connection behavior for testing
 class MockDbConnection : public IDbConnection {
- public:
+public:
   MockDbConnection() = default;
 
-   DbResultSet query(const std::string& sql,
-                     const std::vector<std::string>& params = {}) override {
-     // Simple in-memory storage for db_meta
-     if (sql.find("SELECT value FROM db_meta WHERE key = ?") !=
-         std::string::npos) {
-       if (!params.empty() && params[0] == "instance_id") {
-         DbResultSet result;
-         if (!stored_instance_id_.empty()) {
-           // DbRow holds column values as vector<string>
-           DbRow row(std::vector<std::string>{stored_instance_id_});
-           result.rows_.push_back(std::move(row));
-         }
-         return result;
-       }
-     }
-     return DbResultSet();
-   }
+  DbResultSet query(const std::string &sql,
+                    const std::vector<std::string> &params = {}) override {
+    // Simple in-memory storage for db_meta
+    if (sql.find("SELECT value FROM db_meta WHERE key = ?") !=
+        std::string::npos) {
+      if (!params.empty() && params[0] == "instance_id") {
+        DbResultSet result;
+        if (!stored_instance_id_.empty()) {
+          // DbRow holds column values as vector<string>
+          DbRow row(std::vector<std::string>{stored_instance_id_});
+          result.rows_.push_back(std::move(row));
+        }
+        return result;
+      }
+    }
+    return DbResultSet();
+  }
 
-  i64 exec(const std::string& sql,
-           const std::vector<std::string>& params = {}) override {
+  i64 exec(const std::string &sql,
+           const std::vector<std::string> &params = {}) override {
     // Handle both legacy INSERT OR REPLACE and modern ON CONFLICT form
     if (sql.find("INSERT INTO db_meta") != std::string::npos) {
       if (params.size() >= 2 && params[0] == "instance_id") {
         stored_instance_id_ = params[1];
-        return 1;  // rows affected
+        return 1; // rows affected
       }
     }
     return 0;
   }
 
-  void with_transaction(
-      const std::function<void(IDbTransaction&)>& func) override {
+  void
+  with_transaction(const std::function<void(IDbTransaction &)> &func) override {
     (void)func;
     // Mock: no transaction needed for unit tests
   }
@@ -79,7 +79,7 @@ class MockDbConnection : public IDbConnection {
 class HsmInstanceIdTest : public ::testing::Test {};
 
 class DatabaseHsmInstanceProviderTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
     mock_db_ = std::make_unique<MockDbConnection>();
     provider_ = std::make_unique<DatabaseHsmInstanceProvider>(*mock_db_);
@@ -90,14 +90,14 @@ class DatabaseHsmInstanceProviderTest : public ::testing::Test {
 };
 
 class ProcessWideInstanceTest : public ::testing::Test {
- protected:
+protected:
   void TearDown() override {
     // Clear process-wide instance ID after each test
     vhsm::core::set_hsm_instance_id("");
   }
 };
 
-}  // namespace
+} // namespace
 
 // ===========================================================================
 // HsmInstanceId Tests
@@ -132,19 +132,19 @@ TEST_F(HsmInstanceIdTest, ImmutabilityAfterConstruction) {
 
   // Ensure value does not change
   EXPECT_EQ(id.value(), original);
-  EXPECT_EQ(id.value(), original);  // Call again to verify immutability
+  EXPECT_EQ(id.value(), original); // Call again to verify immutability
 }
 
 TEST_F(HsmInstanceIdTest, Copyable) {
   std::string uuid = "550e8400-e29b-41d4-a716-446655440000";
   HsmInstanceId id1(uuid);
-  HsmInstanceId id2 = id1;  // Copy construction
+  HsmInstanceId id2 = id1; // Copy construction
 
   EXPECT_EQ(id1, id2);
   EXPECT_EQ(id2.value(), uuid);
 
   HsmInstanceId id3("other");
-  id3 = id1;  // Copy assignment
+  id3 = id1; // Copy assignment
   EXPECT_EQ(id1, id3);
 }
 
@@ -165,7 +165,7 @@ TEST_F(DatabaseHsmInstanceProviderTest, CachesAfterFirstRead) {
 
   // Second call returns cached value (not the modified one)
   HsmInstanceId id2 = provider_->getInstanceId();
-  EXPECT_EQ(id2.value(), uuid);  // Still the original
+  EXPECT_EQ(id2.value(), uuid); // Still the original
 }
 
 TEST_F(DatabaseHsmInstanceProviderTest, ThrowsWhenNotSeeded) {
@@ -233,7 +233,7 @@ TEST_F(ProcessWideInstanceTest, OverwritesPreviousValue) {
 // ===========================================================================
 
 class HsmInstanceIntegrationTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() override {
     // Create a temporary in-memory SQLite database
     db_ = make_sqlite_connection(":memory:");

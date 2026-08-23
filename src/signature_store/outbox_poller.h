@@ -21,22 +21,23 @@ namespace vhsm::signature_store::db {
 
 class OutboxPoller {
 public:
-  OutboxPoller(IDbConnection& db, vhsm::notification::NotificationBus& bus,
-               std::chrono::milliseconds interval = std::chrono::milliseconds(500));
+  OutboxPoller(
+      IDbConnection &db, vhsm::notification::NotificationBus &bus,
+      std::chrono::milliseconds interval = std::chrono::milliseconds(500));
   ~OutboxPoller();
 
   void start();
   void stop() noexcept;
 
-  OutboxPoller(const OutboxPoller&) = delete;
-  OutboxPoller& operator=(const OutboxPoller&) = delete;
+  OutboxPoller(const OutboxPoller &) = delete;
+  OutboxPoller &operator=(const OutboxPoller &) = delete;
 
 private:
   void loop();
   void poll_once();
 
-  IDbConnection& db_;
-  vhsm::notification::NotificationBus& bus_;
+  IDbConnection &db_;
+  vhsm::notification::NotificationBus &bus_;
   std::chrono::milliseconds interval_;
   std::atomic<bool> running_{false};
   std::unique_ptr<std::thread> thread_;
