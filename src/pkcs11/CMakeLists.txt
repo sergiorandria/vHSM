@@ -3,6 +3,7 @@ add_library(vhsm_pkcs11 OBJECT)
 set(PKCS11_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/p11_internal.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/p11_init.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/composition_root.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/p11_slot.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/p11_session.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/p11_object.cpp

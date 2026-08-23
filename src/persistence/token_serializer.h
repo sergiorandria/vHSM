@@ -6,31 +6,15 @@
 #include <vector>
 
 #include "../core/types.h"
+#include "../domain/keystore/token_snapshot.h"
 #include "../keystore/token.h"
 
 namespace vhsm::persistence {
 
 class Vault; // defined in vault.h; forward-declared to avoid a heavy include
 
-struct TokenSnapshot {
-  std::string label;
-  std::string id;
-  CK_ULONG max_session_count;
-  CK_ULONG session_count;
-  CK_ULONG max_rw_session_count;
-  CK_ULONG rw_session_count;
-  CK_BBOOL token_initialized;
-  CK_BBOOL user_pin_set;
-  CK_BBOOL so_pin_set;
-  CK_BBOOL user_login_required;
-  CK_BBOOL so_login_required;
-  unsigned max_failed_attempts;
-  unsigned user_failed_attempts;
-  unsigned so_failed_attempts;
-  CK_BBOOL user_pin_locked;
-  CK_BBOOL so_pin_locked;
-  std::vector<u8> kek; // raw KEK (get_kek()); serialized as-is
-};
+// Re-export domain DTO for backward compat (DDD: persistence depends on domain)
+using TokenSnapshot = vhsm::domain::keystore::TokenSnapshot;
 
 // Serializes a TokenSnapshot into the versioned byte layout.
 // Throws std::runtime_error on invalid input.
