@@ -1,7 +1,7 @@
+#include "composition_root.h"
 #include "pkcs11.h"
 #include "pkcs11_internal.h"
 #include "pkcs11_types.h"
-#include "composition_root.h"
 
 #include "../keystore/slot.h"
 #include "../keystore/token.h"
@@ -12,6 +12,7 @@
 #include "../signature_store/ledger_retry_queue.h"
 #include "../signature_store/signature_repository.h"
 #endif
+#include "../core/hsm_instance.h"
 #include "../notification/bounded_notification_bus.h"
 #include "../notification/email_adapter.h"
 #include "../notification/grpc_push_adapter.h"
@@ -23,7 +24,6 @@
 #include "../signature_store/notification_dispatcher.h"
 #include "../signature_store/notification_repository.h"
 #include "../signature_store/signature_dispatcher.h"
-#include "../core/hsm_instance.h"
 
 #include <cstdlib>
 #include <cstring>

@@ -4,9 +4,9 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "../core/hsm_instance.h"
 #include "../persistence/token_serializer.h"
 #include "../persistence/vault.h"
-#include "../core/hsm_instance.h"
 
 namespace vhsm::admin {
 

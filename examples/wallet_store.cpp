@@ -2,9 +2,9 @@
 #include <iostream>
 #include <string>
 
-#include "util.h"
 #include "fabric/identity/identity.h"
 #include "fabric/identity/wallet.h"
+#include "util.h"
 
 // Store a PKI identity (cert + key + MSP ID) into a hardened wallet. The wallet
 // encrypts the private key at rest with AES-256-GCM; the wrapping key is taken
@@ -42,7 +42,8 @@ int main(int argc, char **argv) {
     // Wrapping key: from a file, not argv. Validated before use, then the
     // SecureString's destructor scrubs the in-memory copy.
     examples::SecureString masterKey = examples::readSecureFile(masterKeyFile);
-    examples::expectMasterKeyHex(std::string(masterKey.data(), masterKey.size()));
+    examples::expectMasterKeyHex(
+        std::string(masterKey.data(), masterKey.size()));
     setenv("FABRIC_WALLET_MASTER_KEY", masterKey.data(), 1);
 
     auto wres = fabric::identity::CustomHardenedWallet::create(walletDir);
@@ -56,7 +57,8 @@ int main(int argc, char **argv) {
       return 1;
     }
 
-    fabric::identity::Identity id(mspId, cert, std::string(key.data(), key.size()));
+    fabric::identity::Identity id(mspId, cert,
+                                  std::string(key.data(), key.size()));
     auto put = wallet.put(label, id);
     if (!put.has_value()) {
       std::cerr << "put failed: " << put.error().message() << "\n";

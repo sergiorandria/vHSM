@@ -20,8 +20,8 @@
 namespace vhsm::admin {
 
 HsmAdminServiceImpl::HsmAdminServiceImpl(
-    vhsm::signature_store::db::IDbConnection *db,
-    vhsm::keystore::Token *token, vhsm::ledger::LedgerClient *ledger_client,
+    vhsm::signature_store::db::IDbConnection *db, vhsm::keystore::Token *token,
+    vhsm::ledger::LedgerClient *ledger_client,
     vhsm::ledger::LedgerWorker *ledger_worker,
     vhsm::notification::NotificationBus *bus, vhsm::audit::AuditLog *audit_log)
     : db_(db), token_(token), ledger_client_(ledger_client),
@@ -210,9 +210,10 @@ HsmAdminServiceImpl::RestoreToken(::grpc::ServerContext * /*ctx*/,
   }
 }
 
-::grpc::Status HsmAdminServiceImpl::GetSignature(
-    ::grpc::ServerContext * /*ctx*/, const GetSignatureRequest *request,
-    GetSignatureResponse *response) {
+::grpc::Status
+HsmAdminServiceImpl::GetSignature(::grpc::ServerContext * /*ctx*/,
+                                  const GetSignatureRequest *request,
+                                  GetSignatureResponse *response) {
   if (!request || !response) {
     return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
                           "invalid request");
@@ -235,9 +236,10 @@ HsmAdminServiceImpl::RestoreToken(::grpc::ServerContext * /*ctx*/,
   return ::grpc::Status::OK;
 }
 
-::grpc::Status HsmAdminServiceImpl::QuerySignatures(
-    ::grpc::ServerContext * /*ctx*/, const SignatureQuery *request,
-    SignatureList *response) {
+::grpc::Status
+HsmAdminServiceImpl::QuerySignatures(::grpc::ServerContext * /*ctx*/,
+                                     const SignatureQuery *request,
+                                     SignatureList *response) {
   if (!request || !response) {
     return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
                           "invalid request");
@@ -255,8 +257,8 @@ HsmAdminServiceImpl::RestoreToken(::grpc::ServerContext * /*ctx*/,
   signature_store::db::SignatureQuery query(*db_, *token_);
   std::vector<std::string> ids;
   if (!request->key_fingerprint().empty()) {
-    ids = query.get_signature_ids_by_key_fingerprint(
-        request->key_fingerprint());
+    ids =
+        query.get_signature_ids_by_key_fingerprint(request->key_fingerprint());
   } else {
     ids = query.get_signature_ids_by_time_range(request->start_time(),
                                                 request->end_time());
@@ -282,9 +284,10 @@ HsmAdminServiceImpl::RestoreToken(::grpc::ServerContext * /*ctx*/,
   return ::grpc::Status::OK;
 }
 
-::grpc::Status HsmAdminServiceImpl::VerifySignature(
-    ::grpc::ServerContext * /*ctx*/, const VerifySignatureRequest *request,
-    VerifySignatureResponse *response) {
+::grpc::Status
+HsmAdminServiceImpl::VerifySignature(::grpc::ServerContext * /*ctx*/,
+                                     const VerifySignatureRequest *request,
+                                     VerifySignatureResponse *response) {
   if (!request || !response) {
     return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
                           "invalid request");
@@ -327,9 +330,10 @@ HsmAdminServiceImpl::RestoreToken(::grpc::ServerContext * /*ctx*/,
   return ::grpc::Status::OK;
 }
 
-::grpc::Status HsmAdminServiceImpl::ListPendingLedgerCommits(
-    ::grpc::ServerContext * /*ctx*/, const Empty * /*request*/,
-    PendingLedgerList *response) {
+::grpc::Status
+HsmAdminServiceImpl::ListPendingLedgerCommits(::grpc::ServerContext * /*ctx*/,
+                                              const Empty * /*request*/,
+                                              PendingLedgerList *response) {
   if (!response) {
     return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
                           "invalid request");
@@ -345,9 +349,10 @@ HsmAdminServiceImpl::RestoreToken(::grpc::ServerContext * /*ctx*/,
   return ::grpc::Status::OK;
 }
 
-::grpc::Status HsmAdminServiceImpl::RetryLedgerCommits(
-    ::grpc::ServerContext * /*ctx*/, const Empty * /*request*/,
-    RetryLedgerResponse *response) {
+::grpc::Status
+HsmAdminServiceImpl::RetryLedgerCommits(::grpc::ServerContext * /*ctx*/,
+                                        const Empty * /*request*/,
+                                        RetryLedgerResponse *response) {
   if (!response) {
     return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
                           "invalid request");
@@ -379,9 +384,10 @@ HsmAdminServiceImpl::RestoreToken(::grpc::ServerContext * /*ctx*/,
   return ::grpc::Status::OK;
 }
 
-::grpc::Status HsmAdminServiceImpl::AddSubscriber(
-    ::grpc::ServerContext * /*ctx*/, const Subscriber *request,
-    SubscriberResponse *response) {
+::grpc::Status
+HsmAdminServiceImpl::AddSubscriber(::grpc::ServerContext * /*ctx*/,
+                                   const Subscriber *request,
+                                   SubscriberResponse *response) {
   if (!request || !response) {
     return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
                           "invalid request");
@@ -412,9 +418,10 @@ HsmAdminServiceImpl::RestoreToken(::grpc::ServerContext * /*ctx*/,
   return ::grpc::Status::OK;
 }
 
-::grpc::Status HsmAdminServiceImpl::ListSubscribers(
-    ::grpc::ServerContext * /*ctx*/, const Empty * /*request*/,
-    SubscriberList *response) {
+::grpc::Status
+HsmAdminServiceImpl::ListSubscribers(::grpc::ServerContext * /*ctx*/,
+                                     const Empty * /*request*/,
+                                     SubscriberList *response) {
   if (!response) {
     return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
                           "invalid request");
@@ -437,9 +444,10 @@ HsmAdminServiceImpl::RestoreToken(::grpc::ServerContext * /*ctx*/,
   return ::grpc::Status::OK;
 }
 
-::grpc::Status HsmAdminServiceImpl::RemoveSubscriber(
-    ::grpc::ServerContext * /*ctx*/, const SubscriberIdRequest *request,
-    SubscriberResponse *response) {
+::grpc::Status
+HsmAdminServiceImpl::RemoveSubscriber(::grpc::ServerContext * /*ctx*/,
+                                      const SubscriberIdRequest *request,
+                                      SubscriberResponse *response) {
   if (!request || !response) {
     return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
                           "invalid request");
@@ -458,9 +466,10 @@ HsmAdminServiceImpl::RestoreToken(::grpc::ServerContext * /*ctx*/,
   return ::grpc::Status::OK;
 }
 
-::grpc::Status HsmAdminServiceImpl::QueryNotificationLog(
-    ::grpc::ServerContext * /*ctx*/, const NotificationLogQuery *request,
-    NotificationLogList *response) {
+::grpc::Status
+HsmAdminServiceImpl::QueryNotificationLog(::grpc::ServerContext * /*ctx*/,
+                                          const NotificationLogQuery *request,
+                                          NotificationLogList *response) {
   if (!request || !response) {
     return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
                           "invalid request");
@@ -474,9 +483,8 @@ HsmAdminServiceImpl::RestoreToken(::grpc::ServerContext * /*ctx*/,
   if (!request->subscriber_id().empty()) {
     subscriber_id = request->subscriber_id();
   }
-  auto entries =
-      repo.query_log(subscriber_id, request->since(),
-                     static_cast<int>(request->limit()));
+  auto entries = repo.query_log(subscriber_id, request->since(),
+                                static_cast<int>(request->limit()));
   for (const auto &e : entries) {
     auto *out = response->add_entries();
     out->set_id(e.id);

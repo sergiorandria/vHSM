@@ -2,8 +2,8 @@
 #include "pkcs11_internal.h"
 #include "pkcs11_types.h"
 
-#include "../core/system_hsm_clock.h"
 #include "../core/hsm_instance.h"
+#include "../core/system_hsm_clock.h"
 #include "../crypto/crypto_engine.h"
 #include "../signature_store/signature_dispatcher.h"
 

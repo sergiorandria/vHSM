@@ -1,6 +1,6 @@
 # Admin Unit Tests
 
-find_package(GTest REQUIRED)
+find_package(GTest QUIET)
 
 add_executable(vhsm_admin_test
     admin_service_test.cpp

@@ -40,6 +40,6 @@ inline std::uint64_t get_le64(const std::uint8_t *p) {
   return v;
 }
 
-}  // namespace vhsm::persistence
+} // namespace vhsm::persistence
 
-#endif  // VHSM_PERSISTENCE_LE_BYTES_H
+#endif // VHSM_PERSISTENCE_LE_BYTES_H

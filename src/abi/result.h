@@ -14,30 +14,25 @@
 
 VHSM_ABI_NAMESPACE_BEGIN
 
-template <typename T>
-using Result = std::expected<T, std::error_code>;
+template <typename T> using Result = std::expected<T, std::error_code>;
 
 using Status = std::error_code; // void-result alias: Result<void> is Status
 
 // Helpers — keep call sites terse and nodiscard-propagating.
-template <typename T>
-VHSM_NODISCARD inline Result<T> ok(T&& v) {
+template <typename T> VHSM_NODISCARD inline Result<T> ok(T &&v) {
   return Result<T>(std::forward<T>(v));
 }
 inline Result<void> ok() { return Result<void>{}; }
 
-template <typename T>
-VHSM_NODISCARD inline Result<T> err(std::error_code ec) {
+template <typename T> VHSM_NODISCARD inline Result<T> err(std::error_code ec) {
   return std::unexpected(ec);
 }
-inline Result<void> err(std::error_code ec) {
-  return std::unexpected(ec);
-}
+inline Result<void> err(std::error_code ec) { return std::unexpected(ec); }
 
 // Error category base for domain errors (e.g. CKR_* → std::error_code).
 class VHSM_HIDDEN VHSMErrorCategory : public std::error_category {
 public:
-  const char* name() const noexcept override { return "vhsm"; }
+  const char *name() const noexcept override { return "vhsm"; }
   std::string message(int ev) const override;
 };
 

@@ -3,14 +3,14 @@
 #include <string>
 #include <vector>
 
-#include "util.h"
+#include "fabric/gateway/contract.h"
+#include "fabric/gateway/gateway.h"
+#include "fabric/gateway/network.h"
+#include "fabric/gateway/transaction.h"
 #include "fabric/grpc/grpc_connection.h"
 #include "fabric/identity/identity.h"
 #include "fabric/identity/wallet.h"
-#include "fabric/gateway/gateway.h"
-#include "fabric/gateway/network.h"
-#include "fabric/gateway/contract.h"
-#include "fabric/gateway/transaction.h"
+#include "util.h"
 
 namespace {
 std::string toHex(const std::string &s) {
@@ -23,7 +23,7 @@ std::string toHex(const std::string &s) {
   }
   return out;
 }
-}  // namespace
+} // namespace
 
 // Connect to a Fabric gateway using an identity loaded from the hardened
 // wallet (no raw key material is handled by the application at runtime).
@@ -32,10 +32,11 @@ std::string toHex(const std::string &s) {
 //        <channel> <chaincode> <function> [submit|evaluate] [args...]
 int main(int argc, char **argv) {
   if (argc < 9) {
-    std::cerr << "usage: " << argv[0]
-              << " <target> <tlsCa> <walletDir> <masterKeyFile> <label>"
-                 " <channel> <chaincode> <function> [submit|evaluate] [args...]\n"
-              << "  masterKeyFile must contain 64 hex chars (32 bytes)\n";
+    std::cerr
+        << "usage: " << argv[0]
+        << " <target> <tlsCa> <walletDir> <masterKeyFile> <label>"
+           " <channel> <chaincode> <function> [submit|evaluate] [args...]\n"
+        << "  masterKeyFile must contain 64 hex chars (32 bytes)\n";
     return 2;
   }
   const std::string target = argv[1];
@@ -78,8 +79,8 @@ int main(int argc, char **argv) {
     }
     auto idres = wres.value().get(label);
     if (!idres.has_value()) {
-      std::cerr << "identity '" << label << "' not found: "
-                << idres.error().message() << "\n";
+      std::cerr << "identity '" << label
+                << "' not found: " << idres.error().message() << "\n";
       return 1;
     }
     fabric::identity::Identity id = *idres.value();
