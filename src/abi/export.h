@@ -3,6 +3,17 @@
 
 #include "../core/macros.h"
 
+// WHY default visibility is hidden: On ELF, every non-static symbol is
+// exported by default, which leaks internal helpers (e.g., SecureBuffer's
+// memcpy) into the dynamic symbol table. An attacker with code-execution-
+// adjacent access can then LD_PRELOAD a malicious `memcpy` and interpose
+// secret copies. Building with -fvisibility=hidden and marking only the
+// intentional ABI surface VHSM_API (default) keeps the .so's export table
+// minimal, lets LTO devirtualize hidden symbols, and makes `nm -D` auditable.
+// WHY Windows needs dllexport/dllimport: MSVC has no -fvisibility; the
+// export table is opt-in via __declspec. VHSM_BUILDING_DLL controls which
+// side of the import/export pair we are on.
+
 // VHSM_API — default visibility (exported). Everything else is hidden by
 // -fvisibility=hidden, so only these symbols appear in the .so/.dll.
 // VHSM_HIDDEN — explicitly hidden (internal, test-only, or LTO devirtualizable).
@@ -19,8 +30,12 @@
 #define VHSM_HIDDEN __attribute__((visibility("hidden")))
 #endif
 
-// Nodiscard — force callers to handle fallible results. MSVC needs the
-// attribute spelled without the extra brackets that GCC allows.
+// WHY nodiscard on every fallible Result: vHSM is a security boundary; a
+// caller that writes `ledger->submit(rec);` without checking the returned
+// `Result<void>` silently drops a ledger anchoring failure and the audit trail
+// diverges. `[[nodiscard]]` turns that into -Werror=unused-result, so the
+// compiler, not code review, enforces handling. MSVC spells the attribute
+// without the extra brackets that GCC allows, hence the three-way check.
 #ifndef VHSM_NODISCARD
 #if defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER)
 #define VHSM_NODISCARD [[nodiscard]]
@@ -29,6 +44,12 @@
 #endif
 #endif
 
+// WHY noinline + hidden for secret copies: The compiler is entitled to
+// inline a `memcpy` of a KEK and then eliminate the wipe as a dead store.
+// Marking the copy `noinline` and `hidden` forces an out-of-line, non-
+// interposable call (see SecureBuffer::__v_sb_write) so LD_PRELOAD cannot
+// replace it and LTO cannot reason about the wipe's liveness. Without this,
+// a single -O3 build could keep key material in a register.
 // Noinline + hidden — for secret copies (SecureBuffer, KEK) so LD_PRELOAD
 // cannot interpose the memcpy.
 #if defined(__GNUC__) || defined(__clang__)
@@ -37,6 +58,13 @@
 #define VHSM_NOINLINE_HIDDEN
 #endif
 
+// WHY versioned inline namespace: PKCS#11 is a stable C ABI, but the C++
+// layers (TokenSnapshot, ISignatureStore) will evolve. An inline namespace
+// `v1` lets us ship `v2` with breaking changes while keeping `v1` symbols
+// linkable for old binaries (dual ABI). Consumers write `vhsm::v1::Foo` for
+// pinning or `vhsm::Foo` for "current" via the alias below. Bumping the
+// inline namespace is cheaper than a SOVERSION bump and works on Windows
+// where SOVERSION is meaningless.
 // Versioned ABI namespace. Consumers write `vhsm::v1::Foo`; `vhsm::Foo` is an
 // alias to the current version. Bumping the inline namespace to `v2` keeps
 // `v1` linkable for existing binaries (dual ABI).

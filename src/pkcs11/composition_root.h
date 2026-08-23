@@ -33,6 +33,16 @@ class Vault;
 
 namespace vhsm::pkcs11 {
 
+// WHY a composition root: Before `AppContainer`, `p11_init.cpp:99` held 8
+// `g_*` globals (`g_dbConnection`, `g_ledgerWorker`, ...) each created in a
+// separate `init_*` helper with duplicated `resolve_db_path` logic. Tests
+// could not create an isolated DB (`:memory:`) without touching the globals,
+// and `VHSM_LEDGER` vs `VHSM_STORE_BACKEND=db|ledger` diverged. A single
+// `AppContainer` owns the whole object graph (`db → bus → ledger → dispatcher
+// → vault` in that order) so `create_app_container()` is the only place that
+// knows the wiring, `p11_init` becomes a thin `C_Initialize` adapter that
+// moves the container's members into the legacy globals, and tests can
+// `create_app_container()` with `:memory:` without polluting the process.
 // AppContainer — composition root (DDD application layer).
 // Owns all long-lived services that p11_init previously held as globals
 // (g_dbConnection, g_ledgerWorker, ...). Keeping them together makes the
