@@ -14,7 +14,7 @@ target_sources(vhsm_crypto
 )
 
 target_include_directories(vhsm_crypto
-    PUBLIC ${PROJECT_SOURCE_DIR}
+    PUBLIC ${PROJECT_SOURCE_DIR}/src
 )
 
 find_package(OpenSSL REQUIRED)

@@ -13,7 +13,7 @@ target_sources(vhsm_keystore
 )
 
 target_include_directories(vhsm_keystore
-    PUBLIC ${PROJECT_SOURCE_DIR}
+    PUBLIC ${PROJECT_SOURCE_DIR}/src
 )
 
 find_package(OpenSSL REQUIRED)

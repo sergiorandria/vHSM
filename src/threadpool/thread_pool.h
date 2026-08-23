@@ -13,7 +13,9 @@
 #include <utility>
 #include <vector>
 
+#ifndef _VHSMXX_HAVE_ATTRIBUTE_VISIBILITY
 #define _VHSMXX_HAVE_ATTRIBUTE_VISIBILITY
+#endif
 
 #include "../core/macros.h"
 #include "capability_token.h"

@@ -51,6 +51,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         -Wl,-z,relro,-z,now
     )
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
+    add_compile_definitions(_VHSMXX_HAVE_ATTRIBUTE_VISIBILITY)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     add_compile_options(
         /W4 /WX /GS /GL /sdl
