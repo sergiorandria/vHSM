@@ -1,5 +1,5 @@
-#include "error.h"
 #include "secure_buffer.h"
+#include "error.h"
 
 #include <cassert>
 #include <cstring>
@@ -43,10 +43,11 @@ std::size_t SecureBuffer::v_sb_round_up_to_page(std::size_t n) noexcept {
 
 bool SecureBuffer::v_sb_lock_pages(void *addr, std::size_t len) {
 #ifdef _WIN32
-  VHSM_CHECK_MSG(VirtualLock(addr, len), "SecureBuffer: VirtualLock failed (err=" +
-                             std::to_string(GetLastError()) +
-                             "). "
-                             "Consider raising the working set limit.");
+  VHSM_CHECK_MSG(VirtualLock(addr, len),
+                 "SecureBuffer: VirtualLock failed (err=" +
+                     std::to_string(GetLastError()) +
+                     "). "
+                     "Consider raising the working set limit.");
 #else
   if (::mlock(addr, len) != 0) {
     throw std::runtime_error(
@@ -89,7 +90,7 @@ void SecureBuffer::v_sb_secure_zero(void *addr, std::size_t len) noexcept {
 }
 
 SecureBuffer::SecureBuffer(std::size_t size) {
-   VHSM_CHECK_MSG(size != 0, "SecureBuffer: size must be > 0");
+  VHSM_CHECK_MSG(size != 0, "SecureBuffer: size must be > 0");
 
   const std::size_t ps = v_sb_page_size();
   const std::size_t data_pages = v_sb_round_up_to_page(size);

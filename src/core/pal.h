@@ -39,7 +39,7 @@ namespace vhsm::pal {
 // failure modes (`errno` vs `GetLastError`), so callers would otherwise
 // invert the check on one platform.
 // Memory locking — prevents swapping of sensitive buffers (KEK, DRBG state).
-inline bool lock_memory(void* addr, std::size_t len) noexcept {
+inline bool lock_memory(void *addr, std::size_t len) noexcept {
 #ifdef _WIN32
   return ::VirtualLock(addr, len) != 0;
 #else
@@ -53,7 +53,7 @@ inline bool lock_memory(void* addr, std::size_t len) noexcept {
 // `KeyWrap::~KeyWrap`) where throwing would `std::terminate`. Best-effort
 // unlock plus a preceding `OPENSSL_cleanse` is the only safe order: cleanse
 // first, then unlock, so the key is not swapped out between the two calls.
-inline void unlock_memory(void* addr, std::size_t len) noexcept {
+inline void unlock_memory(void *addr, std::size_t len) noexcept {
 #ifdef _WIN32
   ::VirtualUnlock(addr, len);
 #else

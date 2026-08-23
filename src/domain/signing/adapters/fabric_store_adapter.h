@@ -20,19 +20,20 @@ namespace vhsm::domain::signing {
 class FabricStoreAdapter final : public ISignatureStore {
 public:
 #ifdef VHSM_LEDGER
-  explicit FabricStoreAdapter(vhsm::ledger::LedgerClient& client)
+  explicit FabricStoreAdapter(vhsm::ledger::LedgerClient &client)
       : client_(client) {}
 
-  std::optional<std::string> store(const SignatureRecord& rec) override {
+  std::optional<std::string> store(const SignatureRecord &rec) override {
     // The ledger is the source of truth; submit_record is idempotent on
     // `record_id` because the chaincode's `RecordSignature` uses the id as
     // the key. A second submit with the same id is a no-op on Fabric.
     auto entry = client_.submit_record(rec);
-    if (!entry) return std::nullopt;
+    if (!entry)
+      return std::nullopt;
     return rec.record_id;
   }
 
-  std::optional<SignatureRecord> load(const std::string& id) const override {
+  std::optional<SignatureRecord> load(const std::string &id) const override {
     // Ledger `GetRecord` is not yet indexed by `record_id` in the chaincode;
     // for now return nullopt and let callers fall back to `list()`.
     // A future chaincode with `GetRecordByID` will make this efficient.
@@ -48,13 +49,13 @@ public:
   }
 
 private:
-  vhsm::ledger::LedgerClient& client_;
+  vhsm::ledger::LedgerClient &client_;
 #else
 public:
-  std::optional<std::string> store(const SignatureRecord&) override {
+  std::optional<std::string> store(const SignatureRecord &) override {
     return std::nullopt;
   }
-  std::optional<SignatureRecord> load(const std::string&) const override {
+  std::optional<SignatureRecord> load(const std::string &) const override {
     return std::nullopt;
   }
   std::vector<SignatureRecord> list() const override { return {}; }

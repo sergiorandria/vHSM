@@ -31,4 +31,15 @@
 #define _VHSMXX_CORE_VERSION 1ULL
 #endif
 
+#ifdef __GNUC__
+
+#ifndef _VHSMXX_DEFAULT_ABI_TAG
+#define _VHSMXX_DEFAULT_ABI_TAG __attribute((__abi_tag__("1.0.0")))
+#else
+#define _VHSMXX_DEFAULT_ABI_TAG
+#endif // _VHSMXX_DEFAULT_ABI_TAG
+
+#define _VHSMXX_USE_ABI1 _VHSMXX_DEFAULT_ABI_TAG
+
+#endif // __GNUC__
 #endif // VHSM_MACROS_H

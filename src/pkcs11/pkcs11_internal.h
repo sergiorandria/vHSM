@@ -105,7 +105,7 @@ extern std::unique_ptr<AppContainer> g_appContainer;
 // C_Initialize uses the composition root; still owning for backward compat)
 extern std::unique_ptr<vhsm::signature_store::db::SignatureDispatcher>
     g_signatureDispatcher;
-extern vhsm::notification::NotificationBus* g_notificationBus;
+extern vhsm::notification::NotificationBus *g_notificationBus;
 extern std::unique_ptr<vhsm::audit::AuditLog> g_auditLog;
 extern std::unique_ptr<vhsm::signature_store::db::IDbConnection> g_dbConnection;
 

@@ -1,7 +1,7 @@
+#include "composition_root.h"
 #include "pkcs11.h"
 #include "pkcs11_internal.h"
 #include "pkcs11_types.h"
-#include "composition_root.h"
 
 #include "../crypto/SecureRNG.h"
 #include "../crypto/aes_gcm.h"
@@ -72,7 +72,7 @@ std::unique_ptr<AppContainer> g_appContainer;
 // SignatureDispatcher instance (initialized in C_Initialize)
 std::unique_ptr<vhsm::signature_store::db::SignatureDispatcher>
     g_signatureDispatcher;
-vhsm::notification::NotificationBus* g_notificationBus = nullptr;
+vhsm::notification::NotificationBus *g_notificationBus = nullptr;
 std::unique_ptr<vhsm::audit::AuditLog> g_auditLog;
 std::unique_ptr<vhsm::signature_store::db::IDbConnection> g_dbConnection;
 

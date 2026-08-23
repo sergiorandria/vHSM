@@ -13,8 +13,8 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
-#include <windows.h>
 #include <bcrypt.h>
+#include <windows.h>
 #pragma comment(lib, "bcrypt.lib")
 #else
 #include <cerrno>
@@ -137,11 +137,13 @@ std::vector<u8> SecureRNG::get_system_entropy(const std::string &source_path) {
   while (off < entropy.size()) {
     ssize_t n = ::getrandom(entropy.data() + off, entropy.size() - off, 0);
     if (n < 0) {
-      if (errno == EINTR) continue;
+      if (errno == EINTR)
+        continue;
       break; // fall back to file
     }
     off += static_cast<std::size_t>(n);
-    if (off == entropy.size()) return entropy;
+    if (off == entropy.size())
+      return entropy;
   }
   // Fallback: read from the requested source_path (usually /dev/urandom)
   if (off != entropy.size()) {

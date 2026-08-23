@@ -11,13 +11,13 @@
 
 #include <nlohmann/json.hpp>
 
+#include "fabric/crypto/secure_string.h"
 #include "fabric/gateway/contract.h"
 #include "fabric/gateway/gateway.h"
 #include "fabric/gateway/network.h"
 #include "fabric/gateway/transaction.h"
 #include "fabric/grpc/grpc_connection.h"
 #include "fabric/grpc/grpc_status.h"
-#include "fabric/crypto/secure_string.h"
 #include "fabric/identity/identity.h"
 #include "fabric/protoutil/proposal_builder.h"
 
