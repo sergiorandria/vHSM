@@ -1,0 +1,44 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "linux-ninja",
+      "displayName": "Linux Ninja (default)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "VHSM_ADMIN_GRPC": "OFF",
+        "VHSM_LEDGER": "OFF",
+        "VHSM_DB_BACKEND": "sqlite"
+      }
+    },
+    {
+      "name": "windows-msvc",
+      "displayName": "Windows MSVC + vcpkg",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VHSM_ADMIN_GRPC": "OFF",
+        "VHSM_LEDGER": "OFF",
+        "VHSM_DB_BACKEND": "sqlite"
+      },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "asan",
+      "displayName": "ASan (Linux)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-asan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined",
+        "VHSM_LEDGER": "OFF"
+      }
+    }
+  ]
+}

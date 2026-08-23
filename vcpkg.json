@@ -1,0 +1,18 @@
+{
+  "name": "virtual-hsm",
+  "version": "1.0.0",
+  "description": "Virtual HSM with PKCS#11 and Fabric ledger — Windows/Linux",
+  "dependencies": [
+    "openssl",
+    {
+      "name": "grpc",
+      "features": ["codegen"]
+    },
+    "protobuf",
+    "sqlite3",
+    "curl",
+    "nlohmann-json",
+    "gtest"
+  ],
+  "builtin-baseline": "2024-07-12"
+}
