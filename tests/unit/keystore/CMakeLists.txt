@@ -1,6 +1,6 @@
 # Keystore Unit Tests
 
-find_package(GTest REQUIRED)
+find_package(GTest QUIET)
 
 add_executable(vhsm_keystore_test
     attribute_store_test.cpp
@@ -25,7 +25,7 @@ add_test(NAME vhsm_keystore_test COMMAND vhsm_keystore_test)
 # Placeholder - add test files as they are created
 
 find_package(OpenSSL REQUIRED)
-find_package(GTest REQUIRED)
+find_package(GTest QUIET)
 
 add_executable(vhsm_fingerprint_test
     key_fingerprint_test.cpp
