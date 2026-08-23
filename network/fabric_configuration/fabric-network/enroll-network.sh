@@ -34,7 +34,6 @@ mkdir -p "$HOST_ORG_ROOT"
 fca_client() {
     local HOME_REL="$1"; shift
     docker run --rm --network "$NETWORK_NAME" \
-        --user "$(id -u):$(id -g)" \
         -e FABRIC_CA_CLIENT_HOME="/organizations/${HOME_REL}" \
         -v "${HOST_ORG_ROOT}:/organizations" \
         "$CA_CLIENT_IMAGE" fabric-ca-client "$@"
@@ -96,6 +95,10 @@ enroll_identity() {
     local CA_HOST="ca.${CA_SHORT}"
     local CA_NAME="ca-${CA_SHORT}"
 
+    # Idempotence : si un run précédent a laissé des artefacts partiels
+    # (ex: script interrompu après une erreur), on repart d'un dossier propre
+    # pour cette identité plutôt que d'accumuler plusieurs clés/certs.
+    rm -rf "${HOST_ORG_ROOT}/${DEST_REL}/msp" "${HOST_ORG_ROOT}/${DEST_REL}/tls-tmp" "${HOST_ORG_ROOT}/${DEST_REL}/tls"
     mkdir -p "${HOST_ORG_ROOT}/${DEST_REL}/msp" "${HOST_ORG_ROOT}/${DEST_REL}/tls-tmp"
 
     # --- certificat MSP (signature) ---
@@ -114,12 +117,16 @@ enroll_identity() {
 
     local TLS_DIR="${HOST_ORG_ROOT}/${DEST_REL}/tls"
     mkdir -p "$TLS_DIR"
-    cp "${HOST_ORG_ROOT}/${DEST_REL}/tls-tmp/signcerts/"*.pem "${TLS_DIR}/server.crt"
-    cp "${HOST_ORG_ROOT}/${DEST_REL}/tls-tmp/keystore/"*_sk "${TLS_DIR}/server.key"
+    # On utilise `ls -t | head -1` plutôt qu'un simple glob : si jamais
+    # plusieurs fichiers correspondent (run précédent non nettoyé, etc.),
+    # on prend le plus récent au lieu de faire échouer `cp` silencieusement
+    # ou de copier le mauvais fichier.
+    cp "$(ls -t "${HOST_ORG_ROOT}/${DEST_REL}/tls-tmp/signcerts/"*.pem | head -1)" "${TLS_DIR}/server.crt"
+    cp "$(ls -t "${HOST_ORG_ROOT}/${DEST_REL}/tls-tmp/keystore/"*_sk | head -1)" "${TLS_DIR}/server.key"
     if [ -d "${HOST_ORG_ROOT}/${DEST_REL}/tls-tmp/tlscacerts" ]; then
-        cp "${HOST_ORG_ROOT}/${DEST_REL}/tls-tmp/tlscacerts/"*.pem "${TLS_DIR}/ca.crt"
+        cp "$(ls -t "${HOST_ORG_ROOT}/${DEST_REL}/tls-tmp/tlscacerts/"*.pem | head -1)" "${TLS_DIR}/ca.crt"
     else
-        cp "${HOST_ORG_ROOT}/${DEST_REL}/tls-tmp/cacerts/"*.pem "${TLS_DIR}/ca.crt"
+        cp "$(ls -t "${HOST_ORG_ROOT}/${DEST_REL}/tls-tmp/cacerts/"*.pem | head -1)" "${TLS_DIR}/ca.crt"
     fi
     rm -rf "${HOST_ORG_ROOT}/${DEST_REL}/tls-tmp"
 
