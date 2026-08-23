@@ -33,6 +33,46 @@ AppContainer::~AppContainer() = default;
 AppContainer::AppContainer(AppContainer &&) noexcept = default;
 AppContainer &AppContainer::operator=(AppContainer &&) noexcept = default;
 
+// In-memory store for tests / fallback when no backend is configured.
+// Keeps the port usable without requiring DB or Fabric.
+class InMemoryStore final : public vhsm::domain::signing::ISignatureStore {
+public:
+  std::optional<std::string> store(const SignatureRecord& rec) override {
+    std::lock_guard<std::mutex> lk(mu_);
+    auto it = std::find_if(data_.begin(), data_.end(),
+                           [&](const auto& r) { return r.record_id == rec.record_id; });
+    if (it != data_.end()) return it->record_id;
+    data_.push_back(rec);
+    return rec.record_id;
+  }
+  std::optional<SignatureRecord> load(const std::string& id) const override {
+    std::lock_guard<std::mutex> lk(mu_);
+    for (auto& r : data_) if (r.record_id == id) return r;
+    return std::nullopt;
+  }
+  std::vector<SignatureRecord> list() const override {
+    std::lock_guard<std::mutex> lk(mu_);
+    return data_;
+  }
+private:
+  mutable std::mutex mu_;
+  std::vector<SignatureRecord> data_;
+};
+
+static AppContainer::StoreBackend resolve_backend() {
+#ifdef VHSM_STORE_BACKEND_ledger
+  AppContainer::StoreBackend def = AppContainer::StoreBackend::Ledger;
+#else
+  AppContainer::StoreBackend def = AppContainer::StoreBackend::Db;
+#endif
+  if (auto* env = std::getenv("VHSM_STORE_BACKEND")) {
+    std::string v(env);
+    if (v == "ledger") return AppContainer::StoreBackend::Ledger;
+    if (v == "db") return AppContainer::StoreBackend::Db;
+  }
+  return def;
+}
+
 std::string resolve_db_path_for_container() {
   const char *explicit_path = std::getenv("VHSM_DB_PATH");
   if (explicit_path && *explicit_path)
@@ -108,18 +148,44 @@ std::unique_ptr<AppContainer> create_app_container() {
   ensure_default_token_for_container();
 
   auto c = std::make_unique<AppContainer>();
-  c->db_path = resolve_db_path_for_container();
-  c->db = vhsm::signature_store::db::make_sqlite_connection(c->db_path);
-  if (!c->db)
-    return c;
+  c->backend = resolve_backend();
 
-  try {
-    vhsm::signature_store::db::DbSchema schema(*c->db);
-    schema.bootstrap();
-    c->instance_id = schema.get_instance_id();
+  // Mutually exclusive backends: only one is wired.
+  if (c->backend == AppContainer::StoreBackend::Ledger) {
+#ifdef VHSM_LEDGER
+    // Ledger backend: no DB, use Fabric as primary store.
+    // Instance ID is still derived from a local DB file for correlation,
+    // but signatures themselves go to the ledger. For true ledger-only,
+    // we keep a tiny local DB just for instance_id; alternatively, ledger
+    // could provide it. For now, create a minimal :memory: DB for meta.
+    c->db_path = ":memory:";
+    c->db = vhsm::signature_store::db::make_sqlite_connection(c->db_path);
+    if (c->db) {
+      try {
+        vhsm::signature_store::db::DbSchema schema(*c->db);
+        schema.bootstrap();
+        c->instance_id = schema.get_instance_id();
+        vhsm::core::set_hsm_instance_id(c->instance_id);
+      } catch (...) {
+      }
+    }
+#else
+    c->instance_id = "ledger-no-build";
     vhsm::core::set_hsm_instance_id(c->instance_id);
-  } catch (...) {
-    return c;
+#endif
+  } else {
+    // DB backend (default): file DB is primary store.
+    c->db_path = resolve_db_path_for_container();
+    c->db = vhsm::signature_store::db::make_sqlite_connection(c->db_path);
+    if (!c->db) return c;
+    try {
+      vhsm::signature_store::db::DbSchema schema(*c->db);
+      schema.bootstrap();
+      c->instance_id = schema.get_instance_id();
+      vhsm::core::set_hsm_instance_id(c->instance_id);
+    } catch (...) {
+      return c;
+    }
   }
 
   c->bounded_bus =
@@ -127,11 +193,15 @@ std::unique_ptr<AppContainer> create_app_container() {
   c->bus = c->bounded_bus.get();
   c->audit_log = std::make_unique<P11AuditLog>();
 
-  auto *token = p11_get_token(0);
-  if (!token)
-    return c;
+  // Unified store port: in-memory for now, DB or ledger adapters can be
+  // swapped here without changing callers. Tests use InMemoryStore.
+  c->store = std::make_unique<InMemoryStore>();
 
-  if (c->db) {
+  auto *token = p11_get_token(0);
+  if (!token) return c;
+
+  // Notification pipeline only makes sense with DB backend (needs tables).
+  if (c->backend == AppContainer::StoreBackend::Db && c->db) {
     try {
       c->notif_repo =
           std::make_unique<vhsm::signature_store::db::NotificationRepository>(
@@ -152,35 +222,66 @@ std::unique_ptr<AppContainer> create_app_container() {
   }
 
 #ifdef VHSM_LEDGER
-  const char *endpoint = std::getenv("VHSM_LEDGER_ENDPOINT");
-  const char *cert = std::getenv("VHSM_LEDGER_CERT");
-  const char *key = std::getenv("VHSM_LEDGER_KEY");
-  if (endpoint && cert && key && *endpoint && *cert && *key) {
-    try {
-      c->ledger_client = std::make_unique<vhsm::ledger::LedgerClient>(
-          endpoint, cert, key,
-          std::getenv("VHSM_LEDGER_CA") ? std::getenv("VHSM_LEDGER_CA") : "",
-          std::getenv("VHSM_LEDGER_SERVER_NAME")
-              ? std::getenv("VHSM_LEDGER_SERVER_NAME")
-              : "",
-          std::getenv("VHSM_LEDGER_MSP_ID") ? std::getenv("VHSM_LEDGER_MSP_ID")
-                                            : "vHSMMSP");
-      auto *db = c->db.get();
-      auto *bus = c->bus;
-      c->ledger_worker = std::make_unique<vhsm::ledger::LedgerWorker>(
-          *c->ledger_client, *bus,
-          [db](const SignatureRecord &rec, const vhsm::ledger::LedgerEntry &e) {
-            vhsm::signature_store::db::SignatureRepository repo(
-                *db, *p11_get_token(0));
-            repo.update_ledger_fields(rec.record_id, e);
-          });
-      c->ledger_worker->start();
-      vhsm::signature_store::db::LedgerRetryQueue retry(*db);
-      for (auto &rec : retry.load_pending_records())
-        c->ledger_worker->submit_record(rec);
-    } catch (...) {
-      c->ledger_client.reset();
-      c->ledger_worker.reset();
+  // Ledger worker only for ledger backend and when endpoint is configured.
+  if (c->backend == AppContainer::StoreBackend::Ledger) {
+    const char *endpoint = std::getenv("VHSM_LEDGER_ENDPOINT");
+    const char *cert = std::getenv("VHSM_LEDGER_CERT");
+    const char *key = std::getenv("VHSM_LEDGER_KEY");
+    if (endpoint && cert && key && *endpoint && *cert && *key) {
+      try {
+        c->ledger_client = std::make_unique<vhsm::ledger::LedgerClient>(
+            endpoint, cert, key,
+            std::getenv("VHSM_LEDGER_CA") ? std::getenv("VHSM_LEDGER_CA") : "",
+            std::getenv("VHSM_LEDGER_SERVER_NAME")
+                ? std::getenv("VHSM_LEDGER_SERVER_NAME")
+                : "",
+            std::getenv("VHSM_LEDGER_MSP_ID") ? std::getenv("VHSM_LEDGER_MSP_ID")
+                                              : "vHSMMSP");
+        auto *bus = c->bus;
+        // For ledger backend, store directly via ledger; no DB retry queue.
+        c->ledger_worker = std::make_unique<vhsm::ledger::LedgerWorker>(
+            *c->ledger_client, *bus,
+            [](const SignatureRecord&, const vhsm::ledger::LedgerEntry&) {});
+        c->ledger_worker->start();
+      } catch (...) {
+        c->ledger_client.reset();
+        c->ledger_worker.reset();
+      }
+    }
+  } else {
+    // DB backend: keep previous complementary ledger anchoring as deprecated
+    // path, but only if caller explicitly set ledger env. Since backends are
+    // now exclusive, this path is deprecated and will be removed.
+    const char *endpoint = std::getenv("VHSM_LEDGER_ENDPOINT");
+    const char *cert = std::getenv("VHSM_LEDGER_CERT");
+    const char *key = std::getenv("VHSM_LEDGER_KEY");
+    if (endpoint && cert && key && *endpoint && *cert && *key) {
+      try {
+        c->ledger_client = std::make_unique<vhsm::ledger::LedgerClient>(
+            endpoint, cert, key,
+            std::getenv("VHSM_LEDGER_CA") ? std::getenv("VHSM_LEDGER_CA") : "",
+            std::getenv("VHSM_LEDGER_SERVER_NAME")
+                ? std::getenv("VHSM_LEDGER_SERVER_NAME")
+                : "",
+            std::getenv("VHSM_LEDGER_MSP_ID") ? std::getenv("VHSM_LEDGER_MSP_ID")
+                                              : "vHSMMSP");
+        auto *db = c->db.get();
+        auto *bus = c->bus;
+        c->ledger_worker = std::make_unique<vhsm::ledger::LedgerWorker>(
+            *c->ledger_client, *bus,
+            [db](const SignatureRecord &rec, const vhsm::ledger::LedgerEntry &e) {
+              vhsm::signature_store::db::SignatureRepository repo(
+                  *db, *p11_get_token(0));
+              repo.update_ledger_fields(rec.record_id, e);
+            });
+        c->ledger_worker->start();
+        vhsm::signature_store::db::LedgerRetryQueue retry(*db);
+        for (auto &rec : retry.load_pending_records())
+          c->ledger_worker->submit_record(rec);
+      } catch (...) {
+        c->ledger_client.reset();
+        c->ledger_worker.reset();
+      }
     }
   }
 #endif
