@@ -842,23 +842,23 @@ option(VHSM_LEDGER_CHAINCODE "Fabric chaincode name"         "signature_ledger")
       Université, vHSM operator)
 - [x] Write `configtx.yaml` defining the channel and endorsement policy (e.g.
       `AND('JuryMSP.peer','UniversiteMSP.peer')`)
-- [ ] Implement and deploy `chaincode/signature_ledger` (Go): `RecordSignature`, `GetRecord`
+- [x] Implement and deploy `chaincode/signature_ledger` (Go): `RecordSignature`, `GetRecord` (deploy to a live network pending)
 - [x] Implement `ledger/ledger_entry.h` — `LedgerEntry` struct
-- [ ] Implement `ledger/ledger_client.cpp` — `submit_record()`, `get_record()` via Fabric Gateway SDK
-- [ ] Implement `ledger/ledger_worker.cpp` — background thread, queue drain, retry backoff
-- [ ] Wire `LedgerWorker::start()` into `C_Initialize` hook (even if PKCS#11 not built yet)
+- [x] Implement `ledger/ledger_client.cpp` — `submit_record()`, `get_record()` via Fabric Gateway SDK
+- [x] Implement `ledger/ledger_worker.cpp` — background thread, queue drain, retry backoff
+- [x] Wire `LedgerWorker::start()` into `C_Initialize` hook (even if PKCS#11 not built yet)
 - [ ] Integration tests: live transaction submission, retrieval, cross-check
 - [ ] Negative test: transaction submitted without sufficient endorsement is rejected
 - [ ] Test crash-recovery: kill worker mid-submission, restart, verify `PENDING` rows re-submitted
 
 ### Phase 6 — Notification System (Week 8)
 
-- [ ] Implement `notification_event.h` with `LEDGER_COMMIT_FAILED` / `LEDGER_VERIFY_FAILED` types
-- [ ] Implement `notification_bus.cpp` — lock-free ring buffer
-- [ ] Implement `notification_dispatcher.cpp` — background thread, subscriber resolution, retry
-- [ ] Implement `adapters/email_adapter.cpp`, `webhook_adapter.cpp`, `grpc_push_adapter.cpp`
-- [ ] Wire `NotificationBus::publish()` into `SignatureDispatcher`, `KeyStore`, `LedgerWorker`
-- [ ] Unit tests: bus overflow, retry, adapter mock
+- [x] Implement `notification_event.h` with `LEDGER_COMMIT_FAILED` / `LEDGER_VERIFY_FAILED` types
+- [x] Implement `notification_bus.cpp` — lock-free ring buffer
+- [x] Implement `notification_dispatcher.cpp` — background thread, subscriber resolution, retry
+- [x] Implement `adapters/email_adapter.cpp`, `webhook_adapter.cpp`, `grpc_push_adapter.cpp`
+- [x] Wire `NotificationBus::publish()` into `SignatureDispatcher`, `KeyStore`, `LedgerWorker` (keystore key-lifecycle events deferred pending Open Question #4)
+- [x] Unit tests: bus overflow, retry, adapter mock
 - [ ] Integration tests: `C_Sign` → email to MailHog; `LEDGER_COMMIT_FAILED` → webhook
 - [ ] Manual test: all 3 team members receive `SIGN_CREATED` + `LEDGER_COMMIT_FAILED` end-to-end
 

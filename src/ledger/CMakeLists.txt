@@ -8,7 +8,7 @@ target_sources(vhsm_ledger
 )
 
 target_include_directories(vhsm_ledger
-    PUBLIC ${PROJECT_SOURCE_DIR}
+    PUBLIC ${PROJECT_SOURCE_DIR}/src
 )
 
 # fabric-gateway-cpp transitively provides the gRPC++, protobuf, OpenSSL and

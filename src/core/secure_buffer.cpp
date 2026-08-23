@@ -1,3 +1,4 @@
+#include "error.h"
 #include "secure_buffer.h"
 
 #include <cassert>
@@ -42,12 +43,10 @@ std::size_t SecureBuffer::v_sb_round_up_to_page(std::size_t n) noexcept {
 
 bool SecureBuffer::v_sb_lock_pages(void *addr, std::size_t len) {
 #ifdef _WIN32
-  if (!VirtualLock(addr, len)) {
-    throw std::runtime_error("SecureBuffer: VirtualLock failed (err=" +
+  VHSM_CHECK_MSG(VirtualLock(addr, len), "SecureBuffer: VirtualLock failed (err=" +
                              std::to_string(GetLastError()) +
                              "). "
                              "Consider raising the working set limit.");
-  }
 #else
   if (::mlock(addr, len) != 0) {
     throw std::runtime_error(
@@ -90,9 +89,7 @@ void SecureBuffer::v_sb_secure_zero(void *addr, std::size_t len) noexcept {
 }
 
 SecureBuffer::SecureBuffer(std::size_t size) {
-  if (size == 0) {
-    throw std::runtime_error("SecureBuffer: size must be > 0");
-  }
+   VHSM_CHECK_MSG(size != 0, "SecureBuffer: size must be > 0");
 
   const std::size_t ps = v_sb_page_size();
   const std::size_t data_pages = v_sb_round_up_to_page(size);
@@ -260,6 +257,7 @@ void SecureBuffer::read(std::size_t offset, u8 *dst, std::size_t len) const {
   __v_sb_read(offset, dst, len);
 }
 
+#if defined(__GNUC__) || defined(__clang__)
 __attribute__((visibility("hidden"))) __attribute__((noinline)) void
 SecureBuffer::__v_sb_write(std::size_t offset, const u8 *src, std::size_t len) {
   ::memcpy(data_ + offset, src, len);
@@ -269,6 +267,17 @@ __attribute__((visibility("hidden"))) __attribute__((noinline)) void
 SecureBuffer::__v_sb_read(std::size_t offset, u8 *dst, std::size_t len) const {
   ::memcpy(dst, data_ + offset, len);
 }
+#else
+void SecureBuffer::__v_sb_write(std::size_t offset, const u8 *src,
+                                std::size_t len) {
+  ::memcpy(data_ + offset, src, len);
+}
+
+void SecureBuffer::__v_sb_read(std::size_t offset, u8 *dst,
+                               std::size_t len) const {
+  ::memcpy(dst, data_ + offset, len);
+}
+#endif
 
 void SecureBuffer::write(std::size_t offset, const u8 *src, std::size_t len) {
   // Zero-length copies are a no-op; see read() for the null/memcpy rationale.

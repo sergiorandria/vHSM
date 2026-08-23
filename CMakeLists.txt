@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(VirtualHSM LANGUAGES C CXX)
+project(VirtualHSM VERSION 1.0.0 LANGUAGES C CXX)
 
 # ---------------------------------------------------------------------------
 # Options
@@ -11,6 +11,28 @@ option(VHSM_ADMIN_GRPC       "Build gRPC admin server"                  ON)
 option(VHSM_NOTIFY_EMAIL     "Build email notification adapter"         ON)
 option(VHSM_NOTIFY_WEBHOOK   "Build webhook notification adapter"       ON)
 set(VHSM_NOTIFY_BUS_SIZE "1024" CACHE STRING "Notification ring buffer capacity")
+set(VHSM_STORE_BACKEND "db" CACHE STRING "Signature store backend: db|ledger")
+set_property(CACHE VHSM_STORE_BACKEND PROPERTY STRINGS db ledger)
+
+# Mutually exclusive backends: ledger is alternative to DB, not complementary.
+# When STORE_BACKEND=ledger, force VHSM_LEDGER ON so Fabric code is built.
+if(VHSM_STORE_BACKEND STREQUAL "ledger")
+  set(VHSM_LEDGER ON CACHE BOOL "" FORCE)
+endif()
+
+# ---------------------------------------------------------------------------
+# Version header generation
+# ---------------------------------------------------------------------------
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/vhsm/version.h
+    @ONLY
+)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/generated)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# Peak: include ABI hardening flags for every target via the helper.
+include(cmake/CompilerFlags.cmake)
 
 # ---------------------------------------------------------------------------
 # C++ standard
@@ -41,6 +63,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         -Wl,-z,relro,-z,now
     )
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
+    add_compile_definitions(_VHSMXX_HAVE_ATTRIBUTE_VISIBILITY)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     add_compile_options(
         /W4 /WX /GS /GL /sdl
@@ -155,11 +178,13 @@ endif()
 # ---------------------------------------------------------------------------
 add_compile_definitions(
     VHSM_DB_BACKEND_${VHSM_DB_BACKEND}          # e.g. VHSM_DB_BACKEND_sqlite
+    VHSM_STORE_BACKEND_${VHSM_STORE_BACKEND}    # e.g. VHSM_STORE_BACKEND_db
     $<$<BOOL:${VHSM_ASYNC_DB}>:VHSM_ASYNC_DB>
     $<$<BOOL:${VHSM_REQUIRE_DB}>:VHSM_REQUIRE_DB>
     $<$<BOOL:${VHSM_ADMIN_GRPC}>:VHSM_ADMIN_GRPC>
     $<$<BOOL:${VHSM_NOTIFY_EMAIL}>:VHSM_NOTIFY_EMAIL>
     $<$<BOOL:${VHSM_NOTIFY_WEBHOOK}>:VHSM_NOTIFY_WEBHOOK>
+    $<$<BOOL:${VHSM_LEDGER}>:VHSM_LEDGER>
     VHSM_NOTIFY_BUS_SIZE=${VHSM_NOTIFY_BUS_SIZE}
 )
 
@@ -184,3 +209,14 @@ add_subdirectory(tests)
 # Install
 # ---------------------------------------------------------------------------
 install(DIRECTORY include/ DESTINATION include)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/generated/vhsm/version.h DESTINATION include/vhsm)
+
+# Version info for downstream find_package
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/VirtualHSMConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/VirtualHSMConfigVersion.cmake"
+        DESTINATION lib/cmake/VirtualHSM)

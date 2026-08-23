@@ -20,7 +20,7 @@ target_sources(vhsm_persistence
 )
 
 target_include_directories(vhsm_persistence
-    PUBLIC ${PROJECT_SOURCE_DIR}
+    PUBLIC ${PROJECT_SOURCE_DIR}/src
 )
 
 target_link_libraries(vhsm_persistence

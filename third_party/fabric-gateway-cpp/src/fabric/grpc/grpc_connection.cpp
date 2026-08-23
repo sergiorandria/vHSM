@@ -49,8 +49,8 @@ GrpcConnection::connect(const std::string &target, const TlsCredentials &tls,
                         const ChannelOptions &options) {
   ::grpc::SslCredentialsOptions sslOpts;
   sslOpts.pem_root_certs = tls.rootCert;
-  sslOpts.pem_private_key = tls.clientKey;
-  sslOpts.pem_cert_chain = tls.clientCert;
+  sslOpts.pem_private_key = tls.clientKey.str();
+  sslOpts.pem_cert_chain = tls.clientCert.str();
   auto creds = ::grpc::SslCredentials(sslOpts);
 
   auto channel = ::grpc::CreateCustomChannel(

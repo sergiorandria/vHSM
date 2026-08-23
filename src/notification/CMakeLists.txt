@@ -10,7 +10,7 @@ target_sources(vhsm_notification
 )
 
 target_include_directories(vhsm_notification
-    PUBLIC ${PROJECT_SOURCE_DIR}
+    PUBLIC ${PROJECT_SOURCE_DIR}/src
 )
 
 find_package(CURL REQUIRED)

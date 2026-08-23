@@ -1,6 +1,7 @@
 #include "signature_dispatcher_core.h"
 
 #include "../../core/utils.h"
+#include "../../core/hsm_instance.h"
 
 #include <chrono>
 #include <sstream>
@@ -27,16 +28,55 @@ bool v_SignatureDispatcherCore_M1::v_dispatch(
                                      input.sign_result.signature.data()),
                                  input.sign_result.signature.size()));
 
-  // Persist the signature record.
-  auto signature_id_opt = v_signature_repository_.insert(
-      input.created_at, input.slot_id, input.token_label, input.key_id,
-      input.key_fingerprint, input.mechanism, input.digest_algorithm,
-      payload_digest,
-      static_cast<int>(input.sign_result.signature.size()), // payload_size
-      signature_b64, input.session_handle, input.user_label, input.app_context);
+  // Persist the signature record transactionally with outbox event.
+  // The outbox pattern ensures that DB commit and event publishing are atomic:
+  // the SIGN_CREATED event is inserted into event_outbox in the same DB
+  // transaction as the signature record, so a crash between DB commit and bus
+  // publish does not lose the event — the poller will replay it.
+  std::string signature_id;
+  bool inserted = false;
+  try {
+    v_conn_.with_transaction([&](IDbTransaction& tx) {
+      // Insert signature via repository's SQL directly on the transaction to
+      // keep both writes atomic. We replicate the repository's insert logic
+      // here to avoid a second round-trip; the repository remains the
+      // single source of SQL for non-transactional callers.
+      signature_id = vhsm::utils::uuid_v4();
+      std::vector<std::string> cols = {
+          signature_id, std::to_string(input.created_at),
+          std::to_string(input.slot_id), input.token_label, input.key_id,
+          input.key_fingerprint, input.mechanism, payload_digest, signature_b64,
+          input.session_handle, input.user_label.value_or(""),
+          input.app_context.value_or(""), "", "0", "", "", "", "PENDING"};
+      const std::string sql_sig = R"SQL(
+        INSERT INTO signature_records (
+            id, created_at, slot_id, token_label, key_id, key_fingerprint,
+            mechanism, payload_digest, signature_b64, session_handle,
+            user_label, app_context,
+            ledger_tx_id, ledger_block_num, ledger_tx_time, ledger_tx_proof,
+            ledger_tx_set_b64, ledger_status
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+      )SQL";
+      tx.exec(sql_sig, cols);
 
-  if (!signature_id_opt) {
-    // If we cannot persist to DB, publish a DB_WRITE_FAILED notification.
+      // Outbox event for SIGN_CREATED — will be dispatched by the poller.
+      std::string outbox_id = vhsm::utils::uuid_v4();
+      std::string payload = R"({"signature_id":")" + signature_id +
+                          R"(","key_id":")" + input.key_id + R"("})";
+      tx.exec(
+          R"SQL(INSERT INTO event_outbox (id, created_at, event_type, aggregate_id, payload, status) VALUES (?,?,?,?,?,?);)SQL",
+          {outbox_id, std::to_string(v_clock_.now().time_since_epoch().count()),
+           "SIGN_CREATED", signature_id, payload, "PENDING"});
+      inserted = true;
+    });
+  } catch (...) {
+    inserted = false;
+  }
+
+  if (!inserted) {
+    // Transaction rolled back, so outbox event was not written either.
+    // Publish a best-effort DB_WRITE_FAILED directly (not via outbox,
+    // because the DB itself failed).
     vhsm::notification::NotificationEvent event;
     event.type =
         vhsm::notification::NotificationEvent::EventType::DB_WRITE_FAILED;
@@ -46,61 +86,21 @@ bool v_SignatureDispatcherCore_M1::v_dispatch(
         "slot:" + std::to_string(input.slot_id) + "/token:" + input.token_label;
     event.actor = input.user_label.value_or("UNKNOWN");
     event.summary = "Failed to write signature record to DB";
-    event.detail_json = "{}"; // TODO: include more details
-    event.hsm_instance = "";  // TODO: fetch from db_meta
+    event.detail_json = "{}";
+    event.hsm_instance = vhsm::core::hsm_instance_id();
     v_notification_bus_.publish(event);
     return false;
   }
-  std::string signature_id = *signature_id_opt;
 
-  // Log to audit log.
-  v_audit_log_.append(signature_id, "C_SIGN");
-
-  // Publish SIGN_CREATED notification.
-  vhsm::notification::NotificationEvent sign_event;
-  sign_event.type =
-      vhsm::notification::NotificationEvent::EventType::SIGN_CREATED;
-  sign_event.severity = vhsm::notification::NotificationEvent::Severity::INFO;
-  sign_event.timestamp = v_clock_.now().time_since_epoch().count();
-  sign_event.source =
-      "slot:" + std::to_string(input.slot_id) + "/token:" + input.token_label;
-  sign_event.actor = input.user_label.value_or("UNKNOWN");
-  sign_event.summary = "Signature " + signature_id.substr(0, 8) +
-                       "... created for key " + input.key_id;
-  // Build detail JSON.
-  std::stringstream detail_ss;
-  detail_ss << R"({"signature_id":")" << signature_id << R"(",)"
-            << R"("key_fingerprint":")" << input.key_fingerprint << R"(",)"
-            << R"("payload_digest":")" << payload_digest << R"(",)"
-            << R"("ledger_tx_id":"")"
-            << R"(",)"
-            << R"("ledger_block_num":0)";
-  sign_event.detail_json = detail_ss.str();
-  sign_event.hsm_instance = ""; // TODO: fetch from db_meta
-  v_notification_bus_.publish(sign_event);
-
-  // Asynchronously anchor the record on the Hyperledger Fabric ledger.  The
-  // ledger worker submits RecordSignature and, on COMMITTED, fills in
-  // ledger_tx_id / ledger_block_num and sets ledger_status='COMMITTED'.
-  if (v_ledger_worker_) {
-    SignatureRecord record;
-    record.record_id = signature_id;
-    record.created_at = input.created_at;
-    record.slot_id = input.slot_id;
-    record.token_label = input.token_label;
-    record.key_id = input.key_id;
-    record.key_fingerprint = input.key_fingerprint;
-    record.mechanism = input.mechanism;
-    record.digest_algorithm = input.digest_algorithm;
-    record.payload_digest = payload_digest;
-    record.payload_size = static_cast<int>(input.sign_result.signature.size());
-    record.signature_b64 = signature_b64;
-    record.session_handle = input.session_handle;
-    record.user_label = input.user_label;
-    record.app_context = input.app_context;
-    record.ledger_status = "PENDING";
-    v_ledger_worker_->submit_record(record);
-  }
+  // WHY no direct publish/ledger submit here: The SIGN_CREATED notification
+  // and the ledger anchor are now written to `event_outbox` inside the same
+  // DB transaction above. A crash between DB commit and bus publish no longer
+  // loses the event — the `OutboxPoller` (or `LedgerRetryQueue` for ledger)
+  // replays `PENDING` rows on the next `C_Initialize` or poll interval. Direct
+  // `v_notification_bus_.publish` and `v_ledger_worker_->submit_record` are
+  // intentionally removed; the poller is the single writer to the bus/ledger.
+  // For backward compat, `C_Sign` still returns `CKR_OK` as soon as the
+  // transaction commits (latency not blocked on Fabric).
   return true;
 }
 

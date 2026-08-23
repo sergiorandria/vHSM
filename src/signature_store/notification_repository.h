@@ -10,6 +10,19 @@
 namespace vhsm::signature_store {
 namespace db {
 
+// A single row from the notification_log table, unpacked into plain fields so
+// callers (e.g. the admin API) can inspect delivery outcomes without knowing
+// the table layout.
+struct NotificationLogRecord {
+  std::string id;
+  int64_t sent_at;
+  std::string event_id;
+  std::string subscriber_id;
+  std::string outcome; // DELIVERED / RETRYING / FAILED / SKIPPED
+  int attempt_count;
+  std::string error_detail;
+};
+
 class NotificationRepository {
 public:
   explicit NotificationRepository(IDbConnection &conn);
@@ -51,6 +64,13 @@ public:
   update_notification_outcome(const std::string &id, const std::string &outcome,
                               int attempt_count,
                               const std::optional<std::string> &error_detail);
+
+  // Query the notification delivery log, newest first.  `subscriber_id`, if
+  // non-empty, restricts to a single subscriber; `since` is an inclusive lower
+  // bound on sent_at (unix seconds); `limit` caps the result (0 = unbounded).
+  std::vector<NotificationLogRecord>
+  query_log(const std::optional<std::string> &subscriber_id, int64_t since,
+            int limit) const;
 
 private:
   IDbConnection &conn_;

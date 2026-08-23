@@ -6,6 +6,7 @@
 
 #include "../persistence/token_serializer.h"
 #include "../persistence/vault.h"
+#include "../core/hsm_instance.h"
 
 namespace vhsm::admin {
 
@@ -50,7 +51,7 @@ CK_RV AdminLoginCore::admin_login(CK_USER_TYPE userType, const std::string &pin,
               << (userType == CKU_SO ? "SO" : "USER") << R"(","caller":")"
               << caller << R"("})";
     event.detail_json = detail_ss.str();
-    event.hsm_instance = ""; // TODO: fetch from db_meta
+    event.hsm_instance = vhsm::core::hsm_instance_id();
 
     bus_->publish(event);
     audit_log_->append("ADMIN_LOGIN-" + std::to_string(created_at),

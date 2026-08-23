@@ -6,6 +6,21 @@
 #include <cstring>
 #include <fstream>
 #include <openssl/evp.h>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <bcrypt.h>
+#pragma comment(lib, "bcrypt.lib")
+#else
+#include <cerrno>
+#include <sys/random.h>
+#include <unistd.h>
+#endif
 
 namespace vhsm::crypto {
 void CTR_DRBG_AES256::increment_v() {
@@ -101,15 +116,43 @@ CTR_DRBG_AES256::~CTR_DRBG_AES256() {
 }
 
 std::vector<u8> SecureRNG::get_system_entropy(const std::string &source_path) {
+#ifdef _WIN32
+  // Windows: BCryptGenRandom is the CSPRNG; source_path is ignored (kept for
+  // API compat with POSIX /dev/* call-sites). BCRYPT_USE_SYSTEM_PREFERRED_RNG
+  // is the recommended flag per MS docs.
+  (void)source_path;
   std::vector<u8> entropy(48);
-  std::ifstream source(source_path, std::ios::in | std::ios::binary);
-
-  if (!source || !source.read(reinterpret_cast<char *>(entropy.data()), 48)) {
-    throw std::runtime_error(
-        "RNG Failure: Enclave cannot reach system entropy source: " +
-        source_path);
+  NTSTATUS s = ::BCryptGenRandom(nullptr, entropy.data(),
+                                 static_cast<ULONG>(entropy.size()),
+                                 BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+  if (!BCRYPT_SUCCESS(s)) {
+    throw std::runtime_error("RNG Failure: BCryptGenRandom failed");
   }
-
   return entropy;
+#else
+  // POSIX: try getrandom(2) first (no FD, no fallback file needed), then
+  // fall back to reading source_path for older kernels/containers.
+  std::vector<u8> entropy(48);
+  std::size_t off = 0;
+  while (off < entropy.size()) {
+    ssize_t n = ::getrandom(entropy.data() + off, entropy.size() - off, 0);
+    if (n < 0) {
+      if (errno == EINTR) continue;
+      break; // fall back to file
+    }
+    off += static_cast<std::size_t>(n);
+    if (off == entropy.size()) return entropy;
+  }
+  // Fallback: read from the requested source_path (usually /dev/urandom)
+  if (off != entropy.size()) {
+    std::ifstream source(source_path, std::ios::in | std::ios::binary);
+    if (!source || !source.read(reinterpret_cast<char *>(entropy.data()), 48)) {
+      throw std::runtime_error(
+          "RNG Failure: Enclave cannot reach system entropy source: " +
+          source_path);
+    }
+  }
+  return entropy;
+#endif
 }
 } // namespace vhsm::crypto

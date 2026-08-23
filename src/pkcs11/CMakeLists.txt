@@ -3,6 +3,7 @@ add_library(vhsm_pkcs11 OBJECT)
 set(PKCS11_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/p11_internal.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/p11_init.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/composition_root.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/p11_slot.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/p11_session.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/p11_object.cpp
@@ -19,7 +20,7 @@ target_sources(vhsm_pkcs11
 )
 
 target_include_directories(vhsm_pkcs11
-    PUBLIC ${PROJECT_SOURCE_DIR}
+    PUBLIC ${PROJECT_SOURCE_DIR}/src
 )
 
 target_compile_options(vhsm_pkcs11 PRIVATE -fPIC -Wno-deprecated-declarations)
@@ -31,8 +32,14 @@ target_link_libraries(vhsm_pkcs11
     vhsm_keystore
     vhsm_persistence
     vhsm_session
+    vhsm_signature_store
+    vhsm_notification
+    vhsm_threadpool
     OpenSSL::SSL
 )
+if(VHSM_LEDGER)
+    target_link_libraries(vhsm_pkcs11 PUBLIC vhsm_ledger)
+endif()
 
 # Shared module that can be loaded as a PKCS#11 .so
 add_library(vhsm_pkcs11_mod SHARED $<TARGET_OBJECTS:vhsm_pkcs11>)
@@ -48,5 +55,11 @@ target_link_libraries(vhsm_pkcs11_mod
     vhsm_keystore
     vhsm_persistence
     vhsm_session
+    vhsm_signature_store
+    vhsm_notification
+    vhsm_threadpool
     OpenSSL::SSL
 )
+if(VHSM_LEDGER)
+    target_link_libraries(vhsm_pkcs11_mod PUBLIC vhsm_ledger)
+endif()

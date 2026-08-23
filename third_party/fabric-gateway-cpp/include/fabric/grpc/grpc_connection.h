@@ -8,6 +8,7 @@
 #include <grpcpp/channel.h>
 #include <grpcpp/grpcpp.h>
 
+#include "fabric/crypto/secure_string.h"
 #include "fabric/grpc/grpc_status.h"
 
 namespace fabric {
@@ -35,8 +36,8 @@ struct TlsCredentials {
   // PEM bundle of root CAs used to verify the server.  Empty = system roots.
   std::string rootCert;
   // Optional client certificate + key for mutual TLS.
-  std::string clientCert;
-  std::string clientKey;
+  crypto::SecureString clientCert;
+  crypto::SecureString clientKey;
   // Grpc verifies the server name against the certificate unless overridden
   // here.  Test networks typically need this (IP-address endpoints).
   std::string serverNameOverride;

@@ -117,6 +117,21 @@ CREATE TABLE IF NOT EXISTS notification_log (
 )SQL";
 }
 
+std::string DbSchema::sql_create_event_outbox() const {
+  return R"SQL(
+CREATE TABLE IF NOT EXISTS event_outbox (
+    id            TEXT    NOT NULL PRIMARY KEY,
+    created_at    INTEGER NOT NULL,
+    event_type    TEXT    NOT NULL,
+    aggregate_id  TEXT    NOT NULL,
+    payload       TEXT    NOT NULL,
+    status        TEXT    NOT NULL DEFAULT 'PENDING'
+        CHECK(status IN ('PENDING','DISPATCHED','FAILED')),
+    retry_count   INTEGER NOT NULL DEFAULT 0
+);
+)SQL";
+}
+
 std::string DbSchema::sql_create_indexes() const {
   return R"SQL(
 CREATE INDEX IF NOT EXISTS idx_sig_key_id
@@ -142,6 +157,12 @@ CREATE INDEX IF NOT EXISTS idx_nlog_event_id
 
 CREATE INDEX IF NOT EXISTS idx_nlog_subscriber
     ON notification_log(subscriber_id);
+
+CREATE INDEX IF NOT EXISTS idx_outbox_status
+    ON event_outbox(status);
+
+CREATE INDEX IF NOT EXISTS idx_outbox_aggregate
+    ON event_outbox(aggregate_id);
 )SQL";
 }
 
@@ -201,6 +222,10 @@ int DbSchema::current_version() {
   }
 }
 
+std::string DbSchema::get_instance_id() {
+  return get_meta(std::string(meta_key::kInstanceId));
+}
+
 void DbSchema::bootstrap() {
   int version = current_version();
 
@@ -230,6 +255,9 @@ void DbSchema::bootstrap() {
       // Notification tables.
       tx.exec(sql_create_notification_subscribers());
       tx.exec(sql_create_notification_log());
+
+      // Event outbox (transactional outbox for ledger + notification).
+      tx.exec(sql_create_event_outbox());
 
       // Indexes.
       // Execute each statement individually — SQLite does not support
@@ -295,6 +323,9 @@ int DbSchema::migrate() {
   // v4 → v5: drop the now-unused integrity_hmac column from the notification
   // tables (there is no local HMAC chain in the aggregate design).
   migrate_v4_to_v5();
+
+  // v5 → v6: create event_outbox for transactional outbox pattern.
+  migrate_v5_to_v6();
 
   return from_version;
 }
@@ -546,17 +577,34 @@ void DbSchema::migrate_v4_to_v5() {
   });
 }
 
+void DbSchema::migrate_v5_to_v6() {
+  conn_.with_transaction([this](IDbTransaction &tx) {
+    tx.exec(sql_create_event_outbox());
+    // Create indexes for the new table
+    std::string idx_sql = sql_create_indexes();
+    std::istringstream idx_stream(idx_sql);
+    std::string stmt;
+    while (std::getline(idx_stream, stmt, ';')) {
+      auto first = stmt.find_first_not_of(" \t\r\n");
+      if (first == std::string::npos) continue;
+      stmt = stmt.substr(first);
+      if (!stmt.empty() && stmt.find("event_outbox") != std::string::npos) {
+        tx.exec(stmt + ";");
+      }
+    }
+    tx.exec("UPDATE db_meta SET value='6' WHERE key='schema_version';");
+  });
+}
+
 // verify_schema
 bool DbSchema::verify_schema(std::string &out_error) {
-  // Minimal check: confirm that each expected table exists.
-  // A production-grade implementation would also verify column names and types
-  // via PRAGMA table_info() or information_schema.
   const std::string_view expected_tables[] = {
       table::kDbMeta,
       table::kSignatureRecords,
       table::kSignatureVerifications,
       table::kNotificationSubscribers,
       table::kNotificationLog,
+      table::kEventOutbox,
   };
 
   for (const auto &tbl : expected_tables) {

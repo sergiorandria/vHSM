@@ -1,15 +1,30 @@
 #include "SecureRNG.h"
 
 #include <cstring>
+#include <mutex>
 #include <openssl/ssl.h>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
 #include <sys/mman.h>
+#endif
 
 namespace vhsm::crypto {
 SecureRNG::SecureRNG() {
   std::lock_guard<std::mutex> lock(engine_mutex);
 
-  // Lock this class space in physical memory to block side-channel host swaps
-  mlock(this, sizeof(SecureRNG));
+  // Lock this object in RAM so the DRBG state (key, V) never swaps to disk.
+#ifdef _WIN32
+  ::VirtualLock(this, sizeof(SecureRNG));
+#else
+  ::mlock(this, sizeof(SecureRNG));
+#endif
 
   // Blocking initialization at boot safely
   std::vector<uint8_t> boot_seed = get_system_entropy("/dev/random");
@@ -47,5 +62,11 @@ void SecureRNG::force_reseed() {
   OPENSSL_cleanse(live_seed.data(), live_seed.size());
 }
 
-SecureRNG::~SecureRNG() { munlock(this, sizeof(SecureRNG)); }
+SecureRNG::~SecureRNG() {
+#ifdef _WIN32
+  ::VirtualUnlock(this, sizeof(SecureRNG));
+#else
+  ::munlock(this, sizeof(SecureRNG));
+#endif
+}
 } // namespace vhsm::crypto
