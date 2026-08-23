@@ -1,7 +1,7 @@
 #include "signature_dispatcher_core.h"
 
-#include "../../core/utils.h"
 #include "../../core/hsm_instance.h"
+#include "../../core/utils.h"
 
 #include <chrono>
 #include <sstream>
@@ -36,18 +36,30 @@ bool v_SignatureDispatcherCore_M1::v_dispatch(
   std::string signature_id;
   bool inserted = false;
   try {
-    v_conn_.with_transaction([&](IDbTransaction& tx) {
+    v_conn_.with_transaction([&](IDbTransaction &tx) {
       // Insert signature via repository's SQL directly on the transaction to
       // keep both writes atomic. We replicate the repository's insert logic
       // here to avoid a second round-trip; the repository remains the
       // single source of SQL for non-transactional callers.
       signature_id = vhsm::utils::uuid_v4();
-      std::vector<std::string> cols = {
-          signature_id, std::to_string(input.created_at),
-          std::to_string(input.slot_id), input.token_label, input.key_id,
-          input.key_fingerprint, input.mechanism, payload_digest, signature_b64,
-          input.session_handle, input.user_label.value_or(""),
-          input.app_context.value_or(""), "", "0", "", "", "", "PENDING"};
+      std::vector<std::string> cols = {signature_id,
+                                       std::to_string(input.created_at),
+                                       std::to_string(input.slot_id),
+                                       input.token_label,
+                                       input.key_id,
+                                       input.key_fingerprint,
+                                       input.mechanism,
+                                       payload_digest,
+                                       signature_b64,
+                                       input.session_handle,
+                                       input.user_label.value_or(""),
+                                       input.app_context.value_or(""),
+                                       "",
+                                       "0",
+                                       "",
+                                       "",
+                                       "",
+                                       "PENDING"};
       const std::string sql_sig = R"SQL(
         INSERT INTO signature_records (
             id, created_at, slot_id, token_label, key_id, key_fingerprint,
@@ -62,7 +74,7 @@ bool v_SignatureDispatcherCore_M1::v_dispatch(
       // Outbox event for SIGN_CREATED — will be dispatched by the poller.
       std::string outbox_id = vhsm::utils::uuid_v4();
       std::string payload = R"({"signature_id":")" + signature_id +
-                          R"(","key_id":")" + input.key_id + R"("})";
+                            R"(","key_id":")" + input.key_id + R"("})";
       tx.exec(
           R"SQL(INSERT INTO event_outbox (id, created_at, event_type, aggregate_id, payload, status) VALUES (?,?,?,?,?,?);)SQL",
           {outbox_id, std::to_string(v_clock_.now().time_since_epoch().count()),

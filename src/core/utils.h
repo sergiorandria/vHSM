@@ -10,9 +10,9 @@
 #include <string_view>
 #include <vector>
 
-#include "macros.h"
 #include "../abi/error.h"
 #include "../abi/result.h"
+#include "macros.h"
 
 namespace vhsm::utils {
 

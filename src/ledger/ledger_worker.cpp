@@ -50,8 +50,8 @@ std::size_t default_pool_size() {
     }
 
     // Allocate correctly: malloc takes 1 arg; use std::free as deleter.
-    std::unique_ptr<std::uint8_t, void (*)(void*)> buffer(
-        static_cast<std::uint8_t*>(std::malloc(length)), std::free);
+    std::unique_ptr<std::uint8_t, void (*)(void *)> buffer(
+        static_cast<std::uint8_t *>(std::malloc(length)), std::free);
     if (!buffer) {
       return concurrency;
     }
@@ -65,7 +65,7 @@ std::size_t default_pool_size() {
     }
 
     for (DWORD i = 0; i < length;) {
-      auto* proc = reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(
+      auto *proc = reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(
           buffer.get() + i);
       if (proc->Relationship == RelationProcessorCore) {
         for (WORD group = 0; group < proc->Processor.GroupCount; ++group) {
@@ -81,11 +81,15 @@ std::size_t default_pool_size() {
   };
 
   std::size_t hw = win_hardware_concurrency();
-  if (hw == 0) return 2;
-  if (hw <= 2) return 2;
+
+  // Lower bound of the number of
+  // CPU cores.
+  hw = max(hw, 2);
+
   // Clamp to avoid oversubscription on many-core Windows hosts; ledger is
   // network-bound, so 4 workers saturate the gateway.
   std::size_t capped = (hw >= 16 ? 4 : hw);
+
   // Prevent underflow: hw is size_t, so hw-? underflows when hw small.
   // Use bounded max.
   return (std::max<std::size_t>)(2, capped);
@@ -100,7 +104,7 @@ std::size_t default_pool_size() {
 // quantum. stop_flag is running_ (true=running); we return early when it
 // becomes false (draining).
 void sleep_interruptible(std::chrono::milliseconds amount,
-                         const std::atomic_bool& running_flag) {
+                         const std::atomic_bool &running_flag) {
   const auto deadline = std::chrono::steady_clock::now() + amount;
   while (std::chrono::steady_clock::now() < deadline) {
     if (!running_flag.load(std::memory_order_acquire))

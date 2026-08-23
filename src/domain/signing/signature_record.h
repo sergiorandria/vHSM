@@ -33,7 +33,7 @@ struct SignatureRecord {
 
   // Domain invariants helpers (lightweight, no DB).
   bool is_pending() const noexcept { return ledger_status == "PENDING"; }
-  void mark_committed(const std::string& tx_id, int64_t block_num) {
+  void mark_committed(const std::string &tx_id, int64_t block_num) {
     ledger_tx_id = tx_id;
     ledger_block_num = block_num;
     ledger_status = "COMMITTED";

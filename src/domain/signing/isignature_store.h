@@ -9,11 +9,11 @@
 namespace vhsm::domain::signing {
 
 // WHY a port: The previous design had `SignatureDispatcher` depend directly on
-// `SignatureRepository` (sqlite) *and* `LedgerClient` (Fabric) at once, so every
-// build pulled both sqlite and Fabric even when only one was deployed. Worse,
-// `signature_records` grew `ledger_*` columns for the ledger-anchoring case,
-// coupling the DB schema to a backend that, per product, is *alternative* to
-// the DB, never complementary. A port inverts the dependency: domain defines
+// `SignatureRepository` (sqlite) *and* `LedgerClient` (Fabric) at once, so
+// every build pulled both sqlite and Fabric even when only one was deployed.
+// Worse, `signature_records` grew `ledger_*` columns for the ledger-anchoring
+// case, coupling the DB schema to a backend that, per product, is *alternative*
+// to the DB, never complementary. A port inverts the dependency: domain defines
 // `ISignatureStore`, infrastructure provides `DbStore` or `FabricStore`, and
 // `composition_root` picks one at `C_Initialize` via `VHSM_STORE_BACKEND`.
 // WHY mutually exclusive: Operationally a deployment is *either* file-DB or
@@ -39,7 +39,7 @@ public:
   // re-submit a `PENDING` record after a power loss.
   // Persist a record; returns the stored id on success, nullopt on DB/ledger
   // error. Implementations must be idempotent for the same record_id.
-  virtual std::optional<std::string> store(const SignatureRecord& rec) = 0;
+  virtual std::optional<std::string> store(const SignatureRecord &rec) = 0;
 
   // WHY optional on load: `get` is used by `C_Verify` and the admin API to
   // distinguish "not found" (CKR_ARGUMENTS_BAD) from "found but
@@ -47,7 +47,8 @@ public:
   // (as the pre-port code did with `vector<optional<string>>`) hid whether
   // the failure was a missing row or a corrupted one, which matters for audit.
   // Load by id; nullopt if not found.
-  virtual std::optional<SignatureRecord> load(const std::string& record_id) const = 0;
+  virtual std::optional<SignatureRecord>
+  load(const std::string &record_id) const = 0;
 
   // WHY list may be empty for ledger: Fabric's `GetAllTheses` scans the
   // world state, but a ledger with no secondary index on `key_id` would need a

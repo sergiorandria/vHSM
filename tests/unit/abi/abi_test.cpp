@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
 
+#include "abi/error.h"
 #include "abi/export.h"
 #include "abi/result.h"
-#include "abi/error.h"
 #include "abi/span.h"
 
 // Test that the base ABI compiles, nodiscard is enforced, and versioned
@@ -29,7 +29,8 @@ TEST(AbiTest, ResultNodiscard) {
 }
 
 TEST(AbiTest, SpanBoundsChecked) {
-  std::array<std::byte, 4> buf{std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}};
+  std::array<std::byte, 4> buf{std::byte{1}, std::byte{2}, std::byte{3},
+                               std::byte{4}};
   ByteSpan s = buf;
   EXPECT_EQ(s.size(), 4);
   EXPECT_EQ(s[2], std::byte{3});

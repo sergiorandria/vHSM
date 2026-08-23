@@ -606,10 +606,9 @@ TEST_F(DbSchemaVerifyTest,
        VerifySchema_WrongSchemaVersion_ReturnsFalseWithReason) {
   schema_.bootstrap();
   FakeDbConnection bad_conn;
-  for (const char *tbl : {"db_meta", "signature_records",
-                          "signature_verifications",
-                          "notification_subscribers", "notification_log",
-                          "event_outbox"}) {
+  for (const char *tbl :
+       {"db_meta", "signature_records", "signature_verifications",
+        "notification_subscribers", "notification_log", "event_outbox"}) {
     bad_conn.exec("CREATE TABLE IF NOT EXISTS " + std::string(tbl) +
                   " (x TEXT);");
   }

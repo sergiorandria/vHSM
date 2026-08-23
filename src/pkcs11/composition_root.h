@@ -13,12 +13,12 @@
 namespace vhsm::ledger {
 class LedgerClient;
 class LedgerWorker;
-}
+} // namespace vhsm::ledger
 #endif
 namespace vhsm::notification {
 class BoundedNotificationBus;
 class NotificationBus;
-}
+} // namespace vhsm::notification
 namespace vhsm::audit {
 class AuditLog;
 }
@@ -27,7 +27,7 @@ class NotificationDispatcher;
 class NotificationRepository;
 class OutboxPoller;
 class SignatureDispatcher;
-}
+} // namespace vhsm::signature_store::db
 namespace vhsm::persistence {
 class Vault;
 }
@@ -69,10 +69,11 @@ struct AppContainer {
   // Common notification bus + dispatcher (used by both backends, but DB
   // tables only exist when backend==Db; ledger backend uses in-memory bus)
   std::unique_ptr<vhsm::notification::BoundedNotificationBus> bounded_bus;
-  vhsm::notification::NotificationBus* bus = nullptr; // non-owning view
+  vhsm::notification::NotificationBus *bus = nullptr; // non-owning view
   std::unique_ptr<vhsm::audit::AuditLog> audit_log;
   std::unique_ptr<vhsm::signature_store::db::NotificationRepository> notif_repo;
-  std::unique_ptr<vhsm::signature_store::db::NotificationDispatcher> notif_dispatcher;
+  std::unique_ptr<vhsm::signature_store::db::NotificationDispatcher>
+      notif_dispatcher;
   // Outbox poller for transactional SIGN_CREATED (replaces direct publish)
   // WHY poller: The dispatcher writes SIGN_CREATED into `event_outbox` in the
   // same DB transaction as `signature_records`. The poller replays PENDING rows
@@ -87,7 +88,8 @@ struct AppContainer {
   // for new code.
   std::unique_ptr<vhsm::domain::signing::ISignatureStore> store;
 
-  // Signature pipeline (concrete, for backward compat; new code should use store)
+  // Signature pipeline (concrete, for backward compat; new code should use
+  // store)
   std::unique_ptr<vhsm::signature_store::db::SignatureDispatcher> dispatcher;
 
   // Vault (optional)
@@ -95,10 +97,10 @@ struct AppContainer {
 
   AppContainer() = default;
   ~AppContainer();
-  AppContainer(const AppContainer&) = delete;
-  AppContainer& operator=(const AppContainer&) = delete;
-  AppContainer(AppContainer&&) noexcept;
-  AppContainer& operator=(AppContainer&&) noexcept;
+  AppContainer(const AppContainer &) = delete;
+  AppContainer &operator=(const AppContainer &) = delete;
+  AppContainer(AppContainer &&) noexcept;
+  AppContainer &operator=(AppContainer &&) noexcept;
 };
 
 // Creates a fully wired container from environment (VHSM_DB_PATH, VHSM_HOME,
@@ -110,7 +112,7 @@ std::unique_ptr<AppContainer> create_app_container();
 
 // Tears down a container in the correct order (dispatcher → ledger → bus → db).
 // Safe to call with nullptr.
-void destroy_app_container(std::unique_ptr<AppContainer>& container) noexcept;
+void destroy_app_container(std::unique_ptr<AppContainer> &container) noexcept;
 
 // Helpers exposed for testing
 std::string resolve_db_path_for_container();

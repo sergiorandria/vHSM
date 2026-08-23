@@ -61,8 +61,8 @@ public:
   SecureBuffer(SecureBuffer &&other) noexcept;
   SecureBuffer &operator=(SecureBuffer &&other) noexcept;
 
-  // WHY _VHSMXX_NODISCARD on all getters: Forgetting to use the returned pointer
-  // is a bug.
+  // WHY _VHSMXX_NODISCARD on all getters: Forgetting to use the returned
+  // pointer is a bug.
   // [[nodiscard]] makes the compiler warn if you call data() and ignore the
   // result. This catches mistakes like: buffer.data(); buffer.write(...) — the
   // pointer is generated but unused, suggesting a logic error. Pointer to the
@@ -145,8 +145,9 @@ private:
   // The public read()/write() perform all bounds/null validation before
   // calling these; they must never be invoked with unvalidated arguments.
 #if defined(__GNUC__) || defined(__clang__)
-  __attribute__((visibility("hidden"))) __attribute__((noinline)) void
-  __v_sb_write(std::size_t offset, const u8 *src, std::size_t len);
+  __attribute__((visibility("hidden")))
+  __attribute__((noinline)) void __v_sb_write(std::size_t offset, const u8 *src,
+                                              std::size_t len);
 
   __attribute__((visibility("hidden"))) __attribute__((noinline)) void
   __v_sb_read(std::size_t offset, u8 *dst, std::size_t len) const;

@@ -3,15 +3,14 @@
 #include <string>
 #include <vector>
 
-#include "util.h"
-#include "fabric/grpc/grpc_connection.h"
-#include "fabric/identity/identity.h"
 #include "fabric/gateway/gateway.h"
 #include "fabric/gateway/transaction.h"
+#include "fabric/grpc/grpc_connection.h"
+#include "fabric/identity/identity.h"
 #include "fabric/protoutil/proposal_builder.h"
+#include "util.h"
 
-namespace {
-}  // namespace
+namespace {} // namespace
 
 // Low-level walk through the Gateway RPCs, bypassing the Network/Contract
 // convenience layer. Shows how a signed proposal is built with protoutil and
@@ -52,8 +51,9 @@ int main(int argc, char **argv) {
   }
 
   try {
-    fabric::identity::Identity id(mspId, cert, std::string(key.data(), key.size()));
-    key.wipe();  // example no longer needs its copy; Identity holds its own
+    fabric::identity::Identity id(mspId, cert,
+                                  std::string(key.data(), key.size()));
+    key.wipe(); // example no longer needs its copy; Identity holds its own
     fabric::grpc::TlsCredentials tls;
     tls.rootCert = tlsCa;
     auto conn = fabric::grpc::GrpcConnection::connect(target, tls);
@@ -62,17 +62,17 @@ int main(int argc, char **argv) {
     }
     auto gw = fabric::gateway::Gateway::connect(conn, id);
 
-    // Build + sign the proposal (this is exactly what Contract does internally).
-    // Note: Contract prepends the function name to the arg list; we do it here
-    // manually since we drive the proposal builder directly.
+    // Build + sign the proposal (this is exactly what Contract does
+    // internally). Note: Contract prepends the function name to the arg list;
+    // we do it here manually since we drive the proposal builder directly.
     std::vector<std::string> ccArgs;
     ccArgs.push_back(function);
     for (const auto &a : args) {
       ccArgs.push_back(a);
     }
     auto [txId, nonce] = fabric::protoutil::createTransactionId(id);
-    ::protos::Proposal proposal =
-        fabric::protoutil::createProposal(id, channel, nonce, chaincode, ccArgs);
+    ::protos::Proposal proposal = fabric::protoutil::createProposal(
+        id, channel, nonce, chaincode, ccArgs);
     ::protos::SignedProposal sp = fabric::protoutil::signProposal(id, proposal);
 
     if (mode == "evaluate") {
@@ -142,7 +142,8 @@ int main(int argc, char **argv) {
       return 1;
     }
     std::cout << "txId           = " << txId << "\n";
-    std::cout << "validationCode = " << static_cast<int>(cresp.result()) << "\n";
+    std::cout << "validationCode = " << static_cast<int>(cresp.result())
+              << "\n";
     std::cout << "blockNumber    = " << cresp.block_number() << "\n";
     std::cout << "committed      = "
               << (cresp.result() == ::protos::VALID ? "true" : "false") << "\n";

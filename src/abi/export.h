@@ -16,7 +16,8 @@
 
 // VHSM_API — default visibility (exported). Everything else is hidden by
 // -fvisibility=hidden, so only these symbols appear in the .so/.dll.
-// VHSM_HIDDEN — explicitly hidden (internal, test-only, or LTO devirtualizable).
+// VHSM_HIDDEN — explicitly hidden (internal, test-only, or LTO
+// devirtualizable).
 #if defined(_WIN32)
 #if defined(VHSM_BUILDING_DLL)
 #define VHSM_API __declspec(dllexport)
@@ -71,15 +72,16 @@
 #define VHSM_ABI_VERSION_MAJOR 1
 #define VHSM_ABI_VERSION_MINOR 0
 
-#define VHSM_ABI_NAMESPACE_BEGIN \
-  namespace vhsm {               \
+#define VHSM_ABI_NAMESPACE_BEGIN                                               \
+  namespace vhsm {                                                             \
   inline namespace v1 {
 
-#define VHSM_ABI_NAMESPACE_END \
-  }                            \
+#define VHSM_ABI_NAMESPACE_END                                                 \
+  }                                                                            \
   } // namespace vhsm
 
-// The unversioned alias `vhsm::Foo` → `vhsm::v1::Foo` (always points at current).
-// New major versions add `inline namespace v2` and keep `v1` for compat.
+// The unversioned alias `vhsm::Foo` → `vhsm::v1::Foo` (always points at
+// current). New major versions add `inline namespace v2` and keep `v1` for
+// compat.
 
 #endif // VHSM_ABI_EXPORT_H

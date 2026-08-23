@@ -3,13 +3,13 @@
 #include <string>
 #include <vector>
 
-#include "util.h"
-#include "fabric/grpc/grpc_connection.h"
-#include "fabric/identity/identity.h"
+#include "fabric/gateway/contract.h"
 #include "fabric/gateway/gateway.h"
 #include "fabric/gateway/network.h"
-#include "fabric/gateway/contract.h"
 #include "fabric/gateway/transaction.h"
+#include "fabric/grpc/grpc_connection.h"
+#include "fabric/identity/identity.h"
+#include "util.h"
 
 namespace {
 
@@ -24,7 +24,7 @@ std::string toHex(const std::string &s) {
   return out;
 }
 
-}  // namespace
+} // namespace
 
 int main(int argc, char **argv) {
   if (argc < 9) {
@@ -68,8 +68,9 @@ int main(int argc, char **argv) {
       conn->waitForReady();
     }
 
-    fabric::identity::Identity id(mspId, cert, std::string(key.data(), key.size()));
-    key.wipe();  // the example no longer needs its copy; Identity holds its own
+    fabric::identity::Identity id(mspId, cert,
+                                  std::string(key.data(), key.size()));
+    key.wipe(); // the example no longer needs its copy; Identity holds its own
     auto gw = fabric::gateway::Gateway::connect(conn, id);
     auto net = gw->getNetwork(channel);
     auto contract = net->getContract(chaincode);

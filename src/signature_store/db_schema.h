@@ -134,7 +134,7 @@ private:
   void migrate_legacy_to_v4(); // Any pre-v4 DB → v4 ledger schema (no Rekor).
   void migrate_v4_to_v5();     // v4 → v5: drop integrity_hmac from the
                                // notification tables.
-  void migrate_v5_to_v6();     // v5 → v6: create event_outbox for outbox pattern.
+  void migrate_v5_to_v6(); // v5 → v6: create event_outbox for outbox pattern.
 };
 
 } // namespace db
