@@ -22,3 +22,6 @@ find_package(OpenSSL REQUIRED)
 target_link_libraries(vhsm_crypto
     PUBLIC OpenSSL::SSL
 )
+if(WIN32)
+    target_link_libraries(vhsm_crypto PRIVATE bcrypt)
+endif()
