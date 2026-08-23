@@ -3,8 +3,12 @@
 #include "../core/hsm_instance.h"
 #include "../keystore/slot.h"
 #include "../keystore/token.h"
+#ifdef VHSM_LEDGER
 #include "../ledger/ledger_client.h"
 #include "../ledger/ledger_worker.h"
+#include "../signature_store/ledger_retry_queue.h"
+#include "../signature_store/signature_repository.h"
+#endif
 #include "../notification/bounded_notification_bus.h"
 #include "../notification/email_adapter.h"
 #include "../notification/grpc_push_adapter.h"
@@ -13,11 +17,9 @@
 #include "../persistence/vault.h"
 #include "../signature_store/db_connection.h"
 #include "../signature_store/db_schema.h"
-#include "../signature_store/ledger_retry_queue.h"
 #include "../signature_store/notification_dispatcher.h"
 #include "../signature_store/notification_repository.h"
 #include "../signature_store/signature_dispatcher.h"
-#include "../signature_store/signature_repository.h"
 
 #include "pkcs11_internal.h"
 
@@ -141,6 +143,7 @@ std::unique_ptr<AppContainer> create_app_container() {
     }
   }
 
+#ifdef VHSM_LEDGER
   const char* endpoint = std::getenv("VHSM_LEDGER_ENDPOINT");
   const char* cert = std::getenv("VHSM_LEDGER_CERT");
   const char* key = std::getenv("VHSM_LEDGER_KEY");
@@ -172,10 +175,18 @@ std::unique_ptr<AppContainer> create_app_container() {
       c->ledger_worker.reset();
     }
   }
+#endif
 
+  // SignatureDispatcher accepts optional ledger worker (nullptr = local-only mode)
+#ifdef VHSM_LEDGER
   c->dispatcher =
       std::make_unique<vhsm::signature_store::db::SignatureDispatcher>(
           *c->db, *token, *c->bus, *c->audit_log, c->ledger_worker.get());
+#else
+  c->dispatcher =
+      std::make_unique<vhsm::signature_store::db::SignatureDispatcher>(
+          *c->db, *token, *c->bus, *c->audit_log, nullptr);
+#endif
 
   c->vault = open_or_create_vault();
 
@@ -190,17 +201,20 @@ void destroy_app_container(std::unique_ptr<AppContainer>& container) noexcept {
     container->notif_dispatcher.reset();
   }
   container->notif_repo.reset();
+#ifdef VHSM_LEDGER
   if (container->ledger_worker) {
     container->ledger_worker->drain_and_stop();
     container->ledger_worker.reset();
   }
   container->ledger_client.reset();
+#endif
   container->dispatcher.reset();
   // vault is closed after dispatcher (persist token before reset in p11)
   container->vault.reset();
   container->bounded_bus.reset();
   container->bus = nullptr;
   container->db.reset();
+  container.reset();
 }
 
 } // namespace vhsm::pkcs11

@@ -80,9 +80,9 @@ bool v_SignatureDispatcherCore_M1::v_dispatch(
   sign_event.hsm_instance = vhsm::core::hsm_instance_id();
   v_notification_bus_.publish(sign_event);
 
-  // Asynchronously anchor the record on the Hyperledger Fabric ledger.  The
-  // ledger worker submits RecordSignature and, on COMMITTED, fills in
-  // ledger_tx_id / ledger_block_num and sets ledger_status='COMMITTED'.
+  // Asynchronously anchor the record on the Hyperledger Fabric ledger (only
+  // when VHSM_LEDGER is enabled). Local-only mode skips anchoring.
+#ifdef VHSM_LEDGER
   if (v_ledger_worker_) {
     SignatureRecord record;
     record.record_id = signature_id;
@@ -102,6 +102,7 @@ bool v_SignatureDispatcherCore_M1::v_dispatch(
     record.ledger_status = "PENDING";
     v_ledger_worker_->submit_record(record);
   }
+#endif
   return true;
 }
 
