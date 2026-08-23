@@ -29,6 +29,10 @@ configure_file(
     @ONLY
 )
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/generated)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# Peak: include ABI hardening flags for every target via the helper.
+include(cmake/CompilerFlags.cmake)
 
 # ---------------------------------------------------------------------------
 # C++ standard

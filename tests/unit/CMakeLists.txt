@@ -1,4 +1,5 @@
 # Unit Tests
+add_subdirectory(abi)
 add_subdirectory(core)
 add_subdirectory(crypto)
 add_subdirectory(keystore)
