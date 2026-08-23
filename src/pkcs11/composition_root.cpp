@@ -23,9 +23,15 @@
 
 #include "pkcs11_internal.h"
 
+#include "../domain/signing/adapters/db_store_adapter.h"
+#ifdef VHSM_LEDGER
+#include "../domain/signing/adapters/fabric_store_adapter.h"
+#endif
+
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 
 namespace vhsm::pkcs11 {
 
@@ -193,12 +199,12 @@ std::unique_ptr<AppContainer> create_app_container() {
   c->bus = c->bounded_bus.get();
   c->audit_log = std::make_unique<P11AuditLog>();
 
-  // Unified store port: in-memory for now, DB or ledger adapters can be
-  // swapped here without changing callers. Tests use InMemoryStore.
-  c->store = std::make_unique<InMemoryStore>();
-
   auto *token = p11_get_token(0);
-  if (!token) return c;
+  if (!token) {
+    // No token yet: still provide an in-memory store so tests can proceed.
+    c->store = std::make_unique<InMemoryStore>();
+    return c;
+  }
 
   // Notification pipeline only makes sense with DB backend (needs tables).
   if (c->backend == AppContainer::StoreBackend::Db && c->db) {
@@ -286,8 +292,30 @@ std::unique_ptr<AppContainer> create_app_container() {
   }
 #endif
 
+  // Unified store port — pick adapter based on backend. New code should use
+  // `c->store`; legacy `dispatcher` still uses concrete DB/ledger for now.
+  if (c->backend == AppContainer::StoreBackend::Ledger) {
+#ifdef VHSM_LEDGER
+    if (c->ledger_client) {
+      c->store = std::make_unique<vhsm::domain::signing::FabricStoreAdapter>(
+          *c->ledger_client);
+    } else {
+      c->store = std::make_unique<InMemoryStore>();
+    }
+#else
+    c->store = std::make_unique<InMemoryStore>();
+#endif
+  } else {
+    if (c->db) {
+      c->store = std::make_unique<vhsm::domain::signing::DbStoreAdapter>(
+          *c->db, *token);
+    } else {
+      c->store = std::make_unique<InMemoryStore>();
+    }
+  }
+
   // SignatureDispatcher accepts optional ledger worker (nullptr = local-only
-  // mode)
+  // mode) — kept for backward compat, new code should use `store`.
 #ifdef VHSM_LEDGER
   c->dispatcher =
       std::make_unique<vhsm::signature_store::db::SignatureDispatcher>(
@@ -320,6 +348,7 @@ void destroy_app_container(std::unique_ptr<AppContainer> &container) noexcept {
   container->ledger_client.reset();
 #endif
   container->dispatcher.reset();
+  container->store.reset();
   // vault is closed after dispatcher (persist token before reset in p11)
   container->vault.reset();
   container->bounded_bus.reset();
