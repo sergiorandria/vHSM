@@ -97,10 +97,15 @@ using session::SessionManager;
 // p11_is_initialized().
 extern bool g_initialized;
 
-// SignatureDispatcher and related globals
+// AppContainer forward (composition root owns all services)
+struct AppContainer;
+extern std::unique_ptr<AppContainer> g_appContainer;
+
+// SignatureDispatcher and related globals (now views into g_appContainer when
+// C_Initialize uses the composition root; still owning for backward compat)
 extern std::unique_ptr<vhsm::signature_store::db::SignatureDispatcher>
     g_signatureDispatcher;
-extern std::unique_ptr<vhsm::notification::NotificationBus> g_notificationBus;
+extern vhsm::notification::NotificationBus* g_notificationBus;
 extern std::unique_ptr<vhsm::audit::AuditLog> g_auditLog;
 extern std::unique_ptr<vhsm::signature_store::db::IDbConnection> g_dbConnection;
 
