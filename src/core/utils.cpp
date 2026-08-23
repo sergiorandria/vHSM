@@ -59,9 +59,9 @@ std::string uuid_v4() {
 
   // RFC 4122 §4.4 — set version and variant bits.
   rnd[6] = static_cast<std::byte>((static_cast<u8>(rnd[6]) & 0x0f) |
-                                  0x40); // version 4
+                                   0x40); // version 4
   rnd[8] = static_cast<std::byte>((static_cast<u8>(rnd[8]) & 0x3f) |
-                                  0x80); // variant 10xx
+                                   0x80); // variant 10xx
 
   const auto *b = reinterpret_cast<const u8 *>(rnd.data());
   return std::format("{:02x}{:02x}{:02x}{:02x}-"
@@ -71,6 +71,14 @@ std::string uuid_v4() {
                      "{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
                      b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9],
                      b[10], b[11], b[12], b[13], b[14], b[15]);
+}
+
+vhsm::v1::Result<std::string> try_uuid_v4() noexcept {
+  try {
+    return uuid_v4();
+  } catch (...) {
+    return std::unexpected(vhsm::v1::make_error_code(vhsm::v1::Errc::DeviceError));
+  }
 }
 
 // Base64

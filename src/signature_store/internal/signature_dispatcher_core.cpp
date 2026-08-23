@@ -74,6 +74,9 @@ bool v_SignatureDispatcherCore_M1::v_dispatch(
   }
 
   if (!inserted) {
+    // Transaction rolled back, so outbox event was not written either.
+    // Publish a best-effort DB_WRITE_FAILED directly (not via outbox,
+    // because the DB itself failed).
     vhsm::notification::NotificationEvent event;
     event.type =
         vhsm::notification::NotificationEvent::EventType::DB_WRITE_FAILED;
@@ -89,55 +92,15 @@ bool v_SignatureDispatcherCore_M1::v_dispatch(
     return false;
   }
 
-  // Log to audit log.
-  v_audit_log_.append(signature_id, "C_SIGN");
-
-  // Publish SIGN_CREATED notification.
-  vhsm::notification::NotificationEvent sign_event;
-  sign_event.type =
-      vhsm::notification::NotificationEvent::EventType::SIGN_CREATED;
-  sign_event.severity = vhsm::notification::NotificationEvent::Severity::INFO;
-  sign_event.timestamp = v_clock_.now().time_since_epoch().count();
-  sign_event.source =
-      "slot:" + std::to_string(input.slot_id) + "/token:" + input.token_label;
-  sign_event.actor = input.user_label.value_or("UNKNOWN");
-  sign_event.summary = "Signature " + signature_id.substr(0, 8) +
-                       "... created for key " + input.key_id;
-  // Build detail JSON.
-  std::stringstream detail_ss;
-  detail_ss << R"({"signature_id":")" << signature_id << R"(",)"
-            << R"("key_fingerprint":")" << input.key_fingerprint << R"(",)"
-            << R"("payload_digest":")" << payload_digest << R"(",)"
-            << R"("ledger_tx_id":"")"
-            << R"(",)"
-            << R"("ledger_block_num":0)";
-  sign_event.detail_json = detail_ss.str();
-  sign_event.hsm_instance = vhsm::core::hsm_instance_id();
-  v_notification_bus_.publish(sign_event);
-
-  // Asynchronously anchor the record on the Hyperledger Fabric ledger (only
-  // when VHSM_LEDGER is enabled). Local-only mode skips anchoring.
-#ifdef VHSM_LEDGER
-  if (v_ledger_worker_) {
-    SignatureRecord record;
-    record.record_id = signature_id;
-    record.created_at = input.created_at;
-    record.slot_id = input.slot_id;
-    record.token_label = input.token_label;
-    record.key_id = input.key_id;
-    record.key_fingerprint = input.key_fingerprint;
-    record.mechanism = input.mechanism;
-    record.digest_algorithm = input.digest_algorithm;
-    record.payload_digest = payload_digest;
-    record.payload_size = static_cast<int>(input.sign_result.signature.size());
-    record.signature_b64 = signature_b64;
-    record.session_handle = input.session_handle;
-    record.user_label = input.user_label;
-    record.app_context = input.app_context;
-    record.ledger_status = "PENDING";
-    v_ledger_worker_->submit_record(record);
-  }
-#endif
+  // WHY no direct publish/ledger submit here: The SIGN_CREATED notification
+  // and the ledger anchor are now written to `event_outbox` inside the same
+  // DB transaction above. A crash between DB commit and bus publish no longer
+  // loses the event — the `OutboxPoller` (or `LedgerRetryQueue` for ledger)
+  // replays `PENDING` rows on the next `C_Initialize` or poll interval. Direct
+  // `v_notification_bus_.publish` and `v_ledger_worker_->submit_record` are
+  // intentionally removed; the poller is the single writer to the bus/ledger.
+  // For backward compat, `C_Sign` still returns `CKR_OK` as soon as the
+  // transaction commits (latency not blocked on Fabric).
   return true;
 }
 

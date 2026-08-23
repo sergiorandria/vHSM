@@ -19,6 +19,8 @@ target_sources(vhsm_signature_store
     signature_dispatcher.cpp
     signature_query.cpp
     verification_service.cpp
+    outbox_poller.cpp
+    outbox_poller.h
     internal/signature_dispatcher_core.cpp
     internal/signature_query_core.cpp
     internal/verification_service_core.cpp
