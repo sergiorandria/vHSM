@@ -16,7 +16,7 @@ struct ClockUtils {
   // Convert a HsmTimePoint to a signed 64-bit epoch-millisecond value
   // (as used by SQLite, JavaScript Date, and most REST APIs).
   // Valid for dates between roughly year 292 million BCE and 292 million CE.
-  VHSM_NODISCARD
+  _VHSMXX_NODISCARD
   static i64 to_epoch_ms(HsmTimePoint tp) noexcept {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
                tp.time_since_epoch())
@@ -26,7 +26,7 @@ struct ClockUtils {
   }
 
   /// Reconstruct a HsmTimePoint from a stored epoch-millisecond value.
-  VHSM_NODISCARD
+  _VHSMXX_NODISCARD
   static HsmTimePoint from_epoch_ms(i64 ms) noexcept {
     return HsmTimePoint(std::chrono::milliseconds(ms));
   }
@@ -39,7 +39,7 @@ struct ClockUtils {
   // std::format("{:%FT%T}Z", ...) because the latter requires C++20's
   // calendar support to be fully implemented, which is still patchy on
   // some toolchains as of 2025.
-  VHSM_NODISCARD
+  _VHSMXX_NODISCARD
   static std::string to_iso8601(HsmTimePoint tp) {
     const i64 total_ms = to_epoch_ms(tp);
     const i64 seconds = total_ms / 1000;
@@ -74,7 +74,7 @@ struct ClockUtils {
   /// Parse "YYYY-MM-DDTHH:MM:SS[.mmm]Z" back to HsmTimePoint.
   /// Returns nullopt if the string is malformed.
   /// Only the 'Z' (UTC) suffix is accepted; local-time offsets are rejected.
-  VHSM_NODISCARD
+  _VHSMXX_NODISCARD
   static std::optional<HsmTimePoint> from_iso8601(const std::string &s) {
     // Minimum valid form: "YYYY-MM-DDTHH:MM:SSZ" = 20 chars
     if (s.size() < 20 || s.back() != 'Z')

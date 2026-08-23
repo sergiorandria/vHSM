@@ -184,65 +184,30 @@ type JuryStatus struct {
 	PendingSigners []string     `json:"pendingSigners,omitempty" metadata:",optional"`
 }
 
-// GetAllThesesRaw fetches all data without struct validation
-// This should be removed in production environment
+// GetAllThesesRaw is DISABLED. It used to return every record on the
+// ledger without schema validation — a diagnostic escape hatch that
+// bypasses the contract's response validation entirely. Any caller should
+// use GetAllTheses (typed, validated) instead. Kept only so any existing
+// caller gets an explicit error instead of a missing-method failure at the
+// API layer.
 func (c *ThesisContract) GetAllThesesRaw(ctx contractapi.TransactionContextInterface) ([]string, error) {
-	resultsIterator, err := ctx.GetStub().GetStateByRange("", "")
-	if err != nil {
-		return nil, err
-	}
-	defer resultsIterator.Close()
-
-	var results []string
-	for resultsIterator.HasNext() {
-		queryResponse, err := resultsIterator.Next()
-		if err != nil {
-			return nil, err
-		}
-
-		results = append(results, string(queryResponse.Value))
-	}
-
-	return results, nil
+	return nil, fmt.Errorf("GetAllThesesRaw is disabled: use GetAllTheses for typed, validated reads")
 }
 
-// NotarizeThesis attaches a document hash and HSM signature to an existing thesis record.
-//
-// NOTE: this duplicates NotarizeDocument's fields, but — unlike
-// NotarizeDocument — it does NOT check that grading is complete first,
-// and never touches Status. Kept as-is per prior request not to remove
-// existing functions, but it should not be wired up by the API: calling
-// it lets a caller record a document hash/signature before jury consensus
-// on the grade exists, which the rest of this contract is now built to
-// prevent. Route callers to NotarizeDocument instead.
+// NotarizeThesis is DISABLED. It used to let a single caller attach a
+// document hash and HSM signature before jury consensus on the grade
+// existed — exactly the direct-commit behavior the contract is now built
+// to prevent. Use NotarizeDocument instead: it runs the same hash +
+// signature write, but only once Status == DEFENDED. Kept only so any
+// existing caller gets a clear, explicit error instead of a missing-method
+// failure at the API layer.
 func (c *ThesisContract) NotarizeThesis(
 	ctx contractapi.TransactionContextInterface,
 	thesisID string,
 	hash string,
 	signature string,
 ) error {
-	thesisJSON, err := ctx.GetStub().GetState(thesisID)
-	if err != nil {
-		return fmt.Errorf("échec de lecture du ledger : %w", err)
-	}
-	if thesisJSON == nil {
-		return fmt.Errorf("aucune thèse trouvée avec l'ID '%s'", thesisID)
-	}
-
-	var thesis ThesisPayload
-	if err := json.Unmarshal(thesisJSON, &thesis); err != nil {
-		return fmt.Errorf("échec de désérialisation de la thèse : %w", err)
-	}
-
-	thesis.HashDocument = hash
-	thesis.SignatureDocument = signature
-
-	updatedJSON, err := json.Marshal(thesis)
-	if err != nil {
-		return fmt.Errorf("échec de sérialisation de la thèse : %w", err)
-	}
-
-	return ctx.GetStub().PutState(thesisID, updatedJSON)
+	return fmt.Errorf("NotarizeThesis is disabled: document notarization now requires the thesis to be fully graded, use NotarizeDocument")
 }
 
 // CreateThesis insère une nouvelle thèse dans le ledger.

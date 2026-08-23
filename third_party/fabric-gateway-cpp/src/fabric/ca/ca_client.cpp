@@ -266,7 +266,7 @@ std::string extractServerError(const std::string &body) {
   return body;
 }
 
-std::pair<std::string, std::string> CaClient::enrollCommon(
+std::pair<std::string, crypto::SecureString> CaClient::enrollCommon(
     const std::string &enrollmentId, const std::string &enrollmentSecret,
     const std::string &endpoint, const std::optional<std::string> &profile,
     const std::optional<std::vector<std::string>> &attrReqs) {
@@ -274,7 +274,7 @@ std::pair<std::string, std::string> CaClient::enrollCommon(
   //    the issued certificate to this CSR's public key, so the returned
   //    Identity's private key matches the certificate.
   auto [privateKeyPEM, publicKeyPEM] = crypto::ECKeyPair::generate();
-  std::string csrPEM = crypto::CSR::generate(privateKeyPEM, enrollmentId);
+  std::string csrPEM = crypto::CSR::generate(privateKeyPEM.str(), enrollmentId);
 
   // 2. Build the fabric-ca enroll/reenroll request body.  The canonical
   //    client sends the PEM CSR verbatim in "certificate_request".
@@ -304,7 +304,10 @@ std::pair<std::string, std::string> CaClient::enrollCommon(
   }
 
   std::string certPEM = parseCertFromResponse(response.body);
-  return {certPEM, privateKeyPEM};
+  // Keep the private key in its self-wiping buffer all the way to the
+  // Identity: returning it as a std::string here would leave a plaintext copy
+  // that is never wiped.
+  return {certPEM, std::move(privateKeyPEM)};
 }
 
 identity::Identity

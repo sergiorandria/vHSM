@@ -1,6 +1,7 @@
 #include "pkcs11.h"
 #include "pkcs11_internal.h"
 #include "pkcs11_types.h"
+#include "composition_root.h"
 
 #include "../crypto/SecureRNG.h"
 #include "../crypto/aes_gcm.h"
@@ -20,7 +21,10 @@
 #include "../persistence/vault.h"
 
 #include "../audit/audit_log.h"
+#include "../core/hsm_instance.h"
+#ifdef VHSM_LEDGER
 #include "../ledger/ledger_worker.h"
+#endif
 #include "../notification/bounded_notification_bus.h"
 #include "../notification/notification_bus.h"
 #include "../notification/notification_event.h"
@@ -62,10 +66,13 @@ using session::SessionManager;
 static const CK_OBJECT_CLASS g_cka_public_key = CKO_PUBLIC_KEY;
 static const CK_OBJECT_CLASS g_cka_private_key = CKO_PRIVATE_KEY;
 
+// AppContainer owns all services when C_Initialize uses composition root
+std::unique_ptr<AppContainer> g_appContainer;
+
 // SignatureDispatcher instance (initialized in C_Initialize)
 std::unique_ptr<vhsm::signature_store::db::SignatureDispatcher>
     g_signatureDispatcher;
-std::unique_ptr<vhsm::notification::NotificationBus> g_notificationBus;
+vhsm::notification::NotificationBus* g_notificationBus = nullptr;
 std::unique_ptr<vhsm::audit::AuditLog> g_auditLog;
 std::unique_ptr<vhsm::signature_store::db::IDbConnection> g_dbConnection;
 
@@ -76,10 +83,11 @@ std::unique_ptr<vhsm::signature_store::db::NotificationRepository>
     g_notificationRepo;
 std::unique_ptr<vhsm::notification::BoundedNotificationBus> g_boundedBus;
 
-// Ledger anchoring globals (optional; only populated when a Fabric gateway is
-// configured)
+// Ledger anchoring globals (optional; only when VHSM_LEDGER is ON)
+#ifdef VHSM_LEDGER
 std::unique_ptr<vhsm::ledger::LedgerClient> g_ledgerClient;
 std::unique_ptr<vhsm::ledger::LedgerWorker> g_ledgerWorker;
+#endif
 
 // Optional encrypted vault backing the default token (PLAN.md Phase 7).
 std::unique_ptr<vhsm::persistence::Vault> g_vault;
@@ -129,7 +137,7 @@ vhsm::signature_store::db::IDbConnection *p11_db_connection() {
 }
 
 vhsm::notification::NotificationBus *p11_notification_bus() {
-  return g_notificationBus.get();
+  return g_notificationBus;
 }
 
 vhsm::audit::AuditLog *p11_audit_log() { return g_auditLog.get(); }
@@ -141,7 +149,7 @@ void p11_publish_event(vhsm::notification::NotificationEvent::EventType type,
                        const std::string &detail_json,
                        const std::optional<std::string> &user_label,
                        const std::string &audit_event_type) {
-  auto *notification_bus = g_notificationBus.get();
+  auto *notification_bus = g_notificationBus;
   auto *audit_log = g_auditLog.get();
   if (!notification_bus || !audit_log)
     return;
@@ -161,7 +169,7 @@ void p11_publish_event(vhsm::notification::NotificationEvent::EventType type,
     event.actor = user_label.value_or("UNKNOWN");
     event.summary = summary;
     event.detail_json = detail_json;
-    event.hsm_instance = ""; // TODO: fetch from db_meta
+    event.hsm_instance = vhsm::core::hsm_instance_id();
     notification_bus->publish(event);
 
     audit_log->append(audit_event_type + "-" + std::to_string(created_at),

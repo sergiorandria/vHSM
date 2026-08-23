@@ -3,6 +3,7 @@
 #include "pkcs11_types.h"
 
 #include "../core/system_hsm_clock.h"
+#include "../core/hsm_instance.h"
 #include "../crypto/crypto_engine.h"
 #include "../signature_store/signature_dispatcher.h"
 
@@ -494,7 +495,7 @@ void publish_verify_event(CK_SESSION_HANDLE h, CK_RV rv,
             << R"("result":")" << (rv == CKR_OK ? "valid" : "invalid")
             << R"("})";
   event.detail_json = detail_ss.str();
-  event.hsm_instance = ""; // TODO: fetch from db_meta
+  event.hsm_instance = vhsm::core::hsm_instance_id();
 
   try {
     notification_bus->publish(event);
@@ -571,7 +572,7 @@ void publish_crypto_op_event(
             << R"("key_fingerprint":")" << key_fp << R"(",)"
             << R"("payload_digest":")" << payload_digest << R"("})";
   event.detail_json = detail_ss.str();
-  event.hsm_instance = ""; // TODO: fetch from db_meta
+  event.hsm_instance = vhsm::core::hsm_instance_id();
 
   try {
     notification_bus->publish(event);

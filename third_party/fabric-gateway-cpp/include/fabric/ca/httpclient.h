@@ -33,7 +33,8 @@ public:
   void setTLSOptions(
       const std::optional<std::string> &caCertPath = std::nullopt,
       const std::optional<std::string> &certPath = std::nullopt,
-      const std::optional<std::string> &keyPath = std::nullopt) override;
+      const std::optional<std::string> &keyPath = std::nullopt,
+      bool allowInsecure = false) override;
 
 private:
   static size_t writeCallback(char *ptr, size_t size, size_t nmemb,

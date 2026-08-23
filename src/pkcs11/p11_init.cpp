@@ -1,12 +1,17 @@
 #include "pkcs11.h"
 #include "pkcs11_internal.h"
 #include "pkcs11_types.h"
+#include "composition_root.h"
 
 #include "../keystore/slot.h"
 #include "../keystore/token.h"
+#ifdef VHSM_LEDGER
 #include "../ledger/ledger_client.h"
 #include "../ledger/ledger_entry.h"
 #include "../ledger/ledger_worker.h"
+#include "../signature_store/ledger_retry_queue.h"
+#include "../signature_store/signature_repository.h"
+#endif
 #include "../notification/bounded_notification_bus.h"
 #include "../notification/email_adapter.h"
 #include "../notification/grpc_push_adapter.h"
@@ -15,11 +20,10 @@
 #include "../persistence/vault.h"
 #include "../signature_store/db_connection.h"
 #include "../signature_store/db_schema.h"
-#include "../signature_store/ledger_retry_queue.h"
 #include "../signature_store/notification_dispatcher.h"
 #include "../signature_store/notification_repository.h"
 #include "../signature_store/signature_dispatcher.h"
-#include "../signature_store/signature_repository.h"
+#include "../core/hsm_instance.h"
 
 #include <cstdlib>
 #include <cstring>
@@ -27,9 +31,11 @@
 #include <memory>
 #include <string>
 
+#include "vhsm/version.h"
+
 namespace vhsm::pkcs11 {
 
-static void ensure_default_token() {
+[[maybe_unused]] static void ensure_default_token() {
   auto &sm = vhsm::session::SlotManager::get_instance();
   if (!sm.get_slot(0)) {
     auto slot = std::make_shared<vhsm::keystore::Slot>(0);
@@ -50,7 +56,7 @@ static void ensure_default_token() {
 // the token exactly as it was.  Failures are swallowed here — a missing/wrong
 // password must not prevent C_Initialize from succeeding (the token just starts
 // in its fresh state).
-static void init_vault() {
+[[maybe_unused]] static void init_vault() {
   const char *path_cstr = std::getenv("VHSM_VAULT_PATH");
   const char *pass_cstr = std::getenv("VHSM_VAULT_PASSWORD");
   if (!path_cstr || !*path_cstr || !pass_cstr)
@@ -83,43 +89,14 @@ static void init_vault() {
   }
 }
 
-// Resolve the file-backed SQLite database path.
-//
-// Precedence:
-//   1. VHSM_DB_PATH  — explicit path (highest precedence; used by tests and
-//   admins)
-//   2. VHSM_HOME     — data directory; DB lives at $VHSM_HOME/vhsm.sqlite
-//   3. ~/.vhs        — platform default; DB lives at ~/.vhs/vhsm.sqlite
-//
-// The parent directory is created (recursively) if it does not exist so the
-// module can bootstrap a fresh data store on first run.
-static std::string resolve_db_path() {
-  const char *explicit_path = std::getenv("VHSM_DB_PATH");
-  if (explicit_path && *explicit_path) {
-    return explicit_path;
-  }
-
-  std::filesystem::path base;
-  const char *home = std::getenv("VHSM_HOME");
-  if (home && *home) {
-    base = std::filesystem::path(home);
-  } else {
-    const char *home_dir = std::getenv("HOME");
-    base = std::filesystem::path(home_dir ? home_dir : ".") / ".vhs";
-  }
-
-  std::filesystem::path db_path = base / "vhsm.sqlite";
-  std::error_code ec;
-  std::filesystem::create_directories(base, ec);
-  // If the directory could not be created (e.g., read-only mount), fall back
-  // to a per-process temp DB rather than failing C_Initialize outright.
-  if (ec) {
-    return ":memory:";
-  }
-  return db_path.string();
+// Resolve the file-backed SQLite database path — delegates to the composition
+// root (DDD) so the path logic lives in one place (AppContainer). Keeps
+// p11_init as a thin adapter over the composition root.
+[[maybe_unused]] static std::string resolve_db_path() {
+  return resolve_db_path_for_container();
 }
 
-static void init_signature_dispatcher() {
+[[maybe_unused]] static void init_signature_dispatcher() {
   // Open (or create) the file-backed SQLite database and bootstrap the schema.
   // A second C_Initialize (after C_Finalize) reuses the same file, so
   // signature records persist across module load/unload cycles.
@@ -132,6 +109,7 @@ static void init_signature_dispatcher() {
   try {
     vhsm::signature_store::db::DbSchema schema(*g_dbConnection);
     schema.bootstrap();
+    vhsm::core::set_hsm_instance_id(schema.get_instance_id());
   } catch (...) {
     // Schema creation failed, continue without dispatcher
     return;
@@ -143,8 +121,7 @@ static void init_signature_dispatcher() {
   // and delivers via the channel adapters.
   g_boundedBus =
       std::make_unique<vhsm::notification::BoundedNotificationBus>(1024);
-  g_notificationBus =
-      std::unique_ptr<vhsm::notification::NotificationBus>(g_boundedBus.get());
+  g_notificationBus = g_boundedBus.get();
   g_auditLog = std::make_unique<P11AuditLog>();
 
   // Get the default token for the dispatcher
@@ -176,9 +153,8 @@ static void init_signature_dispatcher() {
     }
   }
 
-  // Ledger anchoring is optional: only construct the worker + client when a
-  // Fabric gateway endpoint is configured via environment variables.  When
-  // unset, the dispatcher runs in local-only mode (no blockchain anchoring).
+  // Ledger anchoring is optional: only when VHSM_LEDGER is ON and env is set.
+#ifdef VHSM_LEDGER
   const char *endpoint = std::getenv("VHSM_LEDGER_ENDPOINT");
   const char *cert = std::getenv("VHSM_LEDGER_CERT");
   const char *key = std::getenv("VHSM_LEDGER_KEY");
@@ -194,7 +170,7 @@ static void init_signature_dispatcher() {
                                             : "vHSMMSP");
 
       auto *db = g_dbConnection.get();
-      auto *bus = g_notificationBus.get();
+      auto *bus = g_notificationBus;
       g_ledgerWorker = std::make_unique<vhsm::ledger::LedgerWorker>(
           *g_ledgerClient, *bus,
           [db](const SignatureRecord &record,
@@ -205,26 +181,27 @@ static void init_signature_dispatcher() {
           });
       g_ledgerWorker->start();
 
-      // Crash recovery: any record left with ledger_status='PENDING'
-      // (e.g. the worker was killed mid-submission) is re-submitted on
-      // startup so the ledger and the DB converge.
       vhsm::signature_store::db::LedgerRetryQueue retry(*db);
       for (auto &rec : retry.load_pending_records()) {
         g_ledgerWorker->submit_record(rec);
       }
     } catch (...) {
-      // Ledger setup failed (e.g., unreachable gateway); fall back to
-      // local-only mode.  Signatures are still persisted and audited.
       g_ledgerClient.reset();
       g_ledgerWorker.reset();
     }
   }
+#endif
 
   // Create SignatureDispatcher (may run with or without ledger anchoring).
   g_signatureDispatcher =
       std::make_unique<vhsm::signature_store::db::SignatureDispatcher>(
           *g_dbConnection, *token, *g_notificationBus, *g_auditLog,
-          g_ledgerWorker.get());
+#ifdef VHSM_LEDGER
+          g_ledgerWorker.get()
+#else
+          nullptr
+#endif
+      );
 }
 
 CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
@@ -236,9 +213,41 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
       // we always support locking; fine
     }
   }
-  ensure_default_token();
-  init_vault();
-  init_signature_dispatcher();
+  // Single wiring via AppContainer (DDD composition root) — eliminates
+  // duplicated resolve_db_path / init_vault / init_dispatcher logic.
+  try {
+    g_appContainer = create_app_container();
+    // Move ownership into legacy globals for ABI compat; g_appContainer
+    // is emptied after the moves and can be discarded.
+    g_dbConnection = std::move(g_appContainer->db);
+    g_boundedBus = std::move(g_appContainer->bounded_bus);
+    g_notificationBus = g_boundedBus.get();
+    g_auditLog = std::move(g_appContainer->audit_log);
+    g_notificationRepo = std::move(g_appContainer->notif_repo);
+    g_notificationDispatcher = std::move(g_appContainer->notif_dispatcher);
+#ifdef VHSM_LEDGER
+    g_ledgerClient = std::move(g_appContainer->ledger_client);
+    g_ledgerWorker = std::move(g_appContainer->ledger_worker);
+#endif
+    g_signatureDispatcher = std::move(g_appContainer->dispatcher);
+    g_vault = std::move(g_appContainer->vault);
+    g_appContainer.reset();
+  } catch (...) {
+    g_appContainer.reset();
+    g_dbConnection.reset();
+    g_boundedBus.reset();
+    g_notificationBus = nullptr;
+    g_auditLog.reset();
+    g_notificationRepo.reset();
+    g_notificationDispatcher.reset();
+#ifdef VHSM_LEDGER
+    g_ledgerClient.reset();
+    g_ledgerWorker.reset();
+#endif
+    g_signatureDispatcher.reset();
+    g_vault.reset();
+    return CKR_GENERAL_ERROR;
+  }
   g_initialized = true;
   return CKR_OK;
 }
@@ -270,15 +279,18 @@ CK_RV C_Finalize(CK_VOID_PTR pReserved) {
     g_notificationDispatcher.reset();
   }
   g_notificationRepo.reset();
+#ifdef VHSM_LEDGER
   if (g_ledgerWorker) {
     g_ledgerWorker->drain_and_stop();
     g_ledgerWorker.reset();
   }
   g_ledgerClient.reset();
+#endif
   g_signatureDispatcher.reset();
-  g_notificationBus.reset();
+  g_notificationBus = nullptr;
   g_boundedBus.reset();
   g_dbConnection.reset();
+  g_appContainer.reset();
   vhsm::session::SlotManager::get_instance().reset();
   return CKR_OK;
 }
@@ -289,8 +301,8 @@ CK_RV C_GetInfo(CK_INFO_PTR pInfo) {
   std::memset(pInfo, 0, sizeof(CK_INFO));
   pInfo->cryptokiVersion.major = 2;
   pInfo->cryptokiVersion.minor = 40;
-  pInfo->libraryVersion.major = 1;
-  pInfo->libraryVersion.minor = 0;
+  pInfo->libraryVersion.major = VHSM_VERSION_MAJOR;
+  pInfo->libraryVersion.minor = VHSM_VERSION_MINOR;
   const char *m = "vHSM";
   const char *d = "vHSM PKCS#11 Module";
   std::memcpy(pInfo->manufacturerID, m,

@@ -4,14 +4,18 @@ namespace fabric {
 namespace identity {
 
 Identity::Identity(const std::string &mspId, const std::string &cert,
-                   const std::string &key)
+                    const std::string &key)
     : mspId_(mspId), certificate_(cert), privateKey_(key) {}
+
+Identity::Identity(const std::string &mspId, const std::string &cert,
+                    crypto::SecureString key)
+    : mspId_(mspId), certificate_(cert), privateKey_(std::move(key)) {}
 
 const std::string &Identity::getMSPID() const { return mspId_; }
 
 const std::string &Identity::getCertificate() const { return certificate_; }
 
-const std::string &Identity::getPrivateKey() const { return privateKey_; }
+const std::string &Identity::getPrivateKey() const { return privateKey_.str(); }
 
 bool Identity::isValid() const {
   return !mspId_.empty() && !certificate_.empty() && !privateKey_.empty();

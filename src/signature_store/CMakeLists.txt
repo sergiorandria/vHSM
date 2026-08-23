@@ -19,13 +19,15 @@ target_sources(vhsm_signature_store
     signature_dispatcher.cpp
     signature_query.cpp
     verification_service.cpp
+    outbox_poller.cpp
+    outbox_poller.h
     internal/signature_dispatcher_core.cpp
     internal/signature_query_core.cpp
     internal/verification_service_core.cpp
 )
 
 target_include_directories(vhsm_signature_store
-    PUBLIC ${PROJECT_SOURCE_DIR}
+    PUBLIC ${PROJECT_SOURCE_DIR}/src
 )
 
 target_link_libraries(vhsm_signature_store
@@ -35,6 +37,8 @@ target_link_libraries(vhsm_signature_store
     vhsm_keystore
     vhsm_persistence
     vhsm_notification
-    vhsm_ledger
     OpenSSL::SSL
 )
+if(VHSM_LEDGER)
+    target_link_libraries(vhsm_signature_store PUBLIC vhsm_ledger)
+endif()

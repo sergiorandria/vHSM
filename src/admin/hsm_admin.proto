@@ -1,8 +1,10 @@
-// hsm_admin.proto — gRPC management + signature query API (see PLAN.md §9).
+// hsm_admin.proto — gRPC management + signature query API (see PLAN.md §9–§10).
 //
-// This is the first slice of the HsmAdmin service: the authentication entry
-// point (AdminLogin).  The remaining RPCs (InitToken, QuerySignatures,
-// StreamEvents, TestNotify, …) are added incrementally in later slices.
+// HsmAdmin is the management surface for the vHSM appliance:
+//   * AdminLogin / BackupToken / RestoreToken (§8–§9)
+//   * Signature query, retrieval and verification (§10)
+//   * Ledger management (records awaiting anchoring + retry)
+//   * Notification subscriber management and delivery-log inspection
 //
 // Authentication model (see PLAN.md §9 & the security checklist):
 //   * SO  (Security Officer) — CKU_SO
@@ -23,6 +25,11 @@ enum UserRole {
   USER = 0;  // CKU_USER
   SO   = 1;  // CKU_SO
 }
+
+// Generic empty request/response body.
+message Empty {}
+
+// ---- Authentication & token lifecycle (§8–§9) ----
 
 // Request to authenticate an SO or USER against a slot's token.
 message AdminLoginRequest {
@@ -61,10 +68,143 @@ message RestoreTokenResponse {
   string status = 1;         // OK / ERROR:<reason>
 }
 
+// ---- Signature query, retrieval & verification (§10) ----
+
+// Query signatures by key fingerprint and/or creation-time range.
+message SignatureQuery {
+  string key_fingerprint = 1; // optional: only records signed by this key
+  int64 start_time = 2;       // optional: inclusive lower bound (unix seconds)
+  int64 end_time = 3;         // optional: inclusive upper bound (unix seconds)
+  uint32 limit = 4;           // optional: cap on returned records (0 = no cap)
+}
+
+// A single signature record as persisted in the local store.
+message SignatureDetail {
+  string id = 1;
+  int64 created_at = 2;
+  uint32 slot_id = 3;
+  string token_label = 4;
+  string key_id = 5;
+  string key_fingerprint = 6;
+  string mechanism = 7;
+  string payload_digest = 8;
+  string signature_b64 = 9;
+  string session_handle = 10;
+  string user_label = 11;
+  string app_context = 12;
+  string ledger_tx_id = 13;
+  int64 ledger_block_num = 14;
+  string ledger_tx_time = 15;
+  string ledger_status = 16;  // PENDING / COMMITTED / FAILED
+}
+
+message SignatureList {
+  repeated SignatureDetail records = 1;
+}
+
+message GetSignatureRequest {
+  string signature_id = 1;
+}
+
+message GetSignatureResponse {
+  SignatureDetail record = 1;
+}
+
+// Verify a stored signature by ID, optionally cross-checking the Fabric
+// ledger (the tamper-evident form).
+message VerifySignatureRequest {
+  string signature_id = 1;
+  bool check_ledger = 2;  // cross-check against the ledger (default: true)
+}
+
+message VerifySignatureResponse {
+  bool record_found = 1;          // present in the local store
+  bool valid = 2;                 // record_found AND ledger cross-check ok (if requested)
+  bool ledger_cross_check_ok = 3; // ledger entry matches the local row
+  string ledger_status = 4;       // PENDING / COMMITTED / FAILED
+  string ledger_tx_id = 5;
+  int64 ledger_block_num = 6;
+  string error_detail = 7;
+}
+
+// ---- Ledger management ----
+
+// Signature IDs whose records still bear ledger_status = 'PENDING' (records
+// that have not yet been anchored to the Fabric ledger).
+message PendingLedgerList {
+  repeated string signature_ids = 1;
+}
+
+message RetryLedgerResponse {
+  uint32 resubmitted = 1;      // records handed back to the ledger worker
+  repeated string failed = 2;  // records that could not be resubmitted
+  string status = 3;           // OK / ERROR:<reason>
+}
+
+// ---- Notification subscriber management & delivery-log inspection (§10) ----
+
+message Subscriber {
+  string id = 1;
+  string name = 2;
+  string channel = 3;       // email | webhook | grpc_push
+  string address = 4;
+  string min_severity = 5;  // INFO | WARN | CRITICAL
+  string event_filter = 6;  // optional glob on event type
+  bool enabled = 7;
+}
+
+message SubscriberResponse {
+  string status = 1;  // OK / ERROR:<reason>
+}
+
+message SubscriberList {
+  repeated Subscriber subscribers = 1;
+}
+
+message SubscriberIdRequest {
+  string id = 1;
+}
+
+// Delivery-log inspection (the notification_log table).
+message NotificationLogQuery {
+  string subscriber_id = 1; // optional: only deliveries to this subscriber
+  int64 since = 2;          // optional: only deliveries at/after this unix time
+  uint32 limit = 3;         // optional: cap on returned entries (0 = no cap)
+}
+
+message NotificationLogEntry {
+  string id = 1;
+  int64 sent_at = 2;
+  string event_id = 3;
+  string subscriber_id = 4;
+  string outcome = 5;  // DELIVERED / RETRYING / FAILED / SKIPPED
+  uint32 attempt_count = 6;
+  string error_detail = 7;
+}
+
+message NotificationLogList {
+  repeated NotificationLogEntry entries = 1;
+}
+
 service HsmAdmin {
   rpc AdminLogin(AdminLoginRequest) returns (AdminLoginResponse);
   // Backup/Restore the token's durable state (KEK, flags, counters) into an
   // encrypted vault file (PLAN.md §8 BackupToken / RestoreToken).
   rpc BackupToken(BackupTokenRequest) returns (BackupTokenResponse);
   rpc RestoreToken(RestoreTokenRequest) returns (RestoreTokenResponse);
+
+  // Signature query API (PLAN.md §10).
+  rpc QuerySignatures(SignatureQuery) returns (SignatureList);
+  rpc GetSignature(GetSignatureRequest) returns (GetSignatureResponse);
+  rpc VerifySignature(VerifySignatureRequest) returns (VerifySignatureResponse);
+
+  // Ledger management: list / retry records awaiting anchoring.
+  rpc ListPendingLedgerCommits(Empty) returns (PendingLedgerList);
+  rpc RetryLedgerCommits(Empty) returns (RetryLedgerResponse);
+
+  // Notification subscriber management + delivery-log inspection.
+  rpc AddSubscriber(Subscriber) returns (SubscriberResponse);
+  rpc ListSubscribers(Empty) returns (SubscriberList);
+  rpc RemoveSubscriber(SubscriberIdRequest) returns (SubscriberResponse);
+  rpc QueryNotificationLog(NotificationLogQuery) returns (NotificationLogList);
 }

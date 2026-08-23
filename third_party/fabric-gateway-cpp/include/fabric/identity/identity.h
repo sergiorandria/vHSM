@@ -3,6 +3,8 @@
 
 #include <string>
 
+#include "fabric/crypto/secure_string.h"
+
 namespace fabric {
 namespace identity {
 
@@ -18,7 +20,13 @@ public:
    * @param key PEM-encoded private key
    */
   Identity(const std::string &mspId, const std::string &cert,
-           const std::string &key);
+            const std::string &key);
+
+  // Overload that takes ownership of an already self-wiping key buffer.  Used
+  // on the enrollment path so the freshly generated private key never exists
+  // as a plaintext std::string copy that would outlive the Identity unwiped.
+  Identity(const std::string &mspId, const std::string &cert,
+            crypto::SecureString key);
 
   /**
    * Get the MSP ID
@@ -47,7 +55,10 @@ public:
 private:
   std::string mspId_;
   std::string certificate_;
-  std::string privateKey_;
+  // Private key material is held in a self-wiping buffer, not a plain
+  // std::string: the key must not outlive the Identity in plaintext. The cert
+  // is public, so it stays a normal string.
+  crypto::SecureString privateKey_;
 };
 
 } // namespace identity
