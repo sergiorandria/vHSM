@@ -1,7 +1,11 @@
 # Crypto Unit Tests
 
 find_package(OpenSSL REQUIRED)
-find_package(GTest REQUIRED)
+find_package(GTest QUIET)
+if(NOT GTest_FOUND)
+  message(STATUS "GTest not found — skipping vhsm_crypto_test")
+  return()
+endif()
 
 add_executable(vhsm_crypto_test
     rsa_test.cpp

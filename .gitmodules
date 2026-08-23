@@ -1,0 +1,3 @@
+[submodule "third_party/fabric-gateway-cpp"]
+	path = third_party/fabric-gateway-cpp
+	url = https://github.com/sergiorandria/fabric-gateway-cpp.git
