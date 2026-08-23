@@ -1,6 +1,7 @@
 #include "pkcs11.h"
 #include "pkcs11_internal.h"
 #include "pkcs11_types.h"
+#include "composition_root.h"
 
 #include "../keystore/slot.h"
 #include "../keystore/token.h"
@@ -86,50 +87,11 @@ static void init_vault() {
   }
 }
 
-// Resolve the file-backed SQLite database path.
-//
-// Precedence:
-//   1. VHSM_DB_PATH  — explicit path (highest precedence; used by tests and
-//   admins)
-//   2. VHSM_HOME     — data directory; DB lives at $VHSM_HOME/vhsm.sqlite
-//   3. ~/.vhs        — platform default; DB lives at ~/.vhs/vhsm.sqlite
-//
-// The parent directory is created (recursively) if it does not exist so the
-// module can bootstrap a fresh data store on first run.
+// Resolve the file-backed SQLite database path — delegates to the composition
+// root (DDD) so the path logic lives in one place (AppContainer). Keeps
+// p11_init as a thin adapter over the composition root.
 static std::string resolve_db_path() {
-  const char *explicit_path = std::getenv("VHSM_DB_PATH");
-  if (explicit_path && *explicit_path) {
-    return explicit_path;
-  }
-
-  std::filesystem::path base;
-  const char *home = std::getenv("VHSM_HOME");
-  if (home && *home) {
-    base = std::filesystem::path(home);
-  } else {
-#ifdef _WIN32
-    const char *local = std::getenv("LOCALAPPDATA");
-    if (local && *local) {
-      base = std::filesystem::path(local) / "vHSM";
-    } else {
-      const char *up = std::getenv("USERPROFILE");
-      base = std::filesystem::path(up ? up : ".") / "vHSM";
-    }
-#else
-    const char *home_dir = std::getenv("HOME");
-    base = std::filesystem::path(home_dir ? home_dir : ".") / ".vhs";
-#endif
-  }
-
-  std::filesystem::path db_path = base / "vhsm.sqlite";
-  std::error_code ec;
-  std::filesystem::create_directories(base, ec);
-  // If the directory could not be created (e.g., read-only mount), fall back
-  // to a per-process temp DB rather than failing C_Initialize outright.
-  if (ec) {
-    return ":memory:";
-  }
-  return db_path.string();
+  return resolve_db_path_for_container();
 }
 
 static void init_signature_dispatcher() {
