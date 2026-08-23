@@ -51,7 +51,7 @@ add_library(vhsm_admin STATIC
 
 target_include_directories(vhsm_admin
     PUBLIC
-        ${PROJECT_SOURCE_DIR}
+        ${PROJECT_SOURCE_DIR}/src
 )
 
 # Generated headers live in the build tree; keep -Werror from tripping on them.

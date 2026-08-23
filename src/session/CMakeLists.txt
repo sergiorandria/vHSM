@@ -12,7 +12,7 @@ target_sources(vhsm_session
 )
 
 target_include_directories(vhsm_session
-    PUBLIC ${PROJECT_SOURCE_DIR}
+    PUBLIC ${PROJECT_SOURCE_DIR}/src
 )
 
 target_link_libraries(vhsm_session

@@ -3,5 +3,5 @@ add_library(vhsm_threadpool
 )
 
 target_include_directories(vhsm_threadpool
-    PUBLIC ${PROJECT_SOURCE_DIR}
+    PUBLIC ${PROJECT_SOURCE_DIR}/src
 )

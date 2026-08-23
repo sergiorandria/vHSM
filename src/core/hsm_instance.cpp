@@ -24,7 +24,7 @@ void set_hsm_instance_id(std::string id) {
   g_hsm_instance_id = std::move(id);
 }
 
-const std::string& hsm_instance_id() {
+const std::string &hsm_instance_id() {
   // Returned reference is valid until next set_hsm_instance_id call.
   // Callers should copy if they need to hold it across a set.
   // Reading without lock is safe on most platforms for std::string
@@ -39,18 +39,18 @@ const std::string& hsm_instance_id() {
 // ------------------ HsmInstanceId ------------------
 HsmInstanceId::HsmInstanceId(std::string id) noexcept : id_(std::move(id)) {}
 
-const std::string& HsmInstanceId::value() const noexcept { return id_; }
+const std::string &HsmInstanceId::value() const noexcept { return id_; }
 
-bool HsmInstanceId::operator==(const HsmInstanceId& other) const noexcept {
+bool HsmInstanceId::operator==(const HsmInstanceId &other) const noexcept {
   return id_ == other.id_;
 }
-bool HsmInstanceId::operator!=(const HsmInstanceId& other) const noexcept {
+bool HsmInstanceId::operator!=(const HsmInstanceId &other) const noexcept {
   return !(*this == other);
 }
 
 // ------------------ DatabaseHsmInstanceProvider ------------------
 DatabaseHsmInstanceProvider::DatabaseHsmInstanceProvider(
-    vhsm::signature_store::db::IDbConnection& db)
+    vhsm::signature_store::db::IDbConnection &db)
     : db_(db) {}
 
 HsmInstanceId DatabaseHsmInstanceProvider::getInstanceId() const {
@@ -67,7 +67,8 @@ HsmInstanceId DatabaseHsmInstanceProvider::getInstanceId() const {
   std::string uuid;
   if (!rs.empty() && !rs.rows_.empty()) {
     auto v = rs.get<std::string>(rs.rows_[0], 0);
-    if (v) uuid = *v;
+    if (v)
+      uuid = *v;
   }
   if (uuid.empty()) {
     throw std::runtime_error("HSM instance ID not seeded.");
@@ -80,12 +81,11 @@ HsmInstanceId DatabaseHsmInstanceProvider::getInstanceId() const {
   return fresh;
 }
 
-bool DatabaseHsmInstanceProvider::seedInstanceId(const HsmInstanceId& id) {
+bool DatabaseHsmInstanceProvider::seedInstanceId(const HsmInstanceId &id) {
   try {
-    db_.exec(
-        "INSERT INTO db_meta(key, value) VALUES(?, ?) "
-        "ON CONFLICT(key) DO UPDATE SET value=excluded.value;",
-        std::vector<std::string>{"instance_id", id.value()});
+    db_.exec("INSERT INTO db_meta(key, value) VALUES(?, ?) "
+             "ON CONFLICT(key) DO UPDATE SET value=excluded.value;",
+             std::vector<std::string>{"instance_id", id.value()});
   } catch (...) {
     return false;
   }
@@ -98,8 +98,8 @@ bool DatabaseHsmInstanceProvider::seedInstanceId(const HsmInstanceId& id) {
 }
 
 // ------------------ Factory ------------------
-std::unique_ptr<IHsmInstanceProvider> createDefaultInstanceProvider(
-    vhsm::signature_store::db::IDbConnection& db) {
+std::unique_ptr<IHsmInstanceProvider>
+createDefaultInstanceProvider(vhsm::signature_store::db::IDbConnection &db) {
   return std::make_unique<DatabaseHsmInstanceProvider>(db);
 }
 

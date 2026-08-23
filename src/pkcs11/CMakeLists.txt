@@ -20,7 +20,7 @@ target_sources(vhsm_pkcs11
 )
 
 target_include_directories(vhsm_pkcs11
-    PUBLIC ${PROJECT_SOURCE_DIR}
+    PUBLIC ${PROJECT_SOURCE_DIR}/src
 )
 
 target_compile_options(vhsm_pkcs11 PRIVATE -fPIC -Wno-deprecated-declarations)

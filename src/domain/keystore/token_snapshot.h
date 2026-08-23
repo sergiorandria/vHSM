@@ -35,7 +35,4 @@ struct TokenSnapshot {
 
 } // namespace vhsm::domain::keystore
 
-// Alias for backward compat with persistence code that expects ::TokenSnapshot
-using TokenSnapshot = vhsm::domain::keystore::TokenSnapshot;
-
 #endif // VHSM_DOMAIN_KEYSTORE_TOKEN_SNAPSHOT_H
