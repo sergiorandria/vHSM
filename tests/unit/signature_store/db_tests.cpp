@@ -605,12 +605,11 @@ TEST_F(DbSchemaVerifyTest, VerifySchema_MissingTable_ReturnsFalseWithReason) {
 TEST_F(DbSchemaVerifyTest,
        VerifySchema_WrongSchemaVersion_ReturnsFalseWithReason) {
   schema_.bootstrap();
-  // Manually corrupt schema_version in meta.
-  // We re-create a schema against a connection seeded with wrong version.
   FakeDbConnection bad_conn;
-  for (const char *tbl :
-       {"db_meta", "signature_records", "signature_verifications",
-        "notification_subscribers", "notification_log"}) {
+  for (const char *tbl : {"db_meta", "signature_records",
+                          "signature_verifications",
+                          "notification_subscribers", "notification_log",
+                          "event_outbox"}) {
     bad_conn.exec("CREATE TABLE IF NOT EXISTS " + std::string(tbl) +
                   " (x TEXT);");
   }
@@ -711,8 +710,8 @@ TEST(DbSchemaConstantsTest, LedgerStatusConstants_AreCorrect) {
   EXPECT_EQ(ledger_status::kFailed, "FAILED");
 }
 
-TEST(DbSchemaConstantsTest, CurrentSchemaVersion_IsFive) {
-  EXPECT_EQ(kCurrentSchemaVersion, 5);
+TEST(DbSchemaConstantsTest, CurrentSchemaVersion_IsSix) {
+  EXPECT_EQ(kCurrentSchemaVersion, 6);
 }
 
 } // namespace vhsm::signature_store::db

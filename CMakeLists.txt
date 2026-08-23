@@ -11,6 +11,14 @@ option(VHSM_ADMIN_GRPC       "Build gRPC admin server"                  ON)
 option(VHSM_NOTIFY_EMAIL     "Build email notification adapter"         ON)
 option(VHSM_NOTIFY_WEBHOOK   "Build webhook notification adapter"       ON)
 set(VHSM_NOTIFY_BUS_SIZE "1024" CACHE STRING "Notification ring buffer capacity")
+set(VHSM_STORE_BACKEND "db" CACHE STRING "Signature store backend: db|ledger")
+set_property(CACHE VHSM_STORE_BACKEND PROPERTY STRINGS db ledger)
+
+# Mutually exclusive backends: ledger is alternative to DB, not complementary.
+# When STORE_BACKEND=ledger, force VHSM_LEDGER ON so Fabric code is built.
+if(VHSM_STORE_BACKEND STREQUAL "ledger")
+  set(VHSM_LEDGER ON CACHE BOOL "" FORCE)
+endif()
 
 # ---------------------------------------------------------------------------
 # Version header generation
@@ -166,6 +174,7 @@ endif()
 # ---------------------------------------------------------------------------
 add_compile_definitions(
     VHSM_DB_BACKEND_${VHSM_DB_BACKEND}          # e.g. VHSM_DB_BACKEND_sqlite
+    VHSM_STORE_BACKEND_${VHSM_STORE_BACKEND}    # e.g. VHSM_STORE_BACKEND_db
     $<$<BOOL:${VHSM_ASYNC_DB}>:VHSM_ASYNC_DB>
     $<$<BOOL:${VHSM_REQUIRE_DB}>:VHSM_REQUIRE_DB>
     $<$<BOOL:${VHSM_ADMIN_GRPC}>:VHSM_ADMIN_GRPC>

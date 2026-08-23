@@ -12,7 +12,7 @@ namespace db {
 // Schema version
 // Bumped whenever a migration adds or changes a table.
 // Migration N upgrades from version N-1 to version N.
-inline constexpr int kCurrentSchemaVersion = 5;
+inline constexpr int kCurrentSchemaVersion = 6;
 
 // v1 — initial schema (signature_records, signature_verifications,
 //       notification_subscribers, notification_log, db_meta)
@@ -21,6 +21,8 @@ inline constexpr int kCurrentSchemaVersion = 5;
 // v4 — Hyperledger Fabric ledger columns, no Rekor, no integrity_hmac
 // v5 — notification_subscribers / notification_log drop integrity_hmac
 //      (matches PLANv4 §8.5 "Fabric/notification" schema; no local HMAC)
+// v6 — event_outbox for transactional outbox pattern (ledger + notification
+//      delivery via same DB transaction as signature_records)
 
 // Table name constants
 namespace table {
@@ -30,6 +32,7 @@ inline constexpr std::string_view kSignatureVerifications =
 inline constexpr std::string_view kNotificationSubscribers =
     "notification_subscribers";
 inline constexpr std::string_view kNotificationLog = "notification_log";
+inline constexpr std::string_view kEventOutbox = "event_outbox";
 inline constexpr std::string_view kDbMeta = "db_meta";
 } // namespace table
 
@@ -111,6 +114,7 @@ public:
   std::string sql_create_signature_verifications() const;
   std::string sql_create_notification_subscribers() const;
   std::string sql_create_notification_log() const;
+  std::string sql_create_event_outbox() const;
   std::string sql_create_db_meta() const;
 
   // CREATE INDEX statements.
@@ -130,6 +134,7 @@ private:
   void migrate_legacy_to_v4(); // Any pre-v4 DB → v4 ledger schema (no Rekor).
   void migrate_v4_to_v5();     // v4 → v5: drop integrity_hmac from the
                                // notification tables.
+  void migrate_v5_to_v6();     // v5 → v6: create event_outbox for outbox pattern.
 };
 
 } // namespace db

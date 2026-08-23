@@ -5,6 +5,7 @@
 #include <string>
 
 #include "../core/hsm_instance.h"
+#include "../domain/signing/isignature_store.h"
 #include "../signature_store/db_connection.h"
 
 // Forward declares for impl to keep header light
@@ -40,25 +41,36 @@ namespace vhsm::pkcs11 {
 // p11_init still mirrors globals for ABI compat but now delegates creation
 // to this factory.
 struct AppContainer {
-  // DB + schema
-  std::unique_ptr<vhsm::signature_store::db::IDbConnection> db;
-  std::string db_path;
+  enum class StoreBackend { Db, Ledger };
+  StoreBackend backend = StoreBackend::Db;
   std::string instance_id;
 
-  // Notification bus + dispatcher
-  std::unique_ptr<vhsm::notification::BoundedNotificationBus> bounded_bus;
-  vhsm::notification::NotificationBus* bus = nullptr; // non-owning view of bounded_bus
-  std::unique_ptr<vhsm::audit::AuditLog> audit_log;
-  std::unique_ptr<vhsm::signature_store::db::NotificationRepository> notif_repo;
-  std::unique_ptr<vhsm::signature_store::db::NotificationDispatcher> notif_dispatcher;
+  // --- DB backend (mutually exclusive with ledger) ---
+  std::unique_ptr<vhsm::signature_store::db::IDbConnection> db;
+  std::string db_path;
 
-  // Ledger (optional, only when VHSM_LEDGER is ON)
+  // --- Ledger backend (mutually exclusive with DB) ---
 #ifdef VHSM_LEDGER
   std::unique_ptr<vhsm::ledger::LedgerClient> ledger_client;
   std::unique_ptr<vhsm::ledger::LedgerWorker> ledger_worker;
 #endif
 
-  // Signature pipeline
+  // Common notification bus + dispatcher (used by both backends, but DB
+  // tables only exist when backend==Db; ledger backend uses in-memory bus)
+  std::unique_ptr<vhsm::notification::BoundedNotificationBus> bounded_bus;
+  vhsm::notification::NotificationBus* bus = nullptr; // non-owning view
+  std::unique_ptr<vhsm::audit::AuditLog> audit_log;
+  std::unique_ptr<vhsm::signature_store::db::NotificationRepository> notif_repo;
+  std::unique_ptr<vhsm::signature_store::db::NotificationDispatcher> notif_dispatcher;
+
+  // Unified signature store port — points to either DbSignatureStore or
+  // FabricSignatureStore depending on backend. SignatureDispatcher will be
+  // constructed against this port in a future slice; for now dispatcher
+  // still takes the concrete DB/ledger pointers, but store is available
+  // for new code.
+  std::unique_ptr<vhsm::domain::signing::ISignatureStore> store;
+
+  // Signature pipeline (concrete, for backward compat; new code should use store)
   std::unique_ptr<vhsm::signature_store::db::SignatureDispatcher> dispatcher;
 
   // Vault (optional)
