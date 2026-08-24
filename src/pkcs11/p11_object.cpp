@@ -280,15 +280,12 @@ CK_RV C_FindObjectsInit(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
   auto s = p11_get_session(hSession);
   if (!s)
     return CKR_SESSION_HANDLE_INVALID;
-  {
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-    if (g_findResults.count(hSession))
-      return CKR_OPERATION_ACTIVE;
-  }
+  // Find state now lives on the Session; a second Init while one is active is
+  // CKR_OPERATION_ACTIVE (same semantics as the old g_findResults map check).
+  if (s->hasFindResults() || s->findActive())
+    return CKR_OPERATION_ACTIVE;
 
   std::vector<CK_OBJECT_HANDLE> results;
-  // Fast path: if template contains only indexed attrs (CLASS/LABEL/ID),
-  // use secondary index O(k) instead of O(n) registry scan.
   bool use_index = false;
   if (pTemplate && ulCount > 0 && ulCount <= 3) {
     bool all_indexed = true;
@@ -305,43 +302,19 @@ CK_RV C_FindObjectsInit(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
       tmpl[a.type] = std::vector<uint8_t>(static_cast<uint8_t*>(a.pValue),
                                           static_cast<uint8_t*>(a.pValue) + a.ulValueLen);
     }
+    // Session store IS the session's object universe — no g_objectRegistry
+    // intersection needed anymore (it could diverge from the store).
     results = s->getObjectStore().v_find_all_by_attributes(tmpl);
-    // Intersect with session's registry (object must be in this session's handle list)
-    std::vector<CK_OBJECT_HANDLE> session_handles;
-    {
-      std::lock_guard<std::mutex> lock(g_stateMutex);
-      auto it = g_objectRegistry.find(hSession);
-      if (it != g_objectRegistry.end()) session_handles = it->second;
-    }
-    if (!session_handles.empty()) {
-      std::unordered_map<CK_OBJECT_HANDLE, bool> in_session;
-      for (auto h : session_handles) in_session[h] = true;
-      std::vector<CK_OBJECT_HANDLE> filtered;
-      filtered.reserve(results.size());
-      for (auto h : results) if (in_session.count(h)) filtered.push_back(h);
-      results.swap(filtered);
-    } else {
-      results.clear();
-    }
   } else {
-    // Registry scan but with short lock: copy handles, then match outside
-    std::vector<CK_OBJECT_HANDLE> handles;
-    {
-      std::lock_guard<std::mutex> lock(g_stateMutex);
-      auto it = g_objectRegistry.find(hSession);
-      if (it != g_objectRegistry.end()) handles = it->second;
-    }
+    // Enumerate all handles from the session's own store.
+    auto handles = s->getObjectStore().v_all_handles();
     for (CK_OBJECT_HANDLE h : handles) {
       auto o = s->getObjectStore().v_get_object(h);
       if (o && match_object(*o, pTemplate, ulCount))
         results.push_back(h);
     }
   }
-  {
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-    g_findResults[hSession].handles = std::move(results);
-    g_findResults[hSession].pos = 0;
-  }
+  s->setFindResults(std::move(results));
   return CKR_OK;
 }
 
@@ -349,32 +322,22 @@ CK_RV C_FindObjects(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE_PTR phObject,
                     CK_ULONG ulMaxObjectCount, CK_ULONG_PTR pulObjectCount) {
   if (!pulObjectCount)
     return CKR_ARGUMENTS_BAD;
-  CK_ULONG n = 0;
-  {
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-    auto it = g_findResults.find(hSession);
-    if (it == g_findResults.end())
-      return CKR_OPERATION_NOT_INITIALIZED;
-    auto &state = it->second;
-    for (CK_ULONG i = state.pos; i < state.handles.size() && n < ulMaxObjectCount; ++i) {
-      if (phObject)
-        phObject[n] = state.handles[i];
-      ++n;
-    }
-    *pulObjectCount = n;
-    state.pos += n;
-    // Optional shrink when done to free memory
-    if (state.pos >= state.handles.size()) {
-      // Keep vector but reset pos to avoid reallocation on next FindInit for same session
-      // We keep the vector allocated for reuse.
-    }
-  }
+  auto s = p11_get_session(hSession);
+  if (!s)
+    return CKR_SESSION_HANDLE_INVALID;
+  // Cursor advance on Session — O(k) slice copy, no O(n) vector::erase.
+  if (!s->findActive())
+    return CKR_OPERATION_NOT_INITIALIZED;
+  *pulObjectCount = static_cast<CK_ULONG>(
+      s->findNextBatch(phObject, static_cast<size_t>(ulMaxObjectCount)));
   return CKR_OK;
 }
 
 CK_RV C_FindObjectsFinal(CK_SESSION_HANDLE hSession) {
-  std::lock_guard<std::mutex> lock(g_stateMutex);
-  g_findResults.erase(hSession);
+  auto s = p11_get_session(hSession);
+  if (!s)
+    return CKR_SESSION_HANDLE_INVALID;
+  s->clearFindResults();
   return CKR_OK;
 }
 

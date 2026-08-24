@@ -22,22 +22,18 @@ CK_RV C_OpenSession(CK_SLOT_ID slotID, CK_FLAGS flags, CK_VOID_PTR pApplication,
 CK_RV C_CloseSession(CK_SESSION_HANDLE hSession) {
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
-  CK_RV rv = g_sessionManager.closeSession(hSession);
-  if (rv == CKR_OK)
-    p11_clear_session_objects(hSession);
-  return rv;
+  // SessionManager::closeSession destroys the Session object, which owns all
+  // per-session operation/find state — nothing global left to clear.
+  return g_sessionManager.closeSession(hSession);
 }
 
 CK_RV C_CloseAllSessions(CK_SLOT_ID slotID) {
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
-  CK_RV rv = g_sessionManager.closeAllSessions(slotID);
-  std::lock_guard<std::mutex> lock(g_stateMutex);
-  g_objectRegistry.clear();
-  g_activeMech.clear();
-  g_findResults.clear();
-  g_loginState.clear();
-  return rv;
+  // SessionManager::closeAllSessions destroys every Session for the slot.
+  // Per-session state (op buffers, find results, login state) dies with the
+  // Session objects; no parallel global maps to clean up.
+  return g_sessionManager.closeAllSessions(slotID);
 }
 
 CK_RV C_GetSessionInfo(CK_SESSION_HANDLE hSession, CK_SESSION_INFO_PTR pInfo) {
@@ -49,13 +45,8 @@ CK_RV C_GetSessionInfo(CK_SESSION_HANDLE hSession, CK_SESSION_INFO_PTR pInfo) {
   std::memset(pInfo, 0, sizeof(CK_SESSION_INFO));
   pInfo->slotID = s->getSlotID();
   pInfo->flags = s->getFlags();
-  CK_USER_TYPE ut = CKU_INVALID;
-  {
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-    auto it = g_loginState.find(hSession);
-    if (it != g_loginState.end())
-      ut = it->second;
-  }
+  // Single source of truth: Session::getUserType() (was g_loginState map).
+  CK_USER_TYPE ut = s->getUserType();
   bool rw = (s->getFlags() & CKF_RW_SESSION) != 0;
   if (ut == CKU_USER)
     pInfo->state = rw ? CKS_RW_USER_FUNCTIONS : CKS_RO_USER_FUNCTIONS;
@@ -74,7 +65,8 @@ CK_RV C_Login(CK_SESSION_HANDLE hSession, CK_USER_TYPE userType,
   if (userType != CKU_USER && userType != CKU_SO)
     return CKR_USER_TYPE_INVALID;
   keystore::Token *tok = p11_get_token_for_session(hSession);
-  if (!tok)
+  auto s = p11_get_session(hSession);
+  if (!tok || !s)
     return CKR_SESSION_HANDLE_INVALID;
 
   bool was_locked = (userType == CKU_USER)
@@ -83,9 +75,12 @@ CK_RV C_Login(CK_SESSION_HANDLE hSession, CK_USER_TYPE userType,
   CK_RV rv =
       tok->login(userType, reinterpret_cast<const CK_CHAR *>(pPin), ulPinLen);
   if (rv == CKR_OK) {
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-    g_loginState[hSession] = userType;
-    return CKR_OK;
+    // Record login on the Session itself (replaces g_loginState map).
+    // Token::login already verified the PIN; Session::login just records the
+    // userType and derives state_ from it. Pass an empty SecureBuffer since
+    // the PIN has been consumed by Token::login.
+    SecureBuffer pin_sink(1);
+    return s->login(userType, pin_sink);
   }
 
   // Brute-force protection: when a failed attempt trips the lockout
@@ -95,8 +90,7 @@ CK_RV C_Login(CK_SESSION_HANDLE hSession, CK_USER_TYPE userType,
                         ? tok->is_user_pin_locked() == CK_TRUE
                         : tok->is_so_pin_locked() == CK_TRUE;
   if (!was_locked && now_locked) {
-    auto s = p11_get_session(hSession);
-    int slot_id = s ? static_cast<int>(s->getSlotID()) : 0;
+    int slot_id = static_cast<int>(s->getSlotID());
     std::stringstream detail_ss;
     detail_ss << R"({"user_type":")"
               << (userType == CKU_USER ? "CKU_USER" : "CKU_SO")
@@ -117,19 +111,20 @@ CK_RV C_Logout(CK_SESSION_HANDLE hSession) {
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   keystore::Token *tok = p11_get_token_for_session(hSession);
-  if (!tok)
+  auto s = p11_get_session(hSession);
+  if (!tok || !s)
     return CKR_SESSION_HANDLE_INVALID;
-  CK_USER_TYPE ut = CKU_USER;
-  {
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-    auto it = g_loginState.find(hSession);
-    if (it != g_loginState.end())
-      ut = it->second;
-  }
+  // Single source of truth: read the user type from the Session (was
+  // g_loginState). Then token logout + session logout together.
+  CK_USER_TYPE ut = s->getUserType();
   CK_RV rv = tok->logout(ut);
-  {
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-    g_loginState.erase(hSession);
+  if (rv == CKR_OK || rv == CKR_USER_NOT_LOGGED_IN) {
+    // Clear per-session op/find state too.
+    s->logout();
+    s->opEnd();
+    s->clearFindResults();
+    if (rv == CKR_USER_NOT_LOGGED_IN)
+      rv = CKR_OK; // idempotent logout is friendlier and matches old behavior
   }
   return rv;
 }

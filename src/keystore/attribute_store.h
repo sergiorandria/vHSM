@@ -2,6 +2,7 @@
 #define VHSM_KEYSTORE_ATTRIBUTE_STORE_H
 
 #include "../core/secure_buffer.h"
+#include "pkcs11/pkcs11_types.h"  // resolved via -I src
 #include "../core/types.h"
 #include "hsm_object.h"
 
@@ -12,7 +13,8 @@
 
 namespace vhsm::keystore::internal {
 
-// CKA_/CKO_/CKK_* now defined in src/domain/pkcs11/pkcs11_types.h (single source).
+// CKA_/CKO_/CKK_* single source: src/pkcs11/pkcs11_types.h (constexpr, global ns).
+// Included transitively via hsm_object.h -> core/types.h -> pkcs11_types.h.
 
 /**
  * v_AttributeStore_M1 manages PKCS#11 attributes for HSM objects.
