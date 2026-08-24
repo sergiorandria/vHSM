@@ -31,15 +31,11 @@
 #include "../signature_store/db_connection.h"
 #include "../signature_store/signature_dispatcher.h"
 
-#include <openssl/core_names.h>
 #include <openssl/ec.h>
-#include <openssl/ecdsa.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
-#include <openssl/kdf.h>
 #include <openssl/rand.h>
 #include <openssl/rsa.h>
-#include <openssl/x509.h>
 
 #include <algorithm>
 #include <chrono>
@@ -317,6 +313,19 @@ std::vector<u8> p11_get_attr_bytes(const HsmObject &obj, CK_ATTRIBUTE_TYPE t) {
 CK_RV p11_store_secret(HsmObject &obj, const std::vector<u8> &raw) {
   obj.setAttribute(CKA_VALUE, raw.data(), raw.size());
   return CKR_OK;
+}
+
+CK_RV p11_store_key_ec(HsmObject &obj, vhsm::crypto::ECCKeyPair kp,
+                       bool isPrivate) {
+  // Serialize via the EVP shim path (scrypto handles are EVP-compatible in
+  // shim builds); reuse p11_store_key for attribute layout.
+  return p11_store_key(obj, static_cast<EVP_PKEY *>(kp.key), isPrivate, CKK_EC);
+}
+
+CK_RV p11_store_key(HsmObject &obj, vhsm::crypto::RSAKeyPair kp,
+                    bool isPrivate, int keyType) {
+  return p11_store_key(obj, static_cast<EVP_PKEY *>(kp.key), isPrivate,
+                       keyType);
 }
 
 // ---------------------------------------------------------------------------

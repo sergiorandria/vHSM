@@ -1,11 +1,11 @@
 #include "ctr_drbg_aes256.h"
 #include "../core/error.h"
-#include "CipherCtxGuard.h"
 #include "SecureRNG.h"
+#include "vhsm/scrypto/aes.h"
+#include "vhsm/scrypto/mem.h"
 
 #include <cstring>
 #include <fstream>
-#include <openssl/evp.h>
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -33,18 +33,8 @@ void CTR_DRBG_AES256::increment_v() {
 
 void CTR_DRBG_AES256::aes256_encrypt_block(const std::vector<u8> &input,
                                            std::vector<u8> &output) {
-  int len;
-
-  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-  VHSM_CHECK_PTR_MSG(ctx != nullptr,
-                     "RNG Internal Error: Context creation failed");
-
-  CipherCtxGuard guard(ctx);
-
-  VHSM_CHECK(
-      EVP_EncryptInit_ex(ctx, EVP_aes_256_ecb(), nullptr, key.data(), nullptr));
-  VHSM_CHECK(EVP_CIPHER_CTX_set_padding(ctx, 0));
-  VHSM_CHECK(EVP_EncryptUpdate(ctx, output.data(), &len, input.data(), 16));
+  vhsm::scrypto::aes256_ecb_encrypt_block(key.data(), input.data(),
+                                          output.data());
 }
 
 void CTR_DRBG_AES256::update(const std::vector<u8> &provided_data) {
@@ -65,7 +55,7 @@ void CTR_DRBG_AES256::update(const std::vector<u8> &provided_data) {
 
   std::memcpy(key.data(), temp.data(), 32);
   std::memcpy(V.data(), temp.data() + 32, 16);
-  OPENSSL_cleanse(temp.data(), temp.size());
+  vhsm::scrypto::cleanse(temp.data(), temp.size());
 }
 
 CTR_DRBG_AES256::CTR_DRBG_AES256(const std::vector<u8> &entropy_input) {
@@ -111,8 +101,8 @@ std::vector<u8> CTR_DRBG_AES256::generate(size_t requested_bytes) {
 }
 
 CTR_DRBG_AES256::~CTR_DRBG_AES256() {
-  OPENSSL_cleanse(key.data(), key.size());
-  OPENSSL_cleanse(V.data(), V.size());
+  vhsm::scrypto::cleanse(key.data(), key.size());
+  vhsm::scrypto::cleanse(V.data(), V.size());
 }
 
 std::vector<u8> SecureRNG::get_system_entropy(const std::string &source_path) {

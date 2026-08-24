@@ -106,7 +106,7 @@ if(VHSM_USE_SECURE_CRYPTO)
     target_link_libraries(vhsm_crypto_provider INTERFACE vhsm_secure_crypto)
     target_include_directories(vhsm_crypto_provider INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vhsm-secure-crypto/include)
-    target_compile_definitions(vhsm_crypto_provider INTERFACE VHSM_USE_SECURE_CRYPTO VHSM_OPENSSL_SHIM)
+    target_compile_definitions(vhsm_crypto_provider INTERFACE VHSM_USE_SECURE_CRYPTO VHSM_OPENSSL_SHIM=1)
     add_compile_definitions(VHSM_USE_SECURE_CRYPTO)
     message(STATUS "VHSM: using vhsm-secure-crypto (hardened OpenSSL clone) wired via vhsm_crypto_provider — OpenSSL-free build")
 else()
