@@ -1,8 +1,12 @@
 /*
  * crypto_engine.cpp
  *
- * CryptoEngine dispatches a signing request to the correct primitive based on
- * the key type. All primitives come from vhsm::scrypto (hardened clone).
+ * CryptoEngine dispatches a signing request to the primitive matching the
+ * key's algorithm family. All primitives come from vhsm::scrypto (hardened
+ * clone). A requested mechanism that conflicts with the key family is
+ * rejected with CKR_KEY_TYPE_INCONSISTENT unless the caller explicitly opts
+ * into native fallback (MechanismPolicy::AllowNativeFallback) — silent
+ * algorithm substitution produced signatures verifiers would reject.
  */
 
 #include "crypto_engine.h"
@@ -43,20 +47,49 @@ SignResult make_result(const std::vector<uint8_t> &signature,
 
 } // namespace
 
+namespace {
+
+// True when `requested_mechanism` names an RSA family mechanism.
+bool is_rsa_request(const std::string &mech) {
+  return mech.find("RSA") != std::string::npos;
+}
+// True when it names an EC family mechanism.
+bool is_ec_request(const std::string &mech) {
+  return mech.find("ECDSA") != std::string::npos;
+}
+// Enforce policy; throws on RejectMismatch conflict.
+void check_family(const std::string &requested_mechanism, bool rsa_key,
+                  MechanismPolicy policy) {
+  if (requested_mechanism.empty() ||
+      policy == MechanismPolicy::AllowNativeFallback)
+    return;
+  const bool conflict =
+      rsa_key ? is_ec_request(requested_mechanism)
+              : is_rsa_request(requested_mechanism);
+  if (conflict) {
+    throw std::runtime_error(
+        "CKR_KEY_TYPE_INCONSISTENT: mechanism " + requested_mechanism +
+        " does not match " + (rsa_key ? "RSA" : "EC") + " key");
+  }
+}
+
+} // namespace
+
 SignResult CryptoEngine::sign(const RSAKeyPair &key,
                               const std::vector<u8> &data,
-                              const std::string &requested_mechanism) {
+                              const std::string &requested_mechanism,
+                              MechanismPolicy policy) {
   VHSM_CHECK_MSG(key.key != nullptr, "CryptoEngine::sign: key is null");
-  (void)requested_mechanism; // audit hint only; native algorithm is used
+  check_family(requested_mechanism, /*rsa_key=*/true, policy);
   return make_result(RSAUtil::sign(key, data), data, "CKM_SHA256_RSA_PKCS");
 }
 
 SignResult CryptoEngine::sign(const ECCKeyPair &key,
                               const std::vector<u8> &data,
-                              const std::string &requested_mechanism) {
+                              const std::string &requested_mechanism,
+                              MechanismPolicy policy) {
   VHSM_CHECK_MSG(key.key != nullptr, "CryptoEngine::sign: key is null");
-  (void)requested_mechanism;
+  check_family(requested_mechanism, /*rsa_key=*/false, policy);
   return make_result(ECC::sign(key, data), data, "CKM_ECDSA_SHA256");
 }
-
 } // namespace vhsm::crypto
