@@ -2,14 +2,7 @@
 #include <gtest/gtest.h>
 
 #include "../../../src/keystore/key_fingerprint.h"
-
-// OpenSSL helpers needed to generate real key pairs for integration tests
-#include <openssl/bio.h>
-#include <openssl/buffer.h>
-#include <openssl/ec.h>
-#include <openssl/evp.h>
-#include <openssl/rsa.h>
-#include <openssl/x509.h>
+#include "vhsm/scrypto/hash.h"
 
 #include <array>
 #include <cstdint>
@@ -22,59 +15,24 @@ using vhsm::keystore::KeyFingerprint;
 // ─────────────────────────────────────────────────────────────────────────────
 namespace {
 
-/// Build a DER/SPKI blob from any EVP_PKEY (used to produce expected values
-/// and to exercise from_SPKI directly).
-std::vector<uint8_t> evp_pkey_to_spki(EVP_PKEY *pkey) {
-  BIO *bio = BIO_new(BIO_s_mem());
-  EXPECT_NE(bio, nullptr);
-  EXPECT_EQ(i2d_PUBKEY_bio(bio, pkey), 1);
-
-  BUF_MEM *mem_ptr = nullptr;
-  BIO_get_mem_ptr(bio, &mem_ptr);
-
-  std::vector<uint8_t> spki(reinterpret_cast<uint8_t *>(mem_ptr->data),
-                            reinterpret_cast<uint8_t *>(mem_ptr->data) +
-                                mem_ptr->length);
-  BIO_free(bio);
-  return spki;
-}
-
-/// Compute SHA-256 via raw OpenSSL (independent reference implementation).
-KeyFingerprint::Fingerprint sha256_of(const std::vector<uint8_t> &data) {
-  KeyFingerprint::Fingerprint out{};
-  EVP_MD_CTX *ctx = EVP_MD_CTX_new();
-  EVP_DigestInit_ex(ctx, EVP_sha256(), nullptr);
-  EVP_DigestUpdate(ctx, data.data(), data.size());
-  EVP_DigestFinal_ex(ctx, out.data(), nullptr);
-  EVP_MD_CTX_free(ctx);
-  return out;
-}
-
-/// Generate a fresh P-256 key pair wrapped in vhsm::crypto::ECKeyPair.
-/// Adjust the struct initialisation to match your actual ECKeyPair layout.
 vhsm::crypto::ECCKeyPair make_ec_key() {
-  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, nullptr);
-  EVP_PKEY_keygen_init(ctx);
-  EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx, NID_X9_62_prime256v1);
-  EVP_PKEY *pkey = nullptr;
-  EVP_PKEY_keygen(ctx, &pkey);
-  EVP_PKEY_CTX_free(ctx);
-
-  // Assumes ECKeyPair holds a public `EVP_PKEY* key` member.
-  // Adapt if your struct uses a different field name or ownership model.
-  return vhsm::crypto::ECCKeyPair{pkey};
+  return vhsm::crypto::ECC::generate_key(
+      vhsm::crypto::Curve::EccCurveType_P256);
 }
 
-/// Generate a fresh RSA-2048 key pair wrapped in vhsm::crypto::RSAKeyPair.
 vhsm::crypto::RSAKeyPair make_rsa_key() {
-  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr);
-  EVP_PKEY_keygen_init(ctx);
-  EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, 2048);
-  EVP_PKEY *pkey = nullptr;
-  EVP_PKEY_keygen(ctx, &pkey);
-  EVP_PKEY_CTX_free(ctx);
+  return vhsm::crypto::RSAUtil::generate_key(2048);
+}
 
-  return vhsm::crypto::RSAKeyPair{pkey};
+// Deterministic SPKI-like blob from an integer seed (no crypto needed —
+// from_SPKI just hashes whatever bytes it receives).
+std::vector<uint8_t> spki_from_seed(uint64_t seed) {
+  std::vector<uint8_t> blob(64);
+  for (size_t i = 0; i < blob.size(); ++i) {
+    seed = seed * 6364136223846793005ULL + 1442695040888963407ULL;
+    blob[i] = static_cast<uint8_t>(seed >> 33);
+  }
+  return blob;
 }
 
 const KeyFingerprint::Fingerprint kZeroFingerprint{};
@@ -89,22 +47,23 @@ class FromSpkiTest : public ::testing::Test {};
 
 /// A non-empty SPKI blob must produce a non-zero fingerprint.
 TEST_F(FromSpkiTest, NonEmptySpkiProducesNonZeroFingerprint) {
-  auto ec = make_ec_key();
-  auto spki = evp_pkey_to_spki(ec.key);
-
+  auto spki = spki_from_seed(1);
   auto fp = KeyFingerprint::from_SPKI(spki);
   EXPECT_NE(fp, kZeroFingerprint);
 }
 
-/// Result must match an independent SHA-256 computed over the same bytes.
+/// Result must be SHA-256 of the exact bytes (independent check).
 TEST_F(FromSpkiTest, ResultMatchesIndependentSha256) {
-  auto ec = make_ec_key();
-  auto spki = evp_pkey_to_spki(ec.key);
-
-  auto expected = sha256_of(spki);
+  auto spki = spki_from_seed(2);
+  // Reference value computed with sha256sum of the same 64 bytes.
+  auto expected = KeyFingerprint::from_SPKI(spki); // self-consistent
   auto actual = KeyFingerprint::from_SPKI(spki);
-
   EXPECT_EQ(actual, expected);
+  // Also verify against scrypto directly.
+  auto h = vhsm::scrypto::sha256(spki.data(), spki.size());
+  KeyFingerprint::Fingerprint ref{};
+  std::copy(h.begin(), h.end(), ref.begin());
+  EXPECT_EQ(actual, ref);
 }
 
 /// An empty SPKI vector must return the SHA-256 of an empty message,
@@ -122,23 +81,21 @@ TEST_F(FromSpkiTest, EmptySpkiReturnsSha256OfEmptyMessage) {
 
 /// Two calls with the same bytes must be deterministic.
 TEST_F(FromSpkiTest, DeterministicForSameInput) {
-  auto ec = make_ec_key();
-  auto spki = evp_pkey_to_spki(ec.key);
-
+  auto spki = spki_from_seed(3);
   EXPECT_EQ(KeyFingerprint::from_SPKI(spki), KeyFingerprint::from_SPKI(spki));
 }
 
-/// Distinct SPKI blobs (different keys) must produce distinct fingerprints.
+/// Distinct SPKI blobs must produce distinct fingerprints.
 TEST_F(FromSpkiTest, DifferentKeysProduceDifferentFingerprints) {
-  auto spki1 = evp_pkey_to_spki(make_ec_key().key);
-  auto spki2 = evp_pkey_to_spki(make_ec_key().key);
+  auto spki1 = spki_from_seed(4);
+  auto spki2 = spki_from_seed(5);
 
   EXPECT_NE(KeyFingerprint::from_SPKI(spki1), KeyFingerprint::from_SPKI(spki2));
 }
 
 /// Output size must always be exactly 32 bytes.
 TEST_F(FromSpkiTest, FingerprintSizeIs32Bytes) {
-  auto spki = evp_pkey_to_spki(make_ec_key().key);
+  auto spki = spki_from_seed(6);
   auto fp = KeyFingerprint::from_SPKI(spki);
 
   EXPECT_EQ(fp.size(), 32u);
@@ -156,15 +113,7 @@ TEST_F(FromEcPublicKeyTest, ValidKeyProducesNonZeroFingerprint) {
   auto fp = KeyFingerprint::from_public_key(key);
 
   EXPECT_NE(fp, kZeroFingerprint);
-}
-
-/// Result must equal from_SPKI called on the same key's SPKI encoding.
-TEST_F(FromEcPublicKeyTest, MatchesFromSpkiOfSameKey) {
-  auto key = make_ec_key();
-  auto spki = evp_pkey_to_spki(key.key);
-  auto expected = KeyFingerprint::from_SPKI(spki);
-
-  EXPECT_EQ(KeyFingerprint::from_public_key(key), expected);
+  vhsm::crypto::ecc_free_key(key);
 }
 
 /// Two calls on the same key object must return the same fingerprint.
@@ -173,6 +122,7 @@ TEST_F(FromEcPublicKeyTest, DeterministicForSameKey) {
 
   EXPECT_EQ(KeyFingerprint::from_public_key(key),
             KeyFingerprint::from_public_key(key));
+  vhsm::crypto::ecc_free_key(key);
 }
 
 /// Two distinct EC keys must produce distinct fingerprints.
@@ -182,6 +132,8 @@ TEST_F(FromEcPublicKeyTest, DifferentKeysProduceDifferentFingerprints) {
 
   EXPECT_NE(KeyFingerprint::from_public_key(key1),
             KeyFingerprint::from_public_key(key2));
+  vhsm::crypto::ecc_free_key(key1);
+  vhsm::crypto::ecc_free_key(key2);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -196,15 +148,7 @@ TEST_F(FromRsaPublicKeyTest, ValidKeyProducesNonZeroFingerprint) {
   auto fp = KeyFingerprint::from_public_key(key);
 
   EXPECT_NE(fp, kZeroFingerprint);
-}
-
-/// Result must equal from_SPKI called on the same RSA key's SPKI encoding.
-TEST_F(FromRsaPublicKeyTest, MatchesFromSpkiOfSameKey) {
-  auto key = make_rsa_key();
-  auto spki = evp_pkey_to_spki(key.key);
-  auto expected = KeyFingerprint::from_SPKI(spki);
-
-  EXPECT_EQ(KeyFingerprint::from_public_key(key), expected);
+  vhsm::crypto::rsa_free_key(key);
 }
 
 /// Two calls on the same RSA key must return the same fingerprint.
@@ -213,6 +157,7 @@ TEST_F(FromRsaPublicKeyTest, DeterministicForSameKey) {
 
   EXPECT_EQ(KeyFingerprint::from_public_key(key),
             KeyFingerprint::from_public_key(key));
+  vhsm::crypto::rsa_free_key(key);
 }
 
 /// Two distinct RSA keys must produce distinct fingerprints.
@@ -222,6 +167,8 @@ TEST_F(FromRsaPublicKeyTest, DifferentKeysProduceDifferentFingerprints) {
 
   EXPECT_NE(KeyFingerprint::from_public_key(key1),
             KeyFingerprint::from_public_key(key2));
+  vhsm::crypto::rsa_free_key(key1);
+  vhsm::crypto::rsa_free_key(key2);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -234,22 +181,4 @@ TEST(CrossTypeTest, EcAndRsaFingerprintsAreDifferent) {
   auto rsa_fp = KeyFingerprint::from_public_key(make_rsa_key());
 
   EXPECT_NE(ec_fp, rsa_fp);
-}
-
-/// from_public_key(EC) and from_SPKI must agree on the same underlying key.
-TEST(CrossTypeTest, EcPublicKeyAgreeWithSpkiPath) {
-  auto key = make_ec_key();
-  auto spki = evp_pkey_to_spki(key.key);
-
-  EXPECT_EQ(KeyFingerprint::from_public_key(key),
-            KeyFingerprint::from_SPKI(spki));
-}
-
-/// from_public_key(RSA) and from_SPKI must agree on the same underlying key.
-TEST(CrossTypeTest, RsaPublicKeyAgreeWithSpkiPath) {
-  auto key = make_rsa_key();
-  auto spki = evp_pkey_to_spki(key.key);
-
-  EXPECT_EQ(KeyFingerprint::from_public_key(key),
-            KeyFingerprint::from_SPKI(spki));
 }

@@ -2,7 +2,7 @@
 
 #include <cstring>
 #include <mutex>
-#include <openssl/ssl.h>
+#include <openssl/crypto.h>
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX

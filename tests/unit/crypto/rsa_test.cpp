@@ -2,8 +2,6 @@
 
 #include "../../../src/crypto/rsa.h"
 
-#include <openssl/evp.h>
-
 using namespace vhsm::crypto;
 
 TEST(RSA, GenerateSignVerify) {
@@ -14,12 +12,12 @@ TEST(RSA, GenerateSignVerify) {
   std::vector<uint8_t> msg = {'h', 'e', 'l', 'l', 'o'};
 
   // sign
-  std::vector<uint8_t> sig = RSAUtil::sign(kp.key, msg);
+  std::vector<uint8_t> sig = RSAUtil::sign(kp, msg);
   ASSERT_FALSE(sig.empty());
 
   // verify
-  bool ok = RSAUtil::verify(kp.key, msg, sig);
+  bool ok = RSAUtil::verify(kp, msg, sig);
   EXPECT_TRUE(ok);
 
-  EVP_PKEY_free(kp.key);
+  rsa_free_key(kp);
 }

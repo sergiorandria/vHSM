@@ -161,9 +161,12 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
     return CKR_SESSION_HANDLE_INVALID;
   auto &store = s->getObjectStore();
 
-  EVP_PKEY *pkey = nullptr;
+  bool isRsa = false;
+  vhsm::crypto::RSAKeyPair rsaKp{};
+  vhsm::crypto::ECCKeyPair ecKp{};
   if (pMechanism->mechanism == CKM_RSA_PKCS_KEY_PAIR_GEN ||
       pMechanism->mechanism == CKM_RSA_X_509) {
+    isRsa = true;
     int bits = 2048;
     if (pPrivateKeyTemplate) {
       HsmObject tmpPriv(ObjectType::PRIVATE_KEY, true, true, false, true);
@@ -171,8 +174,7 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
                          ulPrivateKeyAttributeCount);
       bits = rsa_bits_from_template(&tmpPriv);
     }
-    auto kp = vhsm::crypto::RSAUtil::generate_key(bits);
-    pkey = kp.key;
+    rsaKp = vhsm::crypto::RSAUtil::generate_key(bits);
   } else if (pMechanism->mechanism == CKM_EC_KEY_PAIR_GEN ||
              pMechanism->mechanism == CKM_ECDSA_KEY_PAIR_GEN) {
     HsmObject tmpPub(ObjectType::PUBLIC_KEY, false, true, false, false);
@@ -183,41 +185,50 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
       p11_apply_template(tmpPriv, pPrivateKeyTemplate,
                          ulPrivateKeyAttributeCount);
     auto curve = curve_from_params(&tmpPub, &tmpPriv);
-    auto kp = vhsm::crypto::ECC::generate_key(curve);
-    pkey = kp.key;
+    ecKp = vhsm::crypto::ECC::generate_key(curve);
   } else {
     return CKR_MECHANISM_INVALID;
   }
 
-  if (!pkey)
+  if (!rsaKp.key && !ecKp.key)
     return CKR_GENERAL_ERROR;
 
   auto [hPub, ptrPub] = store.v_create_object<HsmObject>(
       ObjectType::PUBLIC_KEY, false, true, false, false);
   CK_RV rv = p11_apply_template(*ptrPub, pPublicKeyTemplate,
                                 ulPublicKeyAttributeCount);
-  if (rv == CKR_OK)
-    p11_store_key(*ptrPub, pkey, false,
-                  EVP_PKEY_get_base_id(pkey) == EVP_PKEY_RSA ? CKK_RSA
-                                                             : CKK_EC);
+  if (rv == CKR_OK) {
+    if (isRsa) {
+      rv = p11_store_key(*ptrPub, rsaKp, false, CKK_RSA);
+    } else {
+      rv = p11_store_key_ec(*ptrPub, ecKp, false);
+    }
+  }
 
   auto [hPriv, ptrPriv] = store.v_create_object<HsmObject>(
       ObjectType::PRIVATE_KEY, true, true, false, true);
   if (rv == CKR_OK)
     rv = p11_apply_template(*ptrPriv, pPrivateKeyTemplate,
                             ulPrivateKeyAttributeCount);
-  if (rv == CKR_OK)
-    p11_store_key(*ptrPriv, pkey, true,
-                  EVP_PKEY_get_base_id(pkey) == EVP_PKEY_RSA ? CKK_RSA
-                                                             : CKK_EC);
+  if (rv == CKR_OK) {
+    if (isRsa) {
+      rv = p11_store_key(*ptrPriv, rsaKp, true, CKK_RSA);
+    } else {
+      rv = p11_store_key_ec(*ptrPriv, ecKp, true);
+    }
+  }
+
+  if (isRsa) {
+    vhsm::crypto::rsa_free_key(rsaKp);
+  } else {
+    vhsm::crypto::ecc_free_key(ecKp);
+  }
 
   if (rv != CKR_OK) {
     store.v_destroy_object(hPub);
     store.v_destroy_object(hPriv);
-    EVP_PKEY_free(pkey);
     return rv;
   }
-  EVP_PKEY_free(pkey);
   *phPublicKey = hPub;
   *phPrivateKey = hPriv;
 
