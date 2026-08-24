@@ -111,8 +111,7 @@ std::unordered_map<CK_SESSION_HANDLE, std::vector<u8>> g_gcmIv;
 std::unordered_map<CK_SESSION_HANDLE, std::vector<u8>> g_gcmAad;
 std::unordered_map<CK_SESSION_HANDLE, std::vector<u8>> g_oaepLabel;
 std::unordered_map<CK_SESSION_HANDLE, std::string> g_oaepMgf1;
-std::unordered_map<CK_SESSION_HANDLE, std::vector<CK_OBJECT_HANDLE>>
-    g_findResults;
+std::unordered_map<CK_SESSION_HANDLE, FindResults> g_findResults;
 
 // Login state per session (userType, or CKU_INVALID if not logged in).
 std::unordered_map<CK_SESSION_HANDLE, CK_USER_TYPE> g_loginState;
