@@ -1,8 +1,8 @@
 #include "SecureRNG.h"
 
+#include "vhsm/scrypto/mem.h"
 #include <cstring>
 #include <mutex>
-#include <openssl/crypto.h>
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -29,7 +29,7 @@ SecureRNG::SecureRNG() {
   // Blocking initialization at boot safely
   std::vector<uint8_t> boot_seed = get_system_entropy("/dev/random");
   engine = std::make_unique<CTR_DRBG_AES256>(boot_seed);
-  OPENSSL_cleanse(boot_seed.data(), boot_seed.size());
+  vhsm::scrypto::cleanse(boot_seed.data(), boot_seed.size());
 }
 
 void SecureRNG::bytes(uint8_t *out_buffer, size_t size) {
@@ -42,16 +42,16 @@ void SecureRNG::bytes(uint8_t *out_buffer, size_t size) {
   try {
     std::vector<uint8_t> data = engine->generate(size);
     std::memcpy(out_buffer, data.data(), size);
-    OPENSSL_cleanse(data.data(), data.size());
+    vhsm::scrypto::cleanse(data.data(), data.size());
   } catch (const std::runtime_error &) {
     // Self-healing forced reseed via high-speed live urandom
     std::vector<uint8_t> live_seed = get_system_entropy("/dev/urandom");
     engine->reseed(live_seed);
-    OPENSSL_cleanse(live_seed.data(), live_seed.size());
+    vhsm::scrypto::cleanse(live_seed.data(), live_seed.size());
 
     std::vector<uint8_t> data = engine->generate(size);
     std::memcpy(out_buffer, data.data(), size);
-    OPENSSL_cleanse(data.data(), data.size());
+    vhsm::scrypto::cleanse(data.data(), data.size());
   }
 }
 
@@ -59,7 +59,7 @@ void SecureRNG::force_reseed() {
   std::lock_guard<std::mutex> lock(engine_mutex);
   std::vector<uint8_t> live_seed = get_system_entropy("/dev/urandom");
   engine->reseed(live_seed);
-  OPENSSL_cleanse(live_seed.data(), live_seed.size());
+  vhsm::scrypto::cleanse(live_seed.data(), live_seed.size());
 }
 
 SecureRNG::~SecureRNG() {
