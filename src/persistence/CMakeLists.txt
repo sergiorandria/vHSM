@@ -28,5 +28,5 @@ target_link_libraries(vhsm_persistence
     vhsm_core
     vhsm_crypto
     vhsm_keystore
-    OpenSSL::SSL
+    vhsm_crypto_provider
 )
