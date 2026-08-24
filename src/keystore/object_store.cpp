@@ -416,6 +416,19 @@ v_ObjectStore_M1::v_find_all_by_attributes(
   return out;
 }
 
+std::vector<CK_OBJECT_HANDLE> v_ObjectStore_M1::v_all_handles() const {
+  std::shared_lock<std::shared_mutex> lock(v_mutex_);
+  std::vector<CK_OBJECT_HANDLE> out;
+  out.reserve(v_table_.size());
+  for (size_t i = 0; i < v_table_.size(); ++i) {
+    if (!v_table_[i].v_is_free && v_table_[i].v_object) {
+      uint32_t ver = v_table_[i].v_version.load(std::memory_order_acquire);
+      out.push_back(v_compose_handle(i, ver));
+    }
+  }
+  return out;
+}
+
 void v_ObjectStore_M1::v_reindex(CK_OBJECT_HANDLE handle) {
   std::unique_lock<std::shared_mutex> lock(v_mutex_);
   uint32_t index = v_extract_index(handle);
