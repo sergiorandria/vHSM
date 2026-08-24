@@ -20,8 +20,8 @@
 #include <fstream>
 #include <stdexcept>
 
-#include <openssl/crypto.h>
-#include <openssl/rand.h>
+#include "vhsm/scrypto/mem.h"
+#include "vhsm/scrypto/rng.h"
 
 #include "../core/error.h"
 #include "../core/macros.h"
@@ -96,11 +96,11 @@ Vault::Vault(const std::filesystem::path &path, const std::string &password)
   try {
     (void)crypto::AESGCM::decrypt(key, res);
   } catch (const std::exception &) {
-    OPENSSL_cleanse(const_cast<u8 *>(key.data()), key.size());
+    vhsm::scrypto::cleanse(const_cast<u8 *>(key.data()), key.size());
     throw std::runtime_error(
         "Vault: authentication failed (wrong password or corrupt file)");
   }
-  OPENSSL_cleanse(const_cast<u8 *>(key.data()), key.size());
+  vhsm::scrypto::cleanse(const_cast<u8 *>(key.data()), key.size());
   valid_ = true;
 }
 
@@ -136,8 +136,10 @@ void Vault::save(const std::vector<u8> &payload) {
   // makes the vault resilient to a leaked single key (only one snapshot is
   // affected, not the whole history).
   std::vector<u8> salt(kVaultSaltLen);
-  VHSM_CHECK_MSG(RAND_bytes(salt.data(), static_cast<int>(salt.size())) == 1,
-                 "Vault::save: RAND_bytes failed for salt");
+  {
+    vhsm::scrypto::SecureRng rng;
+    rng.bytes(salt.data(), salt.size());
+  }
 
   const std::vector<u8> key = make_key(salt, kVaultPbkdf2Iterations);
   const crypto::AESGCMResult enc = crypto::AESGCM::encrypt(key, payload);
