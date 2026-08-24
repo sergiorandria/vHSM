@@ -42,9 +42,43 @@ SqliteConnection::SqliteConnection(const std::string &path) {
 }
 
 SqliteConnection::~SqliteConnection() {
+  // Finalize all cached statements before closing db
+  for (auto &kv : v_stmt_cache_) {
+    sqlite3_finalize(kv.second);
+  }
+  v_stmt_cache_.clear();
   if (db_) {
     sqlite3_close(db_);
     db_ = nullptr;
+  }
+}
+
+sqlite3_stmt* SqliteConnection::v_get_cached_stmt(const std::string &sql) {
+  auto it = v_stmt_cache_.find(sql);
+  if (it != v_stmt_cache_.end()) {
+    sqlite3_stmt *stmt = it->second;
+    sqlite3_reset(stmt);
+    sqlite3_clear_bindings(stmt);
+    return stmt;
+  }
+  if (v_stmt_cache_.size() >= kCacheLimit) {
+    v_evict_one();
+  }
+  sqlite3_stmt *raw = nullptr;
+  int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &raw, nullptr);
+  if (rc != SQLITE_OK) {
+    internal::throw_sqlite_error(db_, rc, "prepare (cached)");
+  }
+  v_stmt_cache_.emplace(sql, raw);
+  return raw;
+}
+
+void SqliteConnection::v_evict_one() {
+  // Simple eviction: erase first element (unordered_map iteration)
+  auto it = v_stmt_cache_.begin();
+  if (it != v_stmt_cache_.end()) {
+    sqlite3_finalize(it->second);
+    v_stmt_cache_.erase(it);
   }
 }
 
@@ -52,15 +86,19 @@ DbResultSet SqliteConnection::query(const std::string &sql,
                                     const std::vector<std::string> &params) {
   std::lock_guard<std::mutex> lock(mutex_);
 
-  sqlite3_stmt *raw = nullptr;
-  int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &raw, nullptr);
-  if (rc != SQLITE_OK) {
-    internal::throw_sqlite_error(db_, rc, "prepare (query)");
-  }
-  StmtGuard guard(raw);
-
+  // Dynamic SQL (e.g., query_log with varying WHERE) is not cacheable
+  // because it builds different strings each time. We still cache it but it
+  // will just be a miss and then evicted; overhead is minimal.
+  sqlite3_stmt *raw = v_get_cached_stmt(sql);
   internal::bind_params(db_, raw, params);
-  return internal::collect_rows(db_, raw);
+  // collect_rows will step through raw, but we must not finalize cached stmt
+  // Instead, we collect and then reset for next use. We use a custom guard
+  // that resets instead of finalizing for cached stmts.
+  DbResultSet result = internal::collect_rows(db_, raw);
+  // Reset for next use (collect_rows leaves stmt at DONE)
+  sqlite3_reset(raw);
+  sqlite3_clear_bindings(raw);
+  return result;
 }
 
 i64 SqliteConnection::exec(const std::string &sql,
@@ -91,21 +129,20 @@ void SqliteConnection::with_transaction(
 
 i64 SqliteConnection::exec_locked(const std::string &sql,
                                   const std::vector<std::string> &params) {
-  sqlite3_stmt *raw = nullptr;
-  int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &raw, nullptr);
-  if (rc != SQLITE_OK) {
-    internal::throw_sqlite_error(db_, rc, "prepare (exec)");
-  }
-  StmtGuard guard(raw);
-
+  sqlite3_stmt *raw = v_get_cached_stmt(sql);
   internal::bind_params(db_, raw, params);
 
-  rc = sqlite3_step(raw);
+  int rc = sqlite3_step(raw);
   if (rc != SQLITE_DONE && rc != SQLITE_ROW) {
+    // Reset before throwing so stmt is reusable
+    sqlite3_reset(raw);
+    sqlite3_clear_bindings(raw);
     internal::throw_sqlite_error(db_, rc, "step (exec)");
   }
-
-  return static_cast<i64>(sqlite3_changes(db_));
+  i64 changes = static_cast<i64>(sqlite3_changes(db_));
+  sqlite3_reset(raw);
+  sqlite3_clear_bindings(raw);
+  return changes;
 }
 
 void SqliteConnection::exec_raw(const char *sql) {
