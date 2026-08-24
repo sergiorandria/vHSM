@@ -226,8 +226,11 @@ extern std::unordered_map<CK_SESSION_HANDLE, std::vector<u8>> g_gcmIv;
 extern std::unordered_map<CK_SESSION_HANDLE, std::vector<u8>> g_gcmAad;
 extern std::unordered_map<CK_SESSION_HANDLE, std::vector<u8>> g_oaepLabel;
 extern std::unordered_map<CK_SESSION_HANDLE, std::string> g_oaepMgf1;
-extern std::unordered_map<CK_SESSION_HANDLE, std::vector<CK_OBJECT_HANDLE>>
-    g_findResults;
+struct FindResults {
+  std::vector<CK_OBJECT_HANDLE> handles;
+  size_t pos = 0;
+};
+extern std::unordered_map<CK_SESSION_HANDLE, FindResults> g_findResults;
 extern std::unordered_map<CK_SESSION_HANDLE, CK_USER_TYPE> g_loginState;
 extern std::unordered_map<CK_SESSION_HANDLE, std::vector<CK_OBJECT_HANDLE>>
     g_objectRegistry;

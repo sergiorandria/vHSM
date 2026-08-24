@@ -263,6 +263,13 @@ CK_RV C_SetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
     if (r != CKR_OK)
       rv = r;
   }
+  if (rv == CKR_OK) {
+    // Keep secondary indices consistent for CKA_LABEL/ID/CLASS
+    auto s = p11_get_session(hSession);
+    if (s) {
+      s->getObjectStore().v_reindex(hObject);
+    }
+  }
   return rv;
 }
 
@@ -280,17 +287,60 @@ CK_RV C_FindObjectsInit(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
   }
 
   std::vector<CK_OBJECT_HANDLE> results;
+  // Fast path: if template contains only indexed attrs (CLASS/LABEL/ID),
+  // use secondary index O(k) instead of O(n) registry scan.
+  bool use_index = false;
+  if (pTemplate && ulCount > 0 && ulCount <= 3) {
+    bool all_indexed = true;
+    for (CK_ULONG i = 0; i < ulCount; ++i) {
+      CK_ATTRIBUTE_TYPE t = pTemplate[i].type;
+      if (t != CKA_CLASS && t != CKA_LABEL && t != CKA_ID) { all_indexed = false; break; }
+    }
+    if (all_indexed) use_index = true;
+  }
+  if (use_index) {
+    std::unordered_map<CK_ATTRIBUTE_TYPE, std::vector<uint8_t>> tmpl;
+    for (CK_ULONG i = 0; i < ulCount; ++i) {
+      auto &a = pTemplate[i];
+      tmpl[a.type] = std::vector<uint8_t>(static_cast<uint8_t*>(a.pValue),
+                                          static_cast<uint8_t*>(a.pValue) + a.ulValueLen);
+    }
+    results = s->getObjectStore().v_find_all_by_attributes(tmpl);
+    // Intersect with session's registry (object must be in this session's handle list)
+    std::vector<CK_OBJECT_HANDLE> session_handles;
+    {
+      std::lock_guard<std::mutex> lock(g_stateMutex);
+      auto it = g_objectRegistry.find(hSession);
+      if (it != g_objectRegistry.end()) session_handles = it->second;
+    }
+    if (!session_handles.empty()) {
+      std::unordered_map<CK_OBJECT_HANDLE, bool> in_session;
+      for (auto h : session_handles) in_session[h] = true;
+      std::vector<CK_OBJECT_HANDLE> filtered;
+      filtered.reserve(results.size());
+      for (auto h : results) if (in_session.count(h)) filtered.push_back(h);
+      results.swap(filtered);
+    } else {
+      results.clear();
+    }
+  } else {
+    // Registry scan but with short lock: copy handles, then match outside
+    std::vector<CK_OBJECT_HANDLE> handles;
+    {
+      std::lock_guard<std::mutex> lock(g_stateMutex);
+      auto it = g_objectRegistry.find(hSession);
+      if (it != g_objectRegistry.end()) handles = it->second;
+    }
+    for (CK_OBJECT_HANDLE h : handles) {
+      auto o = s->getObjectStore().v_get_object(h);
+      if (o && match_object(*o, pTemplate, ulCount))
+        results.push_back(h);
+    }
+  }
   {
     std::lock_guard<std::mutex> lock(g_stateMutex);
-    auto it = g_objectRegistry.find(hSession);
-    if (it != g_objectRegistry.end()) {
-      for (CK_OBJECT_HANDLE h : it->second) {
-        auto o = s->getObjectStore().v_get_object(h);
-        if (o && match_object(*o, pTemplate, ulCount))
-          results.push_back(h);
-      }
-    }
-    g_findResults[hSession] = std::move(results);
+    g_findResults[hSession].handles = std::move(results);
+    g_findResults[hSession].pos = 0;
   }
   return CKR_OK;
 }
@@ -305,14 +355,19 @@ CK_RV C_FindObjects(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE_PTR phObject,
     auto it = g_findResults.find(hSession);
     if (it == g_findResults.end())
       return CKR_OPERATION_NOT_INITIALIZED;
-    for (CK_ULONG i = 0; i < it->second.size() && n < ulMaxObjectCount; ++i) {
+    auto &state = it->second;
+    for (CK_ULONG i = state.pos; i < state.handles.size() && n < ulMaxObjectCount; ++i) {
       if (phObject)
-        phObject[n] = it->second[i];
+        phObject[n] = state.handles[i];
       ++n;
     }
     *pulObjectCount = n;
-    // Remove returned handles so subsequent calls return the rest.
-    it->second.erase(it->second.begin(), it->second.begin() + n);
+    state.pos += n;
+    // Optional shrink when done to free memory
+    if (state.pos >= state.handles.size()) {
+      // Keep vector but reset pos to avoid reallocation on next FindInit for same session
+      // We keep the vector allocated for reuse.
+    }
   }
   return CKR_OK;
 }
