@@ -11,7 +11,8 @@
 *.sln.docstates
 test_*
 .claude/
-.clangd
+# .clangd is kept (project clangd config for vhsm-secure-crypto)
+!.clangd
 .astylerc
 .clang-format
 build/

@@ -24,7 +24,9 @@ add_test(NAME vhsm_keystore_test COMMAND vhsm_keystore_test)
 
 # Placeholder - add test files as they are created
 
-find_package(OpenSSL REQUIRED)
+if(NOT VHSM_USE_SECURE_CRYPTO)
+  find_package(OpenSSL REQUIRED)
+endif()
 find_package(GTest QUIET)
 
 add_executable(vhsm_fingerprint_test
@@ -38,7 +40,7 @@ target_include_directories(vhsm_fingerprint_test PRIVATE ${PROJECT_SOURCE_DIR})
 target_link_libraries(vhsm_fingerprint_test
     PRIVATE
     vhsm_crypto
-    OpenSSL::Crypto
+    vhsm_crypto_provider
     GTest::gtest_main
 )
 
