@@ -32,7 +32,7 @@ void ThreadPool::shutdown() { shutdown(shutdown_grace_); }
 
 void ThreadPool::shutdown(std::chrono::milliseconds timeout) {
   {
-    std::lock_guard<std::mutex> lock(queue_mutex_);
+    std::lock_guard<std::mutex> lock(state_mutex_);
     counters_.stopping.store(true, std::memory_order_release);
   }
   work_cv_.notify_all();
@@ -54,17 +54,21 @@ void ThreadPool::shutdown(std::chrono::milliseconds timeout) {
 }
 
 bool ThreadPool::enqueue_locked(PrivilegeTier tier, TaskWorker &&worker) {
-  std::queue<TaskWorker> &target =
-      (tier == PrivilegeTier::High) ? high_queue_ : low_queue_;
-  const std::size_t capacity =
-      (tier == PrivilegeTier::High) ? high_capacity_ : low_capacity_;
-
-  if (capacity > 0 && target.size() >= capacity) {
-    counters_.dropped.fetch_add(1, std::memory_order_release);
-    return false;
+  if (tier == PrivilegeTier::High) {
+    std::lock_guard<std::mutex> lock(high_mutex_);
+    if (high_capacity_ > 0 && high_queue_.size() >= high_capacity_) {
+      counters_.dropped.fetch_add(1, std::memory_order_release);
+      return false;
+    }
+    high_queue_.emplace(std::move(worker));
+  } else {
+    std::lock_guard<std::mutex> lock(low_mutex_);
+    if (low_capacity_ > 0 && low_queue_.size() >= low_capacity_) {
+      counters_.dropped.fetch_add(1, std::memory_order_release);
+      return false;
+    }
+    low_queue_.emplace(std::move(worker));
   }
-
-  target.emplace(std::move(worker));
   counters_.queued.fetch_add(1, std::memory_order_release);
   counters_.enqueued.fetch_add(1, std::memory_order_release);
   return true;
@@ -75,7 +79,7 @@ void ThreadPool::worker_thread(std::size_t thread_index) {
   while (true) {
     TaskWorker task;
     {
-      std::unique_lock<std::mutex> lock(queue_mutex_);
+      std::unique_lock<std::mutex> lock(state_mutex_);
       work_cv_.wait(lock, [this] {
         return counters_.stopping.load(std::memory_order_acquire) ||
                counters_.queued.load(std::memory_order_acquire) > 0;
@@ -85,14 +89,29 @@ void ThreadPool::worker_thread(std::size_t thread_index) {
           counters_.queued.load(std::memory_order_acquire) == 0) {
         return;
       }
+      // Release state lock before acquiring tier locks to avoid inversion
+      lock.unlock();
 
-      // Prefer High-tier work; fall back to Low-tier tasks.
-      if (!high_queue_.empty()) {
-        task = std::move(high_queue_.front());
-        high_queue_.pop();
-      } else {
-        task = std::move(low_queue_.front());
-        low_queue_.pop();
+      bool got = false;
+      {
+        std::lock_guard<std::mutex> hlock(high_mutex_);
+        if (!high_queue_.empty()) {
+          task = std::move(high_queue_.front());
+          high_queue_.pop();
+          got = true;
+        }
+      }
+      if (!got) {
+        std::lock_guard<std::mutex> llock(low_mutex_);
+        if (!low_queue_.empty()) {
+          task = std::move(low_queue_.front());
+          low_queue_.pop();
+          got = true;
+        }
+      }
+      if (!got) {
+        // Spurious wakeup or race: another worker stole the work, go back to wait
+        continue;
       }
       counters_.queued.fetch_sub(1, std::memory_order_release);
     }
