@@ -97,12 +97,47 @@ LedgerRetryQueue::load_pending_record(const std::string &signature_id) {
 }
 
 std::vector<SignatureRecord> LedgerRetryQueue::load_pending_records() {
+  // Optimized: single query vs N+1 (previously scan_pending_ids + N*load_pending_record)
+  // O(1) prepare + 1 roundtrip vs O(N) prepares + N mutex acquires.
+  const std::string sql = R"SQL(
+        SELECT id, created_at, slot_id, token_label, key_id, key_fingerprint,
+               mechanism, payload_digest, signature_b64, session_handle,
+               user_label, app_context, ledger_status
+        FROM signature_records
+        WHERE ledger_status = 'PENDING';
+    )SQL";
   std::vector<SignatureRecord> records;
-  for (const auto &id : scan_pending_ids()) {
-    auto rec = load_pending_record(id);
-    if (rec) {
-      records.push_back(std::move(*rec));
+  auto to_str = [](const std::optional<std::string> &v) -> std::string {
+    return v.value_or("");
+  };
+  try {
+    auto rs = conn_.query(sql);
+    records.reserve(rs.rows_.size());
+    for (const auto &row : rs.rows_) {
+      SignatureRecord rec;
+      rec.record_id = to_str(row.get_string(0));
+      rec.created_at =
+          std::strtoll(to_str(row.get_string(1)).c_str(), nullptr, 10);
+      rec.slot_id = static_cast<int>(
+          std::strtol(to_str(row.get_string(2)).c_str(), nullptr, 10));
+      rec.token_label = to_str(row.get_string(3));
+      rec.key_id = to_str(row.get_string(4));
+      rec.key_fingerprint = to_str(row.get_string(5));
+      rec.mechanism = to_str(row.get_string(6));
+      rec.payload_digest = to_str(row.get_string(7));
+      rec.signature_b64 = to_str(row.get_string(8));
+      rec.session_handle = to_str(row.get_string(9));
+      const std::string user_label = to_str(row.get_string(10));
+      rec.user_label = user_label.empty() ? std::nullopt : std::optional<std::string>(user_label);
+      const std::string app_context = to_str(row.get_string(11));
+      rec.app_context = app_context.empty() ? std::nullopt : std::optional<std::string>(app_context);
+      rec.digest_algorithm = "";
+      rec.payload_size = static_cast<int>(rec.signature_b64.size());
+      rec.ledger_status = to_str(row.get_string(12));
+      if (rec.ledger_status.empty()) rec.ledger_status = "PENDING";
+      records.push_back(std::move(rec));
     }
+  } catch (const DbError &) {
   }
   return records;
 }
