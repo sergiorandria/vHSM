@@ -145,6 +145,9 @@ public:
   // Reindex after attribute update (e.g., C_SetAttributeValue on CKA_LABEL/ID)
   void v_reindex(CK_OBJECT_HANDLE handle);
 
+  // Enumerate all live handles (replaces g_objectRegistry)
+  [[nodiscard]] std::vector<CK_OBJECT_HANDLE> v_all_handles() const;
+
 private:
   struct v_ObjectEntry {
     // WHY shared_ptr: The store holds one strong reference per live entry.
