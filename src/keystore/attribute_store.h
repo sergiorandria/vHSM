@@ -12,25 +12,7 @@
 
 namespace vhsm::keystore::internal {
 
-// PKCS#11 Attribute Types (subset needed for HSM object management)
-constexpr CK_ULONG CKA_CLASS = 0x00000000;
-constexpr CK_ULONG CKA_TOKEN = 0x00000001;
-constexpr CK_ULONG CKA_PRIVATE = 0x00000002;
-constexpr CK_ULONG CKA_LABEL = 0x00000003;
-constexpr CK_ULONG CKA_ID = 0x000000102;
-constexpr CK_ULONG CKA_SENSITIVE = 0x000000103;
-constexpr CK_ULONG CKA_EXTRACTABLE = 0x000000162;
-constexpr CK_ULONG CKA_VALUE = 0x00000011;
-
-// Object Classes
-constexpr CK_ULONG CKO_DATA = 0x00000000;
-constexpr CK_ULONG CKO_CERTIFICATE = 0x00000001;
-constexpr CK_ULONG CKO_PUBLIC_KEY = 0x00000002;
-constexpr CK_ULONG CKO_PRIVATE_KEY = 0x00000003;
-constexpr CK_ULONG CKO_SECRET_KEY = 0x00000004;
-constexpr CK_ULONG CKO_HW_FEATURE = 0x00000005;
-constexpr CK_ULONG CKO_DOMAIN_PARAMETERS = 0x00000006;
-constexpr CK_ULONG CKO_OTHER = 0x00000010;
+// CKA_/CKO_/CKK_* now defined in src/domain/pkcs11/pkcs11_types.h (single source).
 
 /**
  * v_AttributeStore_M1 manages PKCS#11 attributes for HSM objects.
