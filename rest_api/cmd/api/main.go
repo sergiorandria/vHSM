@@ -204,6 +204,14 @@ func main() {
 	if ldapCfg.RoleAttr == "" {
 		ldapCfg.RoleAttr = "cn"
 	}
+	// Startup-time visibility: LDAP without STARTTLS sends bind credentials
+	// in cleartext. Valid for local dev, but must never reach production
+	// unnoticed — warn loudly instead of failing.
+	if !ldapCfg.UseTLS {
+		log.Println("WARNING: LDAP_USE_TLS=false — LDAP credentials will be " +
+			"transmitted without TLS encryption. Enable STARTTLS (LDAP_USE_TLS=true) " +
+			"for any non-local deployment.")
+	}
 	ldapSvc := internal.NewLDAPAuthService(ldapCfg)
 
 	// Loads configuration file from
