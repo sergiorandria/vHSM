@@ -3,7 +3,7 @@
 #include "../crypto/aes_ecb.h"
 
 #include <cstring>
-#include <openssl/crypto.h>
+#include "vhsm/scrypto/mem.h"
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -38,11 +38,11 @@ KeyWrap::KeyWrap(const std::vector<u8> &master_kek) {
 
 KeyWrap::~KeyWrap() {
   // WHY explicit destroy: The KEK is sensitive and must not linger in memory
-  // after the destructor. OPENSSL_cleanse overwrites with zeros using a method
+  // after the destructor. vhsm::scrypto::cleanse overwrites with zeros using a method
   // the compiler can't optimize away. Then unlock releases the page lock.
   if (!internal_kek.empty()) {
-    // WHY OPENSSL_cleanse first: Before unlocking, overwrite the memory.
-    OPENSSL_cleanse(internal_kek.data(), internal_kek.size());
+    // WHY cleanse first: Before unlocking, overwrite the memory.
+    vhsm::scrypto::cleanse(internal_kek.data(), internal_kek.size());
 #ifdef _WIN32
     ::VirtualUnlock(internal_kek.data(), internal_kek.size());
 #else
@@ -119,7 +119,7 @@ std::vector<u8> KeyWrap::wrap(const std::vector<u8> &plaintext_key) const {
   std::memcpy(result.data(), &A, 8);
 
   // WHY wipe temporary block: Don't leave the plaintext block in stack memory.
-  OPENSSL_cleanse(block, sizeof(block));
+  vhsm::scrypto::cleanse(block, sizeof(block));
 #ifdef _WIN32
   ::VirtualUnlock(result.data(), result.size());
 #else
@@ -192,8 +192,8 @@ std::vector<u8> KeyWrap::unwrap(const std::vector<u8> &ciphertext_key) const {
   if (A != AIV) {
     // WHY cleanse before throwing: If integrity check fails, wipe the
     // partially-unwrapped key from memory before propagating the error.
-    OPENSSL_cleanse(result.data(), result.size());
-    OPENSSL_cleanse(block, sizeof(block));
+    vhsm::scrypto::cleanse(result.data(), result.size());
+    vhsm::scrypto::cleanse(block, sizeof(block));
 #ifdef _WIN32
     ::VirtualUnlock(result.data(), result.size());
 #else
@@ -204,7 +204,7 @@ std::vector<u8> KeyWrap::unwrap(const std::vector<u8> &ciphertext_key) const {
   }
 
   // WHY wipe temporary block: Don't leave plaintext in the stack.
-  OPENSSL_cleanse(block, sizeof(block));
+  vhsm::scrypto::cleanse(block, sizeof(block));
 #ifdef _WIN32
   ::VirtualUnlock(result.data(), result.size());
 #else
