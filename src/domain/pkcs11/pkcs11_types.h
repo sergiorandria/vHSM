@@ -168,6 +168,14 @@ typedef CK_ULONG CK_STATE;
 #define CKF_HW_SLOT 0x00000002UL
 #define CKF_REMOVABLE_DEVICE 0x00000004UL
 
+// AttributeStore all see the same values.
+//
+// NOTE: the authoritative CKA_/CKO_/CKK_ constants live in
+// src/pkcs11/pkcs11_types.h (which is what pkcs11/ code includes). That file
+// cannot be included here (circular: it re-exports this header). Keystore/
+// session/signature_store code that needs CKA_* should include
+// "../pkcs11/pkcs11_types.h" directly, or get it via a leaf header that does.
+
 typedef CK_ULONG CK_NOTIFICATION;
 typedef CK_RV (*CK_NOTIFY)(CK_SESSION_HANDLE hSession, CK_NOTIFICATION event,
                            CK_VOID_PTR pApplication);

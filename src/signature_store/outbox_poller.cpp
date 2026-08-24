@@ -47,6 +47,9 @@ void OutboxPoller::poll_once() {
   if (rs.empty())
     return;
 
+  std::vector<std::string> dispatched_ids;
+  dispatched_ids.reserve(rs.rows_.size());
+
   for (auto &row : rs.rows_) {
     auto id_opt = rs.get<std::string>(row, 0);
     auto type_opt = rs.get<std::string>(row, 1);
@@ -81,12 +84,26 @@ void OutboxPoller::poll_once() {
     ev.detail_json = payload;
     ev.hsm_instance = vhsm::core::hsm_instance_id();
     bus_.publish(ev);
+    dispatched_ids.push_back(std::move(id));
+  }
 
-    // Mark dispatched — best-effort, ignore errors (will be retried next poll).
-    try {
-      db_.exec("UPDATE event_outbox SET status='DISPATCHED' WHERE id=?;", {id});
-    } catch (...) {
+  if (dispatched_ids.empty()) return;
+  // Batch update: single statement with IN (?,...,?) vs N separate UPDATEs.
+  // O(1) prepare + 1 roundtrip vs O(N). Holds DB mutex once.
+  try {
+    if (dispatched_ids.size() == 1) {
+      db_.exec("UPDATE event_outbox SET status='DISPATCHED' WHERE id=?;", dispatched_ids);
+    } else {
+      std::string sql = "UPDATE event_outbox SET status='DISPATCHED' WHERE id IN (";
+      for (size_t i = 0; i < dispatched_ids.size(); ++i) {
+        if (i) sql += ",";
+        sql += "?";
+      }
+      sql += ");";
+      db_.exec(sql, dispatched_ids);
     }
+  } catch (...) {
+    // Best-effort: will be retried next poll
   }
 }
 

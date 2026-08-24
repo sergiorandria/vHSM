@@ -21,7 +21,7 @@ target_link_libraries(vhsm_composition_root_test
         vhsm_session
         vhsm_notification
         vhsm_threadpool
-        OpenSSL::SSL
+        vhsm_crypto_provider
         GTest::gtest
         GTest::gtest_main
         SQLite::SQLite3

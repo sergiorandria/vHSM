@@ -1,4 +1,16 @@
-# Notification Unit Tests
+# Notification Unit Tests — skip if deps not found (CI without nlohmann_json/CURL/GTest)
+
+find_package(nlohmann_json 3.11.0 QUIET)
+find_package(CURL QUIET)
+find_package(GTest QUIET)
+if(NOT GTest_FOUND OR NOT nlohmann_json_FOUND)
+  message(STATUS "GTest or nlohmann_json not found — skipping vhsm_notification_test")
+  return()
+endif()
+if(NOT CURL_FOUND)
+  message(STATUS "CURL not found — skipping vhsm_notification_test (needs adapters)")
+  return()
+endif()
 
 add_executable(vhsm_notification_test
     bounded_bus_test.cpp

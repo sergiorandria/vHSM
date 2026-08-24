@@ -1,6 +1,8 @@
 # Crypto Unit Tests
 
-find_package(OpenSSL REQUIRED)
+if(NOT VHSM_USE_SECURE_CRYPTO)
+  find_package(OpenSSL REQUIRED)
+endif()
 find_package(GTest QUIET)
 if(NOT GTest_FOUND)
   message(STATUS "GTest not found — skipping vhsm_crypto_test")
@@ -24,7 +26,7 @@ target_include_directories(vhsm_crypto_test PRIVATE ${PROJECT_SOURCE_DIR})
 target_link_libraries(vhsm_crypto_test
     PRIVATE
     vhsm_crypto
-    OpenSSL::Crypto
+    vhsm_crypto_provider
     GTest::gtest_main
 )
 

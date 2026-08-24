@@ -16,11 +16,9 @@ target_include_directories(vhsm_keystore
     PUBLIC ${PROJECT_SOURCE_DIR}/src
 )
 
-find_package(OpenSSL REQUIRED)
-
 target_link_libraries(vhsm_keystore
     PUBLIC
     vhsm_core
     vhsm_crypto
-    OpenSSL::SSL
+    vhsm_crypto_provider
 )

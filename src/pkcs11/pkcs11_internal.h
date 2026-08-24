@@ -218,31 +218,12 @@ CK_RV p11_random_bytes(u8 *out, std::size_t n);
 std::string p11_key_fingerprint(EVP_PKEY *pkey);
 std::string p11_key_id(const HsmObject *obj);
 
-// Per-session operation state (defined in p11_internal.cpp).
-extern std::unordered_map<CK_SESSION_HANDLE, CK_MECHANISM_TYPE> g_activeMech;
-extern std::unordered_map<CK_SESSION_HANDLE, std::vector<u8>> g_opBuf;
-extern std::unordered_map<CK_SESSION_HANDLE, CK_OBJECT_HANDLE> g_signKey;
-extern std::unordered_map<CK_SESSION_HANDLE, std::vector<u8>> g_gcmIv;
-extern std::unordered_map<CK_SESSION_HANDLE, std::vector<u8>> g_gcmAad;
-extern std::unordered_map<CK_SESSION_HANDLE, std::vector<u8>> g_oaepLabel;
-extern std::unordered_map<CK_SESSION_HANDLE, std::string> g_oaepMgf1;
-extern std::unordered_map<CK_SESSION_HANDLE, std::vector<CK_OBJECT_HANDLE>>
-    g_findResults;
-extern std::unordered_map<CK_SESSION_HANDLE, CK_USER_TYPE> g_loginState;
-extern std::unordered_map<CK_SESSION_HANDLE, std::vector<CK_OBJECT_HANDLE>>
-    g_objectRegistry;
+// Per-session operation state is now owned by Session (see session.h).
+// The ten global maps and g_stateMutex have been removed. Each Session
+// owns its own activeMech, opBuf, signKey, gcmIv/Aad, oaep* and find
+// state, so cross-session contention is zero. See Session::opBegin etc.
 
-// WHY a single global mutex protects all g_* per-session maps: the PKCS#11 spec
-// forbids using the same session concurrently from multiple threads, but
-// different sessions ARE used concurrently. Guarding unordered_map structure
-// (rehash) and each keyed value with one short-lived mutex is simpler and
-// cheaper than per-map or per-session mutexes, and prevents concurrent C_*
-// calls from two sessions racing on the shared containers. The lock is only
-// held for map access, never across OT or crypto work, so it cannot deadlock
-// with the object store / session manager.
-extern std::mutex g_stateMutex;
-
-// Reset all per-session crypto-operation state.
+// Reset all per-session crypto-operation state (now delegates to Session).
 void p11_reset_op(CK_SESSION_HANDLE h);
 
 // WHY extern "C": The PKCS#11 API functions (C_Initialize, C_GetSlotList, etc.)

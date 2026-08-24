@@ -5,6 +5,9 @@
 #include "../core/types.h"
 #include "../keystore/object_store.h"
 #include <mutex>
+#include <optional>
+#include <string>
+#include <vector>
 
 namespace vhsm::session {
 
@@ -74,6 +77,45 @@ public:
                             CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount);
   CK_RV finalizeOperation();
 
+  // Per-operation state (migrated from global g_stateMutex maps)
+  // These replace g_activeMech, g_opBuf, g_signKey, g_gcmIv, etc.
+  // Each Session now owns its own operation state, so cross-session
+  // contention is zero (per spec, same session not used concurrently).
+  CK_RV opBegin(CK_MECHANISM_TYPE mech, CK_OBJECT_HANDLE key);
+  CK_RV opCheck() const;
+  void opEnd();
+
+  // Operation buffer: zero-copy access for multi-part ops
+  // Previously g_opBuf[h] was copied under global lock. Now Session owns
+  // the buffer and callers can move or access by const ref without copy.
+  void opUpdate(const uint8_t *data, size_t len);
+  void opReserve(size_t len); // hint for reserve at Init time
+  [[nodiscard]] const std::vector<uint8_t> &opBuffer() const noexcept;
+  [[nodiscard]] std::vector<uint8_t> opTakeBuffer(); // move out exactly once at Final
+  void opClear() noexcept;
+
+  // Mechanism and key for current operation
+  [[nodiscard]] CK_MECHANISM_TYPE opMech() const noexcept;
+  [[nodiscard]] CK_OBJECT_HANDLE opKey() const noexcept;
+
+  // GCM / OAEP params (previously g_gcmIv, g_gcmAad, g_oaepMgf1, g_oaepLabel)
+  void setGcmParams(const std::vector<uint8_t> &iv, const std::vector<uint8_t> &aad);
+  [[nodiscard]] const std::vector<uint8_t> &gcmIv() const noexcept;
+  [[nodiscard]] const std::vector<uint8_t> &gcmAad() const noexcept;
+  void setOaepParams(const std::string &mgf1, const std::vector<uint8_t> &label);
+  [[nodiscard]] const std::string &oaepMgf1() const noexcept;
+  [[nodiscard]] const std::vector<uint8_t> &oaepLabel() const noexcept;
+
+  // Find results (previously g_findResults)
+  void setFindResults(std::vector<CK_OBJECT_HANDLE> handles);
+  [[nodiscard]] bool hasFindResults() const noexcept;
+  // True between FindInit and FindFinal — used for CKR_OPERATION_ACTIVE.
+  void setFindActive(bool active) noexcept { findActive_ = active; }
+  [[nodiscard]] bool findActive() const noexcept { return findActive_; }
+  // Returns next batch and advances pos; O(1) vs old vector::erase O(n)
+  size_t findNextBatch(CK_OBJECT_HANDLE *out, size_t maxCount);
+  void clearFindResults() noexcept;
+
   // WHY getObjectStore is mutable and const: Sessions need to access (and
   // modify) the object store to create/find/destroy objects. Both const and
   // non-const versions allow callers to work with mutable or immutable
@@ -82,6 +124,9 @@ public:
   getObjectStore() noexcept;
   [[nodiscard]] const vhsm::keystore::internal::v_ObjectStore_M1 &
   getObjectStore() const noexcept;
+
+  // Enumerate all handles in this session's store (replaces g_objectRegistry)
+  [[nodiscard]] std::vector<CK_OBJECT_HANDLE> allHandles() const;
 
   // WHY getSessionInfo populates a pointer: PKCS#11 C_GetSessionInfo uses the
   // caller's CK_SESSION_INFO struct. This method fills it with all session
@@ -125,10 +170,6 @@ private:
   // specific user type).
   CK_USER_TYPE userType_;
 
-  // WHY objectStore_ is per-session: Simplifies object visibility rules.
-  // Objects created in a session are stored here. If a future design needs
-  // shared objects (across sessions), the store can be moved to Token; for now,
-  // isolation is cleaner.
   vhsm::keystore::internal::v_ObjectStore_M1 objectStore_;
 
   // WHY operationInitialized_ and currentOperationMechanism_: Track the current
@@ -137,6 +178,20 @@ private:
   // call C_Encrypt while a sign operation is initialized).
   bool operationInitialized_;
   CK_MECHANISM_TYPE currentOperationMechanism_;
+
+  // Per-operation state (migrated from global maps)
+  CK_MECHANISM_TYPE activeMech_{0};
+  CK_OBJECT_HANDLE signKey_{0};
+  std::vector<uint8_t> opBuf_;
+  std::vector<uint8_t> gcmIv_;
+  std::vector<uint8_t> gcmAad_;
+  std::string oaepMgf1_;
+  std::vector<uint8_t> oaepLabel_;
+
+  // Find results per session (replaces g_findResults)
+  std::vector<CK_OBJECT_HANDLE> findHandles_;
+  size_t findPos_{0};
+  bool findActive_{false};
 
   // WHY pApplication_ and notify_: PKCS#11 callback mechanism. Applications
   // register a callback (notify_) to receive events (e.g., "token inserted").
@@ -149,6 +204,9 @@ private:
   // mutable allows const methods (like getHandle()) to lock (for consistency
   // checks or future logging). In practice, const methods often don't need the
   // lock, but the pattern is safe.
+  // Note: per spec, same session is not used concurrently for op state
+  // (C_SignUpdate etc.), so opBuf_ etc. could be lock-free, but we keep the
+  // mutex for queryable state (state_/userType_ via C_GetSessionInfo).
   mutable std::mutex mutex_;
 };
 

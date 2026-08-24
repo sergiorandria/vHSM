@@ -267,6 +267,7 @@ inline constexpr CK_ULONG CKO_HW_FEATURE = 0x00000005UL;
 inline constexpr CK_ULONG CKO_DOMAIN_PARAMETERS = 0x00000006UL;
 inline constexpr CK_ULONG CKO_MECHANISM = 0x00000007UL;
 inline constexpr CK_ULONG CKO_OTP_KEY = 0x00000008UL;
+inline constexpr CK_ULONG CKO_OTHER = 0x00000010UL;
 inline constexpr CK_ULONG CKO_VENDOR_DEFINED = 0x80000000UL;
 
 // ---------------------------------------------------------------------------

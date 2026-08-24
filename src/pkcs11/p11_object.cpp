@@ -263,6 +263,13 @@ CK_RV C_SetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
     if (r != CKR_OK)
       rv = r;
   }
+  if (rv == CKR_OK) {
+    // Keep secondary indices consistent for CKA_LABEL/ID/CLASS
+    auto s = p11_get_session(hSession);
+    if (s) {
+      s->getObjectStore().v_reindex(hObject);
+    }
+  }
   return rv;
 }
 
@@ -273,25 +280,41 @@ CK_RV C_FindObjectsInit(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
   auto s = p11_get_session(hSession);
   if (!s)
     return CKR_SESSION_HANDLE_INVALID;
-  {
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-    if (g_findResults.count(hSession))
-      return CKR_OPERATION_ACTIVE;
-  }
+  // Find state now lives on the Session; a second Init while one is active is
+  // CKR_OPERATION_ACTIVE (same semantics as the old g_findResults map check).
+  if (s->hasFindResults() || s->findActive())
+    return CKR_OPERATION_ACTIVE;
 
   std::vector<CK_OBJECT_HANDLE> results;
-  {
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-    auto it = g_objectRegistry.find(hSession);
-    if (it != g_objectRegistry.end()) {
-      for (CK_OBJECT_HANDLE h : it->second) {
-        auto o = s->getObjectStore().v_get_object(h);
-        if (o && match_object(*o, pTemplate, ulCount))
-          results.push_back(h);
-      }
+  bool use_index = false;
+  if (pTemplate && ulCount > 0 && ulCount <= 3) {
+    bool all_indexed = true;
+    for (CK_ULONG i = 0; i < ulCount; ++i) {
+      CK_ATTRIBUTE_TYPE t = pTemplate[i].type;
+      if (t != CKA_CLASS && t != CKA_LABEL && t != CKA_ID) { all_indexed = false; break; }
     }
-    g_findResults[hSession] = std::move(results);
+    if (all_indexed) use_index = true;
   }
+  if (use_index) {
+    std::unordered_map<CK_ATTRIBUTE_TYPE, std::vector<uint8_t>> tmpl;
+    for (CK_ULONG i = 0; i < ulCount; ++i) {
+      auto &a = pTemplate[i];
+      tmpl[a.type] = std::vector<uint8_t>(static_cast<uint8_t*>(a.pValue),
+                                          static_cast<uint8_t*>(a.pValue) + a.ulValueLen);
+    }
+    // Session store IS the session's object universe — no g_objectRegistry
+    // intersection needed anymore (it could diverge from the store).
+    results = s->getObjectStore().v_find_all_by_attributes(tmpl);
+  } else {
+    // Enumerate all handles from the session's own store.
+    auto handles = s->getObjectStore().v_all_handles();
+    for (CK_OBJECT_HANDLE h : handles) {
+      auto o = s->getObjectStore().v_get_object(h);
+      if (o && match_object(*o, pTemplate, ulCount))
+        results.push_back(h);
+    }
+  }
+  s->setFindResults(std::move(results));
   return CKR_OK;
 }
 
@@ -299,27 +322,22 @@ CK_RV C_FindObjects(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE_PTR phObject,
                     CK_ULONG ulMaxObjectCount, CK_ULONG_PTR pulObjectCount) {
   if (!pulObjectCount)
     return CKR_ARGUMENTS_BAD;
-  CK_ULONG n = 0;
-  {
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-    auto it = g_findResults.find(hSession);
-    if (it == g_findResults.end())
-      return CKR_OPERATION_NOT_INITIALIZED;
-    for (CK_ULONG i = 0; i < it->second.size() && n < ulMaxObjectCount; ++i) {
-      if (phObject)
-        phObject[n] = it->second[i];
-      ++n;
-    }
-    *pulObjectCount = n;
-    // Remove returned handles so subsequent calls return the rest.
-    it->second.erase(it->second.begin(), it->second.begin() + n);
-  }
+  auto s = p11_get_session(hSession);
+  if (!s)
+    return CKR_SESSION_HANDLE_INVALID;
+  // Cursor advance on Session — O(k) slice copy, no O(n) vector::erase.
+  if (!s->findActive())
+    return CKR_OPERATION_NOT_INITIALIZED;
+  *pulObjectCount = static_cast<CK_ULONG>(
+      s->findNextBatch(phObject, static_cast<size_t>(ulMaxObjectCount)));
   return CKR_OK;
 }
 
 CK_RV C_FindObjectsFinal(CK_SESSION_HANDLE hSession) {
-  std::lock_guard<std::mutex> lock(g_stateMutex);
-  g_findResults.erase(hSession);
+  auto s = p11_get_session(hSession);
+  if (!s)
+    return CKR_SESSION_HANDLE_INVALID;
+  s->clearFindResults();
   return CKR_OK;
 }
 

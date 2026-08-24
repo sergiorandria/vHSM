@@ -4,10 +4,6 @@
 
 namespace vhsm::keystore::internal {
 
-namespace {
-constexpr CK_ULONG CK_UNAVAILABLE_INFORMATION = static_cast<CK_ULONG>(~0UL);
-} // namespace
-
 v_AttributeStore_M1::v_AttributeStore_M1(HsmObject &object)
     : v_object_(object) {}
 

@@ -3,6 +3,7 @@
 
 #include <filesystem>
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include "core/types.h"
 #include "persistence/vault.h"
@@ -13,7 +14,14 @@ namespace vhsm::persistence {
 class VaultTest : public ::testing::Test {
 protected:
   void SetUp() override {
-    dir_ = std::filesystem::temp_directory_path() / "vhsm_vault_test";
+    // Unique per process: gtest_discovery splits each TEST_F into its own
+    // ctest test, and ctest runs them in parallel processes. A shared fixed
+    // path made one process's TearDown (remove_all) delete the directory
+    // while another process's save() was creating a temp file in it — flaky
+    // ENOENT "cannot create temp file". pid suffix isolates the processes.
+    dir_ = std::filesystem::temp_directory_path() /
+           ("vhsm_vault_test_" + std::to_string(::getpid()));
+    std::filesystem::remove_all(dir_);
     std::filesystem::create_directories(dir_);
   }
 
