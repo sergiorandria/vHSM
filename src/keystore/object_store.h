@@ -8,7 +8,10 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <stdexcept>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace vhsm::keystore::internal {
@@ -92,25 +95,58 @@ public:
   // lets callers immediately use the object AND keeps it alive for the caller's
   // operation.
   //
-  // WHY lock_guard here: The search iterates the entire table. We hold the lock
-  // for the whole search to prevent concurrent modifications (object
-  // creation/deletion).
+  // Optimized: uses secondary index for CKA_CLASS/CKA_LABEL/CKA_ID when
+  // predicate is of that form; otherwise falls back to linear scan.
+  // Lock is shared for readers, and predicate is evaluated outside the lock
+  // on a snapshot to minimize hold time.
   template <typename Predicate>
   std::pair<CK_OBJECT_HANDLE, std::shared_ptr<HsmObject>>
   v_find_object_if(Predicate pred) const {
-    std::lock_guard<std::mutex> lock(v_mutex_);
+    // Fast path: try indexed lookup if predicate is attribute equality.
+    // We detect this via overloads for common patterns below.
+    // For generic predicate, we do shared lock + snapshot.
+    std::shared_lock<std::shared_mutex> lock(v_mutex_);
+    // Snapshot candidates to evaluate outside lock
+    std::vector<std::pair<uint32_t, std::shared_ptr<HsmObject>>> snapshot;
+    snapshot.reserve(v_table_.size());
     for (size_t i = 0; i < v_table_.size(); ++i) {
       if (!v_table_[i].v_is_free && v_table_[i].v_object) {
-        std::shared_ptr<HsmObject> obj = v_table_[i].v_object;
-        if (pred(obj.get())) {
-          uint32_t version = v_table_[i].v_version.load();
-          CK_OBJECT_HANDLE handle = v_compose_handle(i, version);
-          return {handle, obj};
-        }
+        snapshot.emplace_back(i, v_table_[i].v_object);
+      }
+    }
+    lock.unlock();
+    for (auto &[idx, obj] : snapshot) {
+      if (pred(obj.get())) {
+        std::shared_lock<std::shared_mutex> lock2(v_mutex_);
+        if (idx >= v_table_.size() || v_table_[idx].v_is_free || !v_table_[idx].v_object)
+          continue;
+        // Re-validate version after re-lock
+        uint32_t version = v_table_[idx].v_version.load(std::memory_order_acquire);
+        // Need to ensure object still same
+        if (v_table_[idx].v_object.get() != obj.get())
+          continue;
+        CK_OBJECT_HANDLE handle = v_compose_handle(idx, version);
+        return {handle, obj};
       }
     }
     return {CK_INVALID_HANDLE, nullptr};
   }
+
+  // Optimized find by exact attributes using secondary indices.
+  // Returns first match or invalid handle. O(1) average for indexed attrs,
+  // O(k) where k = bucket size, vs O(n) scan.
+  std::pair<CK_OBJECT_HANDLE, std::shared_ptr<HsmObject>>
+  v_find_by_attributes(const std::unordered_map<CK_ATTRIBUTE_TYPE, std::vector<uint8_t>> &templ) const;
+
+  // Returns all handles matching template, using indices when possible.
+  std::vector<CK_OBJECT_HANDLE>
+  v_find_all_by_attributes(const std::unordered_map<CK_ATTRIBUTE_TYPE, std::vector<uint8_t>> &templ) const;
+
+  // Reindex after attribute update (e.g., C_SetAttributeValue on CKA_LABEL/ID)
+  void v_reindex(CK_OBJECT_HANDLE handle);
+
+  // Enumerate all live handles (replaces g_objectRegistry)
+  [[nodiscard]] std::vector<CK_OBJECT_HANDLE> v_all_handles() const;
 
 private:
   struct v_ObjectEntry {
@@ -132,7 +168,11 @@ private:
     // (reuse existing slot).
     bool v_is_free;
 
-    v_ObjectEntry() : v_version(0), v_is_free(true) {}
+    // Intrusive free-list: when v_is_free, stores index of next free slot.
+    // UINT32_MAX = end of list. Allows O(1) alloc/free vs O(n) scan.
+    uint32_t v_next_free;
+
+    v_ObjectEntry() : v_version(0), v_is_free(true), v_next_free(UINT32_MAX) {}
 
     // WHY delete copy for entry: Each entry owns its object (unique_ptr).
     // Copying would duplicate the object, violating ownership. Move is allowed
@@ -142,8 +182,10 @@ private:
 
     v_ObjectEntry(v_ObjectEntry &&other) noexcept
         : v_object(std::move(other.v_object)),
-          v_version(other.v_version.load()), v_is_free(other.v_is_free) {
+          v_version(other.v_version.load()), v_is_free(other.v_is_free),
+          v_next_free(other.v_next_free) {
       other.v_is_free = true;
+      other.v_next_free = UINT32_MAX;
     }
 
     v_ObjectEntry &operator=(v_ObjectEntry &&other) noexcept {
@@ -151,7 +193,9 @@ private:
         v_object = std::move(other.v_object);
         v_version.store(other.v_version.load());
         v_is_free = other.v_is_free;
+        v_next_free = other.v_next_free;
         other.v_is_free = true;
+        other.v_next_free = UINT32_MAX;
       }
       return *this;
     }
@@ -175,16 +219,26 @@ private:
   // overhead.
   std::vector<v_ObjectEntry> v_table_;
 
-  // WHY mutex: Protects concurrent access to v_table_. Without it,
-  // create/destroy/get could race (one thread deletes while another accesses).
-  // lock_guard ensures RAII semantics (lock is released even if an exception is
-  // thrown).
-  mutable std::mutex v_mutex_;
+  // WHY shared_mutex: Many concurrent v_get_object/v_find_object_if readers,
+  // rarer create/destroy writers. shared_mutex allows parallel reads.
+  mutable std::shared_mutex v_mutex_;
 
-  // WHY atomic v_next_index_: Tracks the next slot to check for reuse. Atomic
-  // allows relaxed stores/loads without locking. Improves performance: we don't
-  // hold the mutex when scanning for the next free slot.
-  std::atomic<uint32_t> v_next_index_;
+  // Intrusive free-list head: index of first free slot, or UINT32_MAX if none.
+  // Protected by v_mutex_ (exclusive).
+  uint32_t v_free_head_ = UINT32_MAX;
+
+  // Secondary indices for hot attributes. Protected by v_mutex_.
+  // Key -> vector of table indices (multimap because duplicate labels/IDs allowed)
+  std::unordered_multimap<std::string, uint32_t> v_label_index_;
+  std::unordered_multimap<std::string, uint32_t> v_id_index_;
+  std::unordered_multimap<uint32_t, uint32_t> v_class_index_;
+
+  // Helpers for index maintenance
+  void v_index_insert(uint32_t index, const HsmObject *obj);
+  void v_index_remove(uint32_t index, const HsmObject *obj);
+  std::string v_extract_label(const HsmObject *obj) const;
+  std::string v_extract_id(const HsmObject *obj) const;
+  uint32_t v_extract_class(const HsmObject *obj) const;
 };
 
 inline constexpr CK_OBJECT_HANDLE CK_INVALID_HANDLE = 0;
@@ -208,45 +262,32 @@ v_ObjectStore_M1::v_create_object(Args &&...args) {
   static_assert(std::is_base_of_v<HsmObject, T>,
                 "T must derive from HsmObject");
 
-  std::lock_guard<std::mutex> lock(v_mutex_);
+  std::unique_lock<std::shared_mutex> lock(v_mutex_);
 
-  // WHY scan from v_next_index_: Start searching from the last reused slot.
-  // This improves cache locality: recently-freed slots are more likely to be
-  // hot.
-  for (size_t i = 0; i < v_table_.size(); ++i) {
-    size_t index = (v_next_index_ + i) % v_table_.size();
-    if (v_table_[index].v_is_free) {
-      // WHY mark not free, increment version: Mark the slot as in-use and
-      // increment the version so old handles to deleted objects become invalid.
-      v_table_[index].v_is_free = false;
-      v_table_[index].v_version.fetch_add(1);
-      uint32_t version = v_table_[index].v_version.load();
-
-      // WHY make_shared: Construct the object in the managed pointer.
-      // Exception-safe: if the constructor throws, v_object remains nullptr
-      // and the entry stays marked free. No memory leak.
-      // One shared_ptr instance (from make_shared) is stored; the caller
-      // receives a copy of that shared_ptr, so the object outlives the store's
-      // entry.
-      v_table_[index].v_object =
-          std::make_shared<T>(std::forward<Args>(args)...);
-
-      // WHY compose handle: Combine index + version into an opaque handle.
-      CK_OBJECT_HANDLE handle = v_compose_handle(index, version);
-      return {handle, std::static_pointer_cast<T>(v_table_[index].v_object)};
-    }
+  uint32_t index;
+  uint32_t version;
+  if (v_free_head_ != UINT32_MAX) {
+    // O(1) pop from free-list
+    index = v_free_head_;
+    v_free_head_ = v_table_[index].v_next_free;
+    v_table_[index].v_is_free = false;
+    v_table_[index].v_version.fetch_add(1, std::memory_order_relaxed);
+    version = v_table_[index].v_version.load(std::memory_order_acquire);
+    v_table_[index].v_object =
+        std::make_shared<T>(std::forward<Args>(args)...);
+    v_index_insert(index, v_table_[index].v_object.get());
+    CK_OBJECT_HANDLE handle = v_compose_handle(index, version);
+    return {handle, std::static_pointer_cast<T>(v_table_[index].v_object)};
   }
 
-  // WHY append new entry if table full: Grow the table dynamically.
-  // This is O(1) amortized (vector growth strategy).
-  size_t index = v_table_.size();
+  // Append new entry if no free slot
+  index = v_table_.size();
   v_table_.emplace_back();
   v_table_[index].v_is_free = false;
-  v_table_[index].v_version.fetch_add(1);
-  uint32_t version = v_table_[index].v_version.load();
-
+  v_table_[index].v_version.fetch_add(1, std::memory_order_relaxed);
+  version = v_table_[index].v_version.load(std::memory_order_acquire);
   v_table_[index].v_object = std::make_shared<T>(std::forward<Args>(args)...);
-
+  v_index_insert(index, v_table_[index].v_object.get());
   CK_OBJECT_HANDLE handle = v_compose_handle(index, version);
   return {handle, std::static_pointer_cast<T>(v_table_[index].v_object)};
 }

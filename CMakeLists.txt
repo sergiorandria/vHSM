@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 project(VirtualHSM VERSION 1.0.0 LANGUAGES C CXX)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ---------------------------------------------------------------------------
 # Options
@@ -13,6 +14,7 @@ option(VHSM_NOTIFY_WEBHOOK   "Build webhook notification adapter"       ON)
 set(VHSM_NOTIFY_BUS_SIZE "1024" CACHE STRING "Notification ring buffer capacity")
 set(VHSM_STORE_BACKEND "db" CACHE STRING "Signature store backend: db|ledger")
 set_property(CACHE VHSM_STORE_BACKEND PROPERTY STRINGS db ledger)
+option(VHSM_USE_SECURE_CRYPTO "Use hardened vhsm-secure-crypto (third_party/vhsm-secure-crypto) instead of system OpenSSL" ON)
 
 # Mutually exclusive backends: ledger is alternative to DB, not complementary.
 # When STORE_BACKEND=ledger, force VHSM_LEDGER ON so Fabric code is built.
@@ -93,7 +95,26 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 # use protobuf:: targets afterwards because they are already defined.
 # ---------------------------------------------------------------------------
 
-find_package(OpenSSL REQUIRED)
+# Secure crypto clone (third_party/vhsm-secure-crypto) — hardened minimal OpenSSL replacement.
+# Wired to the build unconditionally when VHSM_USE_SECURE_CRYPTO=ON.
+# We use a provider interface so IDEs and clangd see the secure headers
+# without breaking the legacy OpenSSL targets needed for RSA/EC math fallback
+# (VHSM_SCRYPTO_PURE=OFF) and for fabric-gateway-cpp.
+if(VHSM_USE_SECURE_CRYPTO)
+    add_subdirectory(third_party/vhsm-secure-crypto)
+    add_library(vhsm_crypto_provider INTERFACE)
+    target_link_libraries(vhsm_crypto_provider INTERFACE vhsm_secure_crypto)
+    target_include_directories(vhsm_crypto_provider INTERFACE
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vhsm-secure-crypto/include)
+    target_compile_definitions(vhsm_crypto_provider INTERFACE VHSM_USE_SECURE_CRYPTO VHSM_OPENSSL_SHIM)
+    add_compile_definitions(VHSM_USE_SECURE_CRYPTO)
+    message(STATUS "VHSM: using vhsm-secure-crypto (hardened OpenSSL clone) wired via vhsm_crypto_provider — OpenSSL-free build")
+else()
+    find_package(OpenSSL REQUIRED)
+    # Compatibility: provide provider alias to OpenSSL when not using secure clone
+    add_library(vhsm_crypto_provider INTERFACE)
+    target_link_libraries(vhsm_crypto_provider INTERFACE OpenSSL::Crypto OpenSSL::SSL)
+endif()
 
 # --- gRPC (brings in Protobuf transitively) ---------------------------------
 if(VHSM_ADMIN_GRPC)

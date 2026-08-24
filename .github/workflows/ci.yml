@@ -13,7 +13,7 @@ jobs:
         with:
           submodules: recursive
       - name: Install deps
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libssl-dev libcurl4-openssl-dev libgtest-dev ninja-build
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libssl-dev libcurl4-openssl-dev nlohmann-json3-dev libgtest-dev ninja-build
       - name: Configure (db backend)
         run: cmake --preset linux-ninja -DVHSM_STORE_BACKEND=db -DVHSM_LEDGER=OFF
       - name: Build

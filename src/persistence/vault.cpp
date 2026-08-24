@@ -234,8 +234,10 @@ void Vault::save(const std::vector<u8> &payload) {
   {
     const int fd = ::open(tmp_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (fd < 0) {
+      const int err = errno;
       throw std::runtime_error("Vault::save: cannot create temp file: " +
-                               tmp_path.string());
+                               tmp_path.string() + ": " +
+                               std::strerror(err));
     }
 
     const std::size_t total = out.size();

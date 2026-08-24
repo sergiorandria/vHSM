@@ -17,10 +17,8 @@ target_include_directories(vhsm_crypto
     PUBLIC ${PROJECT_SOURCE_DIR}/src
 )
 
-find_package(OpenSSL REQUIRED)
-
 target_link_libraries(vhsm_crypto
-    PUBLIC OpenSSL::SSL
+    PUBLIC vhsm_crypto_provider
 )
 if(WIN32)
     target_link_libraries(vhsm_crypto PRIVATE bcrypt)

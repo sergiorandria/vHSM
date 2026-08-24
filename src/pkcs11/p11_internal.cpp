@@ -98,28 +98,10 @@ std::unique_ptr<vhsm::persistence::Vault> g_vault;
 bool g_initialized = false;
 SessionManager g_sessionManager;
 
-// Per-session registry of object handles we have created (used for FindObjects
-// enumeration, since the underlying ObjectStore does not expose iteration).
-std::unordered_map<CK_SESSION_HANDLE, std::vector<CK_OBJECT_HANDLE>>
-    g_objectRegistry;
-
-// Active operation state per session.
-std::unordered_map<CK_SESSION_HANDLE, CK_MECHANISM_TYPE> g_activeMech;
-std::unordered_map<CK_SESSION_HANDLE, std::vector<u8>> g_opBuf;
-std::unordered_map<CK_SESSION_HANDLE, CK_OBJECT_HANDLE> g_signKey;
-std::unordered_map<CK_SESSION_HANDLE, std::vector<u8>> g_gcmIv;
-std::unordered_map<CK_SESSION_HANDLE, std::vector<u8>> g_gcmAad;
-std::unordered_map<CK_SESSION_HANDLE, std::vector<u8>> g_oaepLabel;
-std::unordered_map<CK_SESSION_HANDLE, std::string> g_oaepMgf1;
-std::unordered_map<CK_SESSION_HANDLE, std::vector<CK_OBJECT_HANDLE>>
-    g_findResults;
-
-// Login state per session (userType, or CKU_INVALID if not logged in).
-std::unordered_map<CK_SESSION_HANDLE, CK_USER_TYPE> g_loginState;
-
-// Single mutex guarding all g_* per-session maps (see pkcs11_internal.h
-// rationale).
-std::mutex g_stateMutex;
+// Per-session state is now owned by Session (see session.h).
+// The ten global maps and g_stateMutex have been removed. Each Session
+// owns its own activeMech, opBuf, signKey, gcmIv/Aad, oaep* and find
+// state, so cross-session contention is zero. No global mutex needed.
 
 bool p11_is_initialized() { return g_initialized; }
 
@@ -219,37 +201,30 @@ std::shared_ptr<HsmObject> p11_get_object(CK_SESSION_HANDLE hSession,
   return s->getObjectStore().v_get_object(hObject);
 }
 
-void p11_register_object(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE h) {
-  std::lock_guard<std::mutex> lock(g_stateMutex);
-  g_objectRegistry[hSession].push_back(h);
+void p11_register_object(CK_SESSION_HANDLE, CK_OBJECT_HANDLE) {
+  // No-op: Session::getObjectStore() is the source of truth. Every object
+  // in a session's ObjectStore is already "this session's object" by
+  // construction; no separate registry to keep consistent.
 }
 
-void p11_unregister_object(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE h) {
-  std::lock_guard<std::mutex> lock(g_stateMutex);
-  auto it = g_objectRegistry.find(hSession);
-  if (it != g_objectRegistry.end()) {
-    auto &v = it->second;
-    v.erase(std::remove(v.begin(), v.end(), h), v.end());
-  }
+void p11_unregister_object(CK_SESSION_HANDLE, CK_OBJECT_HANDLE) {
+  // No-op for same reason as above.
 }
 
 void p11_clear_session_objects(CK_SESSION_HANDLE hSession) {
+  // SessionManager::closeSession destroys the Session object, which clears
+  // all per-session state. For C_CloseAllSessions which iterates over
+  // sessions, we just reset the operation state on the still-alive Session
+  // before it is destroyed.
   p11_reset_op(hSession);
-  std::lock_guard<std::mutex> lock(g_stateMutex);
-  g_objectRegistry.erase(hSession);
-  g_findResults.erase(hSession);
-  g_loginState.erase(hSession);
 }
 
 void p11_reset_op(CK_SESSION_HANDLE h) {
-  std::lock_guard<std::mutex> lock(g_stateMutex);
-  g_activeMech.erase(h);
-  g_opBuf.erase(h);
-  g_signKey.erase(h);
-  g_gcmIv.erase(h);
-  g_gcmAad.erase(h);
-  g_oaepLabel.erase(h);
-  g_oaepMgf1.erase(h);
+  auto s = g_sessionManager.getSession(h);
+  if (s) {
+    s->opEnd();
+    s->clearFindResults();
+  }
 }
 
 // ---------------------------------------------------------------------------

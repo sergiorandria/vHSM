@@ -35,7 +35,7 @@ target_link_libraries(vhsm_pkcs11
     vhsm_signature_store
     vhsm_notification
     vhsm_threadpool
-    OpenSSL::SSL
+    vhsm_crypto_provider
 )
 if(VHSM_LEDGER)
     target_link_libraries(vhsm_pkcs11 PUBLIC vhsm_ledger)
@@ -58,7 +58,7 @@ target_link_libraries(vhsm_pkcs11_mod
     vhsm_signature_store
     vhsm_notification
     vhsm_threadpool
-    OpenSSL::SSL
+    vhsm_crypto_provider
 )
 if(VHSM_LEDGER)
     target_link_libraries(vhsm_pkcs11_mod PUBLIC vhsm_ledger)

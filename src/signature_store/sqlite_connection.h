@@ -3,9 +3,11 @@
 
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 struct sqlite3;
+struct sqlite3_stmt;
 
 #include "db_connection.h"
 #include "db_result_set.h"
@@ -35,6 +37,14 @@ public:
 private:
   sqlite3 *db_ = nullptr;
   std::mutex mutex_;
+  // Statement cache: SQL text -> prepared statement. Protected by mutex_.
+  // LRU eviction at 32 entries to bound memory; hot statements (insert,
+  // update_ledger, etc.) stay cached across C_Sign calls.
+  std::unordered_map<std::string, sqlite3_stmt*> v_stmt_cache_;
+  static constexpr size_t kCacheLimit = 32;
+
+  sqlite3_stmt* v_get_cached_stmt(const std::string &sql);
+  void v_evict_one();
 
   // exec without acquiring the mutex — caller must hold it.
   i64 exec_locked(const std::string &sql,

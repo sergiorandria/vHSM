@@ -74,75 +74,28 @@ std::optional<std::string> SignatureRepository::insert(
 
 bool SignatureRepository::update_ledger_fields(
     const std::string &signature_id, const vhsm::ledger::LedgerEntry &entry) {
-  // Load the current row so we can preserve the non-ledger columns and any
-  // previously captured ledger_tx_time / ledger_tx_proof / ledger_tx_set_b64.
-  auto current_row = get_by_id(signature_id);
-  if (!current_row) {
-    return false;
-  }
-
-  // Row layout (matches sql_create_signature_records()):
-  // 0: id | 1: created_at | 2: slot_id | 3: token_label | 4: key_id
-  // 5: key_fingerprint | 6: mechanism | 7: payload_digest | 8: signature_b64
-  // 9: session_handle | 10: user_label | 11: app_context
-  // 12: ledger_tx_id | 13: ledger_block_num | 14: ledger_tx_time
-  // 15: ledger_tx_proof | 16: ledger_tx_set_b64 | 17: ledger_status
-  const auto &row = *current_row;
-  if (row.size() < 18) {
-    return false;
-  }
-
-  auto to_storage_string =
-      [](const std::optional<std::string> &opt) -> std::string {
-    return opt ? *opt : "";
-  };
-
-  std::vector<std::string> cols;
-  cols.reserve(18);
-  for (std::size_t i = 0; i < 12; ++i) {
-    cols.push_back(to_storage_string(row[i]));
-  }
-  cols.push_back(entry.tx_id);                        // 12: ledger_tx_id
-  cols.push_back(std::to_string(entry.block_number)); // 13: ledger_block_num
-  cols.push_back(to_storage_string(row[14])); // 14: ledger_tx_time (preserve)
-  cols.push_back(to_storage_string(row[15])); // 15: ledger_tx_proof (preserve)
-  cols.push_back(
-      to_storage_string(row[16])); // 16: ledger_tx_set_b64 (preserve)
-  cols.push_back("COMMITTED");     // 17: ledger_status
-
+  // Optimized: single 3-col UPDATE, no SELECT. Previously this did
+  // SELECT + 18-col UPDATE (rewriting immutable columns). The ledger fields
+  // are the only ones that change post-insert, so we touch only them.
   const std::string sql = R"SQL(
         UPDATE signature_records SET
-            id = ?,
-            created_at = ?,
-            slot_id = ?,
-            token_label = ?,
-            key_id = ?,
-            key_fingerprint = ?,
-            mechanism = ?,
-            payload_digest = ?,
-            signature_b64 = ?,
-            session_handle = ?,
-            user_label = ?,
-            app_context = ?,
             ledger_tx_id = ?,
             ledger_block_num = ?,
-            ledger_tx_time = ?,
-            ledger_tx_proof = ?,
-            ledger_tx_set_b64 = ?,
             ledger_status = ?
         WHERE id = ?;
     )SQL";
-
-  std::vector<std::string> bind_params = cols;
-  bind_params.push_back(signature_id); // WHERE id
-
+  std::vector<std::string> params;
+  params.reserve(4);
+  params.push_back(entry.tx_id);
+  params.push_back(std::to_string(entry.block_number));
+  params.push_back("COMMITTED");
+  params.push_back(signature_id);
   try {
-    conn_.exec(sql, bind_params);
+    i64 n = conn_.exec(sql, params);
+    return n > 0;
   } catch (const DbError &e) {
     return false;
   }
-
-  return true;
 }
 
 std::optional<std::vector<std::optional<std::string>>>

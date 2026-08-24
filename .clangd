@@ -1,0 +1,20 @@
+CompileFlags:
+  CompilationDatabase: build
+  Add:
+    - "-std=c++23"
+    - "-DVHSM_USE_SECURE_CRYPTO"
+    - "-DVHSM_OPENSSL_SHIM"
+    - "-I/home/sergio/Project/vHSM/include"
+    - "-I/home/sergio/Project/vHSM/src"
+    - "-I/home/sergio/Project/vHSM/third_party/vhsm-secure-crypto/include"
+    - "-I/home/sergio/Project/vHSM/third_party/fabric-gateway-cpp/include"
+    - "-I/home/sergio/Project/vHSM/build/generated"
+    - "-I/home/sergio/Project/vHSM/build/generated/vhsm"
+Diagnostics:
+  # Silence spurious 'header not found' while the compilation database is
+  # being generated (fresh checkout, different build dir name). Once
+  # build/compile_commands.json exists clangd uses the exact compiler
+  # invocation and this suppression has no effect.
+  Suppress: "included_header_not_found"
+Index:
+  Background: Build
