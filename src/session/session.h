@@ -109,6 +109,9 @@ public:
   // Find results (previously g_findResults)
   void setFindResults(std::vector<CK_OBJECT_HANDLE> handles);
   [[nodiscard]] bool hasFindResults() const noexcept;
+  // True between FindInit and FindFinal — used for CKR_OPERATION_ACTIVE.
+  void setFindActive(bool active) noexcept { findActive_ = active; }
+  [[nodiscard]] bool findActive() const noexcept { return findActive_; }
   // Returns next batch and advances pos; O(1) vs old vector::erase O(n)
   size_t findNextBatch(CK_OBJECT_HANDLE *out, size_t maxCount);
   void clearFindResults() noexcept;
@@ -178,7 +181,7 @@ private:
 
   // Per-operation state (migrated from global maps)
   CK_MECHANISM_TYPE activeMech_{0};
-  CK_OBJECT_HANDLE signKey_{CK_INVALID_HANDLE};
+  CK_OBJECT_HANDLE signKey_{0};
   std::vector<uint8_t> opBuf_;
   std::vector<uint8_t> gcmIv_;
   std::vector<uint8_t> gcmAad_;
@@ -188,6 +191,7 @@ private:
   // Find results per session (replaces g_findResults)
   std::vector<CK_OBJECT_HANDLE> findHandles_;
   size_t findPos_{0};
+  bool findActive_{false};
 
   // WHY pApplication_ and notify_: PKCS#11 callback mechanism. Applications
   // register a callback (notify_) to receive events (e.g., "token inserted").

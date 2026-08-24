@@ -2,6 +2,8 @@
 
 namespace vhsm::session {
 
+static constexpr CK_OBJECT_HANDLE kInvalidObjectHandle = 0;
+
 Session::Session(CK_SESSION_HANDLE handle, CK_SLOT_ID slotID, CK_FLAGS flags,
                  CK_VOID_PTR pApplication, CK_NOTIFY notify)
     : handle_(handle), slotID_(slotID), flags_(flags),
@@ -11,7 +13,7 @@ Session::Session(CK_SESSION_HANDLE handle, CK_SLOT_ID slotID, CK_FLAGS flags,
       ,
       userType_(CKU_INVALID), operationInitialized_(false),
       currentOperationMechanism_(0), activeMech_(0),
-      signKey_(CK_INVALID_HANDLE), pApplication_(pApplication),
+      signKey_(0), pApplication_(pApplication),
       notify_(notify) {
   // Constructor implementation
 }
@@ -95,7 +97,7 @@ CK_RV Session::logout() {
   }
   // Clear per-operation state
   activeMech_ = 0;
-  signKey_ = CK_INVALID_HANDLE;
+  signKey_ = kInvalidObjectHandle;
   opBuf_.clear();
   opBuf_.shrink_to_fit();
   gcmIv_.clear();
@@ -112,6 +114,12 @@ CK_RV Session::initializeOperation(CK_MECHANISM_TYPE mechanism,
                                    CK_ATTRIBUTE_PTR /*pTemplate*/,
                                    CK_ULONG /*ulCount*/) {
   std::lock_guard<std::mutex> lock(mutex_);
+
+  // Check if we're logged in (user functions) — preserved PKCS#11 semantics.
+  if (state_ != CKS_RW_USER_FUNCTIONS && state_ != CKS_RW_SO_FUNCTIONS &&
+      state_ != CKS_RO_USER_FUNCTIONS && state_ != CKS_RO_SO_FUNCTIONS) {
+    return CKR_USER_NOT_LOGGED_IN;
+  }
 
   // Check if an operation is already initialized
   if (operationInitialized_) {
@@ -141,7 +149,7 @@ CK_RV Session::finalizeOperation() {
 
   // Clear per-operation buffers
   activeMech_ = 0;
-  signKey_ = CK_INVALID_HANDLE;
+  signKey_ = kInvalidObjectHandle;
   opBuf_.clear();
   opBuf_.shrink_to_fit();
   gcmIv_.clear();
@@ -175,7 +183,7 @@ CK_RV Session::opCheck() const {
 void Session::opEnd() {
   std::lock_guard<std::mutex> lock(mutex_);
   activeMech_ = 0;
-  signKey_ = CK_INVALID_HANDLE;
+  signKey_ = kInvalidObjectHandle;
   opBuf_.clear();
   opBuf_.shrink_to_fit();
   gcmIv_.clear();
@@ -262,6 +270,7 @@ void Session::setFindResults(std::vector<CK_OBJECT_HANDLE> handles) {
   std::lock_guard<std::mutex> lock(mutex_);
   findHandles_ = std::move(handles);
   findPos_ = 0;
+  findActive_ = true;
 }
 
 bool Session::hasFindResults() const noexcept {
@@ -283,7 +292,9 @@ size_t Session::findNextBatch(CK_OBJECT_HANDLE *out, size_t maxCount) {
 void Session::clearFindResults() noexcept {
   std::lock_guard<std::mutex> lock(mutex_);
   findHandles_.clear();
+  findHandles_.shrink_to_fit();
   findPos_ = 0;
+  findActive_ = false;
 }
 
 vhsm::keystore::internal::v_ObjectStore_M1 &Session::getObjectStore() noexcept {
