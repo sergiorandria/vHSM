@@ -168,6 +168,39 @@ typedef CK_ULONG CK_STATE;
 #define CKF_HW_SLOT 0x00000002UL
 #define CKF_REMOVABLE_DEVICE 0x00000004UL
 
+// PKCS#11 Attribute Types (CKA_*) — single source of truth, was duplicated in
+// src/keystore/attribute_store.h:16. Keep here so ObjectStore, Token, and
+// AttributeStore all see the same values.
+#define CKA_CLASS 0x00000000UL
+#define CKA_TOKEN 0x00000001UL
+#define CKA_PRIVATE 0x00000002UL
+#define CKA_LABEL 0x00000003UL
+#define CKA_VALUE 0x00000011UL
+#define CKA_ID 0x00000102UL
+#define CKA_SENSITIVE 0x00000103UL
+#define CKA_EXTRACTABLE 0x00000162UL
+#define CKA_KEY_TYPE 0x00000100UL
+#define CKA_EC_PARAMS 0x00000180UL
+#define CKA_EC_POINT 0x00000181UL
+
+// PKCS#11 Object Classes (CKO_*)
+#define CKO_DATA 0x00000000UL
+#define CKO_CERTIFICATE 0x00000001UL
+#define CKO_PUBLIC_KEY 0x00000002UL
+#define CKO_PRIVATE_KEY 0x00000003UL
+#define CKO_SECRET_KEY 0x00000004UL
+#define CKO_HW_FEATURE 0x00000005UL
+#define CKO_DOMAIN_PARAMETERS 0x00000006UL
+#define CKO_VENDOR_DEFINED 0x80000000UL
+
+// PKCS#11 Key Types (CKK_*)
+#define CKK_RSA 0x00000000UL
+#define CKK_DSA 0x00000001UL
+#define CKK_DH 0x00000002UL
+#define CKK_EC 0x00000003UL
+#define CKK_GENERIC_SECRET 0x00000010UL
+#define CKK_AES 0x0000001FUL
+
 typedef CK_ULONG CK_NOTIFICATION;
 typedef CK_RV (*CK_NOTIFY)(CK_SESSION_HANDLE hSession, CK_NOTIFICATION event,
                            CK_VOID_PTR pApplication);
