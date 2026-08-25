@@ -120,7 +120,7 @@ CK_RV C_Logout(CK_SESSION_HANDLE hSession) {
   CK_RV rv = tok->logout(ut);
   if (rv == CKR_OK || rv == CKR_USER_NOT_LOGGED_IN) {
     // Clear per-session op/find state too.
-    s->logout();
+    (void)s->logout();
     s->opEnd();
     s->clearFindResults();
     if (rv == CKR_USER_NOT_LOGGED_IN)
