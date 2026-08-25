@@ -495,7 +495,7 @@ TEST_F(DbSchemaBootstrapTest, Bootstrap_FreshDb_CreatesAllTables) {
 TEST_F(DbSchemaBootstrapTest, Bootstrap_FreshDb_SetsSchemaVersion) {
   schema_.bootstrap();
   int v = schema_.current_version();
-  EXPECT_EQ(v, kCurrentSchemaVersion);
+  EXPECT_EQ(v, K_CURRENT_SCHEMA_VERSION);
 }
 
 TEST_F(DbSchemaBootstrapTest, Bootstrap_FreshDb_ExecsCreateStatements) {
@@ -515,8 +515,8 @@ TEST_F(DbSchemaBootstrapTest, Bootstrap_FreshDb_ExecsCreateStatements) {
 }
 
 TEST_F(DbSchemaBootstrapTest, Bootstrap_AlreadyAtCurrentVersion_IsNoop) {
-  // Pre-seed meta so current_version() returns kCurrentSchemaVersion.
-  conn_.seed_meta("schema_version", std::to_string(kCurrentSchemaVersion));
+  // Pre-seed meta so current_version() returns K_CURRENT_SCHEMA_VERSION.
+  conn_.seed_meta("schema_version", std::to_string(K_CURRENT_SCHEMA_VERSION));
   // Also mark db_meta as existing so table_exists() returns true.
   // (FakeDbConnection.has_table checks tables_ map.)
 
@@ -535,9 +535,9 @@ TEST_F(DbSchemaBootstrapTest, Bootstrap_AlreadyAtCurrentVersion_IsNoop) {
 }
 
 TEST_F(DbSchemaBootstrapTest, Bootstrap_FutureVersion_ThrowsDbError) {
-  // If the DB reports a version *newer* than kCurrentSchemaVersion, bootstrap
+  // If the DB reports a version *newer* than K_CURRENT_SCHEMA_VERSION, bootstrap
   // must throw rather than silently proceed.
-  conn_.seed_meta("schema_version", std::to_string(kCurrentSchemaVersion + 1));
+  conn_.seed_meta("schema_version", std::to_string(K_CURRENT_SCHEMA_VERSION + 1));
 
   for (const char *tbl :
        {"db_meta", "signature_records", "signature_verifications",
@@ -572,7 +572,7 @@ TEST_F(DbSchemaVersionTest,
 TEST_F(DbSchemaVersionTest,
        CurrentVersion_AfterBootstrap_ReturnsCurrentSchemaVersion) {
   schema_.bootstrap();
-  EXPECT_EQ(schema_.current_version(), kCurrentSchemaVersion);
+  EXPECT_EQ(schema_.current_version(), K_CURRENT_SCHEMA_VERSION);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -644,10 +644,10 @@ protected:
 };
 
 TEST_F(DbSchemaMigrateTest, Bootstrap_FromV1_RunsMigration) {
-  // bootstrap() detects v1 < kCurrentSchemaVersion → calls migrate().
+  // bootstrap() detects v1 < K_CURRENT_SCHEMA_VERSION → calls migrate().
   EXPECT_NO_THROW(schema_.bootstrap());
   // After migration the DB is at v4 and the Rekor-era table is gone.
-  EXPECT_EQ(schema_.current_version(), kCurrentSchemaVersion);
+  EXPECT_EQ(schema_.current_version(), K_CURRENT_SCHEMA_VERSION);
   EXPECT_FALSE(conn_.has_table("key_rekor_registry"));
 }
 
@@ -666,7 +666,7 @@ TEST_F(DbSchemaMigrateTest, Bootstrap_FromV1_CreatesLedgerColumns) {
 
 TEST_F(DbSchemaMigrateTest, Migrate_AlreadyAtCurrentVersion_IsNoop) {
   // Bump meta to current version manually.
-  conn_.seed_meta("schema_version", std::to_string(kCurrentSchemaVersion));
+  conn_.seed_meta("schema_version", std::to_string(K_CURRENT_SCHEMA_VERSION));
   // Override the v1 entry — re-seed is simplest by checking current_version
   // return. We can't easily mutate the fake; instead create a fresh connection
   // at current ver.
@@ -678,10 +678,10 @@ TEST_F(DbSchemaMigrateTest, Migrate_AlreadyAtCurrentVersion_IsNoop) {
                       " (x TEXT);");
   }
   current_conn.seed_meta("schema_version",
-                         std::to_string(kCurrentSchemaVersion));
+                         std::to_string(K_CURRENT_SCHEMA_VERSION));
   DbSchema current_schema(current_conn);
   // migrate() from current version returns from_version immediately.
-  EXPECT_EQ(current_schema.migrate(), kCurrentSchemaVersion);
+  EXPECT_EQ(current_schema.migrate(), K_CURRENT_SCHEMA_VERSION);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -689,28 +689,28 @@ TEST_F(DbSchemaMigrateTest, Migrate_AlreadyAtCurrentVersion_IsNoop) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST(DbSchemaConstantsTest, TableNameConstants_AreCorrect) {
-  EXPECT_EQ(table::kSignatureRecords, "signature_records");
-  EXPECT_EQ(table::kSignatureVerifications, "signature_verifications");
-  EXPECT_EQ(table::kNotificationSubscribers, "notification_subscribers");
-  EXPECT_EQ(table::kNotificationLog, "notification_log");
-  EXPECT_EQ(table::kDbMeta, "db_meta");
+  EXPECT_EQ(table::K_SIGNATURE_RECORDS, "signature_records");
+  EXPECT_EQ(table::K_SIGNATURE_VERIFICATIONS, "signature_verifications");
+  EXPECT_EQ(table::K_NOTIFICATION_SUBSCRIBERS, "notification_subscribers");
+  EXPECT_EQ(table::K_NOTIFICATION_LOG, "notification_log");
+  EXPECT_EQ(table::K_DB_META, "db_meta");
 }
 
 TEST(DbSchemaConstantsTest, MetaKeyConstants_AreCorrect) {
-  EXPECT_EQ(meta_key::kSchemaVersion, "schema_version");
-  EXPECT_EQ(meta_key::kHmacKeyWrapped, "hmac_key_wrapped");
-  EXPECT_EQ(meta_key::kCreatedAt, "created_at");
-  EXPECT_EQ(meta_key::kInstanceId, "instance_id");
+  EXPECT_EQ(meta_key::K_SCHEMA_VERSION, "schema_version");
+  EXPECT_EQ(meta_key::K_HMAC_KEY_WRAPPED, "hmac_key_wrapped");
+  EXPECT_EQ(meta_key::K_CREATED_AT, "created_at");
+  EXPECT_EQ(meta_key::K_INSTANCE_ID, "instance_id");
 }
 
 TEST(DbSchemaConstantsTest, LedgerStatusConstants_AreCorrect) {
-  EXPECT_EQ(ledger_status::kPending, "PENDING");
-  EXPECT_EQ(ledger_status::kCommitted, "COMMITTED");
-  EXPECT_EQ(ledger_status::kFailed, "FAILED");
+  EXPECT_EQ(ledger_status::K_PENDING, "PENDING");
+  EXPECT_EQ(ledger_status::K_COMMITTED, "COMMITTED");
+  EXPECT_EQ(ledger_status::K_FAILED, "FAILED");
 }
 
 TEST(DbSchemaConstantsTest, CurrentSchemaVersion_IsSix) {
-  EXPECT_EQ(kCurrentSchemaVersion, 6);
+  EXPECT_EQ(K_CURRENT_SCHEMA_VERSION, 6);
 }
 
 } // namespace vhsm::signature_store::db
