@@ -182,6 +182,10 @@ std::vector<u8> p11_get_attr_bytes(const HsmObject &obj, CK_ATTRIBUTE_TYPE t);
 CK_RV p11_store_secret(HsmObject &obj, const std::vector<u8> &rawKey);
 CK_RV p11_store_key(HsmObject &obj, EVP_PKEY *pkey, bool isPrivate,
                     int keyType);
+CK_RV p11_store_key(HsmObject &obj, vhsm::crypto::RSAKeyPair kp, bool isPrivate,
+                    int keyType);
+CK_RV p11_store_key_ec(HsmObject &obj, vhsm::crypto::ECCKeyPair kp,
+                       bool isPrivate);
 
 EVP_PKEY *p11_evp_from_object(HsmObject *obj);
 EVP_PKEY *p11_build_key_from_attrs(HsmObject *obj, bool isPrivate, int keyType);

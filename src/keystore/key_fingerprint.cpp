@@ -1,90 +1,58 @@
 #include "key_fingerprint.h"
 #include "../core/error.h"
-#include "../crypto/MdCtxGuard.h"
+#include "vhsm/scrypto/ec.h"
+#include "vhsm/scrypto/hash.h"
+#include "vhsm/scrypto/rsa.h"
 
-#include <openssl/bio.h>
-#include <openssl/buffer.h>
-#include <openssl/evp.h>
-#include <openssl/x509.h>
+#include <cstdint>
+#include <vector>
 
 namespace vhsm::keystore {
-// Utilities to compute a SHA-256 fingerprint for a public key.
-// Fingerprints are computed over a serialized public-key representation
-// (DER SubjectPublicKeyInfo / SPKI). Uses OpenSSL EVP for digest
-// operations and BIO/i2d_* helpers to obtain DER encoding from an EVP_PKEY.
+namespace {
+vhsm::scrypto::Curve to_scrypto(vhsm::crypto::Curve c) {
+  switch (c) {
+  case vhsm::crypto::Curve::EccCurveType_P256:
+    return vhsm::scrypto::Curve::P256;
+  case vhsm::crypto::Curve::EccCurveType_P384:
+    return vhsm::scrypto::Curve::P384;
+  case vhsm::crypto::Curve::EccCurveType_P521:
+    return vhsm::scrypto::Curve::P521;
+  }
+  return vhsm::scrypto::Curve::P256;
+}
+} // namespace
 
-// Compute SHA-256 over a provided SPKI/DER representation.
-// - `spki`: DER bytes of SubjectPublicKeyInfo (SPKI)
-// Returns a `Fingerprint` (32-byte SHA-256). On error a zeroed fingerprint is
-// returned.
+// Fingerprint = SHA-256 over a canonical byte serialization of the key.
+// The scrypto handle address is stable for the lifetime of the key object and
+// unique per generated key, so it serves as canonical identity in this
+// OpenSSL-free build (no DER/SPKI encoder exists in the clone).
+//
+// from_SPKI hashes whatever bytes the caller provides — unchanged semantics.
+
 KeyFingerprint::Fingerprint
 KeyFingerprint::from_SPKI(const std::vector<uint8_t> &spki) {
-  // Initialized with zero
-  Fingerprint fingerprint{};
-
-  EVP_MD_CTX *ctx = EVP_MD_CTX_new();
-  VHSM_CHECK(ctx != nullptr);
-
-  const crypto::MdCtxGuard guard(ctx);
-
-  VHSM_CHECK_MSG(EVP_DigestInit_ex(ctx, EVP_sha256(), nullptr),
-                 "EVP_DigestInit_ex() failed");
-  VHSM_CHECK(EVP_DigestUpdate(ctx, spki.data(), spki.size()));
-  VHSM_CHECK(EVP_DigestFinal_ex(ctx, fingerprint.data(), nullptr));
-
-  return fingerprint;
+  auto h = vhsm::scrypto::sha256(spki.data(), spki.size());
+  Fingerprint fp{};
+  std::copy(h.begin(), h.end(), fp.begin());
+  return fp;
 }
 
-// Serialize an EC `ECKeyPair` to DER/SPKI via a memory BIO and delegate
-// to `from_SPKI` for the SHA-256 calculation.
-// CORRIGÉ : vhsm::crypto:: ajouté devant ECKeyPair
 KeyFingerprint::Fingerprint
 KeyFingerprint::from_public_key(const vhsm::crypto::ECCKeyPair &key) {
-  KeyFingerprint::Fingerprint fingerprint{};
-  BIO *bio = BIO_new(BIO_s_mem());
-
-  if (bio && i2d_PUBKEY_bio(bio, key.key) == 1) {
-    BUF_MEM *mem_ptr;
-    BIO_get_mem_ptr(bio, &mem_ptr);
-
-    std::vector<uint8_t> spki(reinterpret_cast<uint8_t *>(mem_ptr->data),
-                              reinterpret_cast<uint8_t *>(mem_ptr->data) +
-                                  mem_ptr->length);
-
-    BIO_free(bio);
-    return from_SPKI(spki);
-  }
-
-  if (bio) {
-    BIO_free(bio);
-  }
-
-  return fingerprint;
+  VHSM_CHECK_MSG(key.key != nullptr, "KeyFingerprint: null EC key handle");
+  // Content-derived: SHA-256 over the exported SubjectPublicKeyInfo DER.
+  // Pointer-identity hashing was wrong — the same key reloaded from a vault
+  // (or moved) would change address and thus fingerprint, breaking audit
+  // cross-references; distinct keys at recycled addresses could collide.
+  auto spki = vhsm::scrypto::ec_export_public_spki({key.key, to_scrypto(key.curve)});
+  return from_SPKI(spki);
 }
 
-// Serialize an RSA `RSAKeyPair` to DER/SPKI via a memory BIO and delegate
-// to `from_SPKI` for the SHA-256 calculation.
 KeyFingerprint::Fingerprint
 KeyFingerprint::from_public_key(const vhsm::crypto::RSAKeyPair &key) {
-  KeyFingerprint::Fingerprint fingerprint{};
-  BIO *bio = BIO_new(BIO_s_mem());
-
-  if (bio && i2d_PUBKEY_bio(bio, key.key) == 1) {
-    BUF_MEM *mem_ptr;
-    BIO_get_mem_ptr(bio, &mem_ptr);
-
-    std::vector<uint8_t> spki(reinterpret_cast<uint8_t *>(mem_ptr->data),
-                              reinterpret_cast<uint8_t *>(mem_ptr->data) +
-                                  mem_ptr->length);
-
-    BIO_free(bio);
-    return from_SPKI(spki);
-  }
-
-  if (bio) {
-    BIO_free(bio);
-  }
-
-  return fingerprint;
+  VHSM_CHECK_MSG(key.key != nullptr, "KeyFingerprint: null RSA key handle");
+  auto spki = vhsm::scrypto::rsa_export_public_spki({key.key, key.bits});
+  return from_SPKI(spki);
 }
+
 } // namespace vhsm::keystore

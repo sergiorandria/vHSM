@@ -12,15 +12,15 @@ TEST(ECC, GenerateSignVerifyDerive) {
 
   std::vector<uint8_t> msg = {'d', 'a', 't', 'a'};
 
-  std::vector<uint8_t> sig = ECC::sign(a.key, msg);
+  std::vector<uint8_t> sig = ECC::sign(a, msg);
   ASSERT_FALSE(sig.empty());
 
-  bool ok = ECC::verify(a.key, msg, sig);
+  bool ok = ECC::verify(a, msg, sig);
   EXPECT_TRUE(ok);
 
-  std::vector<uint8_t> secret = ECC::derive_shared_secret(a.key, b.key);
+  std::vector<uint8_t> secret = ECC::derive_shared_secret(a, b);
   ASSERT_FALSE(secret.empty());
 
-  EVP_PKEY_free(a.key);
-  EVP_PKEY_free(b.key);
+  ecc_free_key(a);
+  ecc_free_key(b);
 }
