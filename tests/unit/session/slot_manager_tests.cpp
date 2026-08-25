@@ -1,20 +1,10 @@
 /**
  * slot_manager_tests.cpp
  *
- * Unit tests for vhsm::session::SlotManager
- *
- * Build (example):
- *   g++ -std=c++17 -Wall -Wextra \
- *       slot_manager_tests.cpp \
- *       ../../../src/session/slot_manager.cpp \
- *       ../../../src/keystore/slot.cpp \
- *       ../../../src/keystore/token.cpp \
- *       -lgtest -lgtest_main -lpthread \
- *       -o slot_manager_tests
- *   ./slot_manager_tests
+ * Unit tests for vhsm::session::SlotManager (injectable, not singleton).
  */
 
-#include <algorithm> // Pour std::find
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <memory>
 #include <thread>
@@ -28,93 +18,84 @@ using namespace vhsm;
 using namespace vhsm::session;
 
 // ============================================================
-// Fixture
+// Fixture — each test gets its own isolated SlotManager
 // ============================================================
 class SlotManagerTest : public ::testing::Test {
 protected:
-  void SetUp() override { SlotManager::get_instance().reset(); }
+  void SetUp() override { manager_ = std::make_unique<SlotManager>(); }
+  void TearDown() override { manager_.reset(); }
 
-  void TearDown() override { SlotManager::get_instance().reset(); }
+  std::unique_ptr<SlotManager> manager_;
 };
 
 // ============================================================
-// TESTS UNITAIRES POUR LE SINGLETON SLOTMANAGER
+// Registration and lookup
 // ============================================================
 
 TEST_F(SlotManagerTest, RegisterAndRetrieveSlot) {
-  auto &manager = SlotManager::get_instance();
+  EXPECT_TRUE(manager_->register_slot(0));
+  EXPECT_TRUE(manager_->register_slot(1));
+  EXPECT_FALSE(manager_->register_slot(0)); // Already exists
 
-  EXPECT_TRUE(manager.register_slot(0));
-  EXPECT_TRUE(manager.register_slot(1));
-
-  EXPECT_FALSE(manager.register_slot(0)); // Already exists
-
-  auto slot = manager.get_slot(0);
+  auto slot = manager_->get_slot(0);
   ASSERT_NE(slot, nullptr);
   EXPECT_EQ(slot->get_id(), 0u);
 
-  slot = manager.get_slot(1);
+  slot = manager_->get_slot(1);
   ASSERT_NE(slot, nullptr);
   EXPECT_EQ(slot->get_id(), 1u);
 
-  EXPECT_EQ(manager.get_slot(999), nullptr); // Non-existent slot
+  EXPECT_EQ(manager_->get_slot(999), nullptr); // Non-existent slot
 }
 
 TEST_F(SlotManagerTest, GetSlotIdList) {
-  auto &manager = SlotManager::get_instance();
+  manager_->register_slot(10);
+  manager_->register_slot(20);
+  manager_->register_slot(30);
 
-  manager.register_slot(10);
-  manager.register_slot(20);
-  manager.register_slot(30);
-
-  std::vector<uint64_t> ids = manager.get_slot_id_list();
+  std::vector<uint64_t> ids = manager_->get_slot_id_list();
   EXPECT_EQ(ids.size(), 3u);
 
   EXPECT_TRUE(std::find(ids.begin(), ids.end(), 10) != ids.end());
   EXPECT_TRUE(std::find(ids.begin(), ids.end(), 20) != ids.end());
   EXPECT_TRUE(std::find(ids.begin(), ids.end(), 30) != ids.end());
-
-  // Test order doesn't matter, but we got what we inserted
-  // Note: unordered_map doesn't guarantee order
 }
 
-TEST_F(SlotManagerTest, SlotManagerIsSingleton) {
-  auto &manager1 = SlotManager::get_instance();
-  auto &manager2 = SlotManager::get_instance();
+TEST_F(SlotManagerTest, InstancesAreIndependent) {
+  // Two SlotManager instances must not share state — this is the whole
+  // point of removing the singleton.
+  manager_->register_slot(42);
 
-  EXPECT_EQ(&manager1, &manager2); // Same instance
+  SlotManager other;
+  EXPECT_EQ(other.get_slot(42), nullptr)
+      << "slot leaked between independent instances";
+  EXPECT_TRUE(other.register_slot(42))
+      << "independent instance should allow same slot id";
 
-  manager1.register_slot(42);
-
-  auto slot = manager2.get_slot(42);
-  ASSERT_NE(slot, nullptr);
-  EXPECT_EQ(slot->get_id(), 42u);
+  // Original still has its slot
+  EXPECT_NE(manager_->get_slot(42), nullptr);
 }
 
 TEST_F(SlotManagerTest, ResetClearsAllSlots) {
-  auto &manager = SlotManager::get_instance();
+  manager_->register_slot(1);
+  manager_->register_slot(2);
 
-  manager.register_slot(1);
-  manager.register_slot(2);
+  EXPECT_NE(manager_->get_slot(1), nullptr);
+  EXPECT_NE(manager_->get_slot(2), nullptr);
 
-  EXPECT_NE(manager.get_slot(1), nullptr);
-  EXPECT_NE(manager.get_slot(2), nullptr);
+  manager_->reset();
 
-  manager.reset();
-
-  EXPECT_EQ(manager.get_slot(1), nullptr);
-  EXPECT_EQ(manager.get_slot(2), nullptr);
+  EXPECT_EQ(manager_->get_slot(1), nullptr);
+  EXPECT_EQ(manager_->get_slot(2), nullptr);
 
   // After reset, we should be able to register again
-  EXPECT_TRUE(manager.register_slot(1)); // Should succeed now
+  EXPECT_TRUE(manager_->register_slot(1));
 }
 
 // Test slot functionality through manager
 TEST_F(SlotManagerTest, SlotTokenOperationsViaManager) {
-  auto &manager = SlotManager::get_instance();
-
-  manager.register_slot(5);
-  auto slot = manager.get_slot(5);
+  manager_->register_slot(5);
+  auto slot = manager_->get_slot(5);
   ASSERT_NE(slot, nullptr);
 
   EXPECT_EQ(slot->get_id(), 5u);
@@ -132,13 +113,12 @@ TEST_F(SlotManagerTest, SlotTokenOperationsViaManager) {
 }
 
 // ============================================================
-// TEST DE CONCURRENCE (THREAD-SAFETY)
+// Concurrency (thread-safety)
 // ============================================================
 
 TEST_F(SlotManagerTest, ConcurrentSlotAccessAndInsertion) {
-  auto &manager = SlotManager::get_instance();
-  manager.register_slot(0);
-  auto slot = manager.get_slot(0);
+  manager_->register_slot(0);
+  auto slot = manager_->get_slot(0);
 
   const int num_threads = 20;
   std::vector<std::thread> threads;
@@ -170,15 +150,14 @@ TEST_F(SlotManagerTest, ConcurrentSlotAccessAndInsertion) {
 }
 
 TEST_F(SlotManagerTest, ConcurrentSlotRegistration) {
-  auto &manager = SlotManager::get_instance();
   const int num_threads = 10;
   std::vector<std::thread> threads;
   std::vector<bool> results(num_threads, false);
 
   for (int i = 0; i < num_threads; ++i) {
     int slot_id = i * 100; // Different slot IDs to avoid conflicts
-    threads.emplace_back([&manager, slot_id, &results, i]() {
-      results[i] = manager.register_slot(slot_id);
+    threads.emplace_back([&mgr = *manager_, slot_id, &results, i]() {
+      results[i] = mgr.register_slot(slot_id);
     });
   }
 
@@ -196,7 +175,7 @@ TEST_F(SlotManagerTest, ConcurrentSlotRegistration) {
   // Verify all slots were registered
   for (int i = 0; i < num_threads; ++i) {
     int slot_id = i * 100;
-    auto slot = manager.get_slot(slot_id);
+    auto slot = manager_->get_slot(slot_id);
     ASSERT_NE(slot, nullptr)
         << "Slot " << slot_id << " not found after registration";
     EXPECT_EQ(slot->get_id(), static_cast<uint64_t>(slot_id));

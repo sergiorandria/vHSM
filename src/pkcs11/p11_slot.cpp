@@ -86,11 +86,11 @@ CK_RV C_GetSlotList(CK_BBOOL tokenPresent, CK_SLOT_ID_PTR pSlotList,
                     CK_ULONG_PTR pulCount) {
   if (!pulCount)
     return CKR_ARGUMENTS_BAD;
-  auto ids = vhsm::session::SlotManager::get_instance().get_slot_id_list();
+  auto ids = vhsm::session::detail::global_slot_manager().get_slot_id_list();
   if (tokenPresent) {
     std::vector<u64> filt;
     for (auto id : ids) {
-      auto sp = vhsm::session::SlotManager::get_instance().get_slot(id);
+      auto sp = vhsm::session::detail::global_slot_manager().get_slot(id);
       if (sp && sp->is_token_present())
         filt.push_back(id);
     }

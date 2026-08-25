@@ -33,7 +33,7 @@ namespace {
 // PKCS#11 module).  Returns nullptr (with a status string set) on failure.
 std::shared_ptr<keystore::Token> resolve_token(uint32_t slot_id,
                                                std::string &err) {
-  auto slot = vhsm::session::SlotManager::get_instance().get_slot(slot_id);
+  auto slot = vhsm::session::detail::global_slot_manager().get_slot(slot_id);
   if (!slot) {
     err = "slot not found: " + std::to_string(slot_id);
     return nullptr;
@@ -120,7 +120,7 @@ bool fill_subscriber(const std::vector<std::optional<std::string>> &row,
   // Resolve the slot's token via the global SlotManager (the same registry
   // the PKCS#11 module uses).
   auto slot =
-      vhsm::session::SlotManager::get_instance().get_slot(request->slot_id());
+      vhsm::session::detail::global_slot_manager().get_slot(request->slot_id());
   if (!slot) {
     return ::grpc::Status(::grpc::StatusCode::NOT_FOUND,
                           "slot not found: " +

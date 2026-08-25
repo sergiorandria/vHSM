@@ -156,8 +156,7 @@ std::string resolve_fabric_config_dir() {
   return "/etc/vhsmd";
 }
 
-static void ensure_default_token_for_container() {
-  auto &sm = vhsm::session::SlotManager::get_instance();
+static void ensure_default_token_for_container(vhsm::session::SlotManager &sm) {
   if (!sm.get_slot(0)) {
     auto slot = std::make_shared<vhsm::keystore::Slot>(0);
     auto tok = std::make_shared<vhsm::keystore::Token>("vHSM Software Token",
@@ -197,9 +196,14 @@ static std::unique_ptr<vhsm::persistence::Vault> open_or_create_vault() {
 }
 
 std::unique_ptr<AppContainer> create_app_container() {
-  ensure_default_token_for_container();
-
   auto c = std::make_unique<AppContainer>();
+
+  // Slot manager: owned by the container (not a singleton). Set as the
+  // process-wide global for legacy PKCS#11 call sites during DI migration.
+  c->slot_manager = std::make_unique<vhsm::session::SlotManager>();
+  vhsm::session::detail::set_global_slot_manager(c->slot_manager.get());
+  ensure_default_token_for_container(*c->slot_manager);
+
   c->backend = resolve_backend();
   check_backend_exclusivity(c->backend);
 
@@ -408,6 +412,8 @@ void destroy_app_container(std::unique_ptr<AppContainer> &container) noexcept {
   container->bounded_bus.reset();
   container->bus = nullptr;
   container->db.reset();
+  vhsm::session::detail::set_global_slot_manager(nullptr);
+  container->slot_manager.reset();
   container.reset();
 }
 

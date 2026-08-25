@@ -23,12 +23,12 @@ protected:
     ::unsetenv("VHSM_LEDGER_ENDPOINT");
     // Clear any previous global instance id
     set_hsm_instance_id("");
-    vhsm::session::SlotManager::get_instance().reset();
+    vhsm::session::detail::global_slot_manager().reset();
   }
   void TearDown() override {
     ::unsetenv("VHSM_DB_PATH");
     set_hsm_instance_id("");
-    vhsm::session::SlotManager::get_instance().reset();
+    vhsm::session::detail::global_slot_manager().reset();
   }
 };
 
