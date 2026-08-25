@@ -120,3 +120,14 @@ private:
 };
 
 #endif // VHSM_CORE_ERROR_H
+// ─── Caller-argument check ────────────────────────────────────────────────
+// Throws std::invalid_argument so the PKCS#11 exception shield
+// (VHSM_C_CATCH) maps it to CKR_ARGUMENTS_BAD — not CKR_GENERAL_ERROR.
+// Use for caller-supplied preconditions (null pointers, wrong sizes).
+// For operational failures (I/O, auth, state) use VHSM_CHECK_MSG instead.
+#define VHSM_CHECK_ARG(cond, msg)                                              \
+  do {                                                                         \
+    if (!(cond))                                                               \
+      throw std::invalid_argument(std::string(msg) + std::string(" at ") +     \
+                                  __FILE__ + ":" + std::to_string(__LINE__));  \
+  } while (0)

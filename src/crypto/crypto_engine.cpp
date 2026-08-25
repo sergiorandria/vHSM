@@ -80,7 +80,7 @@ SignResult CryptoEngine::sign(const RSAKeyPair &key,
                               const std::vector<u8> &data,
                               const std::string &requested_mechanism,
                               MechanismPolicy policy) {
-  VHSM_CHECK_MSG(key.key != nullptr, "CryptoEngine::sign: key is null");
+  VHSM_CHECK_ARG(key.key != nullptr, "CryptoEngine::sign: key is null");
   check_family(requested_mechanism, /*rsa_key=*/true, policy);
   return make_result(RSAUtil::sign(key, data), data, "CKM_SHA256_RSA_PKCS");
 }
@@ -89,7 +89,7 @@ SignResult CryptoEngine::sign(const ECCKeyPair &key,
                               const std::vector<u8> &data,
                               const std::string &requested_mechanism,
                               MechanismPolicy policy) {
-  VHSM_CHECK_MSG(key.key != nullptr, "CryptoEngine::sign: key is null");
+  VHSM_CHECK_ARG(key.key != nullptr, "CryptoEngine::sign: key is null");
   check_family(requested_mechanism, /*rsa_key=*/false, policy);
   return make_result(ECC::sign(key, data), data, "CKM_ECDSA_SHA256");
 }

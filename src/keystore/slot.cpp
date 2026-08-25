@@ -50,7 +50,7 @@ void Slot::define_firmware_version(const struct version &firmware_version) {
   if (major_version <= firmware_version_.major_version &&
       ((major_version != firmware_version_.major_version) ||
        minor_version <= firmware_version_.minor_version)) {
-    throw VersionException("Incoherent version affectation");
+    throw std::runtime_error("Slot: incoherent firmware version downgrade refused");
   }
 
   firmware_version_ = firmware_version;
