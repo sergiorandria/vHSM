@@ -2,6 +2,7 @@
 #include "../core/hsm_instance.h"
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <iostream>
 #include <memory>
 #include <thread>
@@ -209,9 +210,15 @@ void LedgerWorker::submit_record(const SignatureRecord &record) {
       // Queue at capacity: the record cannot be anchored now.
       publish_failed(record);
     }
-  } catch (const std::exception &) {
-    // Pool is shutting down between our running_ check and the enqueue;
-    // the record is dropped (best-effort anchoring during teardown).
+  } catch (const std::exception &e) {
+    // Pool shutting down between running_ check and enqueue — record cannot
+    // be anchored now. Signal the failure so operators know; LedgerRetryQueue
+    // will replay PENDING rows on next C_Initialize.
+    std::fprintf(stderr,
+                 "VHSM: ledger submit_record dropped record %s during "
+                 "teardown: %s\n",
+                 record.record_id.c_str(), e.what());
+    publish_failed(record);
   }
 }
 
