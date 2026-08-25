@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
 #include "../domain/keystore/token_snapshot.h"
 #include "../keystore/token.h"
 

@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
 
 // WHY a migration framework: PLAN.md Phase 7 requires that vault-format or
 // payload-layout changes can be applied forward without user intervention.  A

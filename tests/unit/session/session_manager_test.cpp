@@ -115,7 +115,7 @@ TEST_F(SessionManagerTest, CloseSessionInvalidHandleReturnsHandleInvalid) {
 
 TEST_F(SessionManagerTest, CloseSessionMakesHandleInvalid) {
   CK_SESSION_HANDLE h = openRW();
-  mgr.closeSession(h);
+  (void)mgr.closeSession(h);
   // After close, the handle must no longer be findable.
   EXPECT_EQ(mgr.closeSession(h), CKR_SESSION_HANDLE_INVALID);
 }
@@ -146,7 +146,7 @@ TEST_F(SessionManagerTest, CloseAllSessionsOnlyAffectsTargetSlot) {
   CK_SESSION_HANDLE h0 = openRW(kSlot0);
   CK_SESSION_HANDLE h1 = openRW(kSlot1);
 
-  mgr.closeAllSessions(kSlot0);
+  (void)mgr.closeAllSessions(kSlot0);
 
   // Slot0 session gone.
   EXPECT_EQ(mgr.closeSession(h0), CKR_SESSION_HANDLE_INVALID);
@@ -185,13 +185,13 @@ TEST_F(SessionManagerTest, GetSessionInfoPopulatesSlotAndFlags) {
 TEST_F(SessionManagerTest, GetSessionInfoInitialStateIsRWPublic) {
   CK_SESSION_HANDLE h = openRW();
   CK_SESSION_INFO info{};
-  mgr.getSessionInfo(h, &info);
+  (void)mgr.getSessionInfo(h, &info);
   EXPECT_EQ(info.state, CKS_RW_PUBLIC_SESSION);
 }
 
 TEST_F(SessionManagerTest, GetSessionInfoAfterCloseReturnsHandleInvalid) {
   CK_SESSION_HANDLE h = openRW();
-  mgr.closeSession(h);
+  (void)mgr.closeSession(h);
   CK_SESSION_INFO info{};
   EXPECT_EQ(mgr.getSessionInfo(h, &info), CKR_SESSION_HANDLE_INVALID);
 }
@@ -212,7 +212,7 @@ TEST_F(SessionManagerTest, GetSessionReturnsNullForInvalidHandle) {
 
 TEST_F(SessionManagerTest, GetSessionReturnsNullAfterClose) {
   CK_SESSION_HANDLE h = openRW();
-  mgr.closeSession(h);
+  (void)mgr.closeSession(h);
   EXPECT_EQ(mgr.getSession(h), nullptr);
 }
 
@@ -238,7 +238,7 @@ TEST_F(SessionManagerTest, HaveSessionTrueAfterOpen) {
 
 TEST_F(SessionManagerTest, HaveSessionFalseAfterCloseAll) {
   openRW(kSlot0);
-  mgr.closeAllSessions(kSlot0);
+  (void)mgr.closeAllSessions(kSlot0);
   EXPECT_FALSE(mgr.haveSession(kSlot0));
 }
 
@@ -275,7 +275,7 @@ TEST_F(SessionManagerTest, HaveROSessionTrueWhenMixedSessionsExist) {
 TEST_F(SessionManagerTest, HaveROSessionFalseAfterClosingROSession) {
   CK_SESSION_HANDLE hRO = openRO(kSlot0);
   openRW(kSlot0); // keep an RW session alive
-  mgr.closeSession(hRO);
+  (void)mgr.closeSession(hRO);
   EXPECT_FALSE(mgr.haveROSession(kSlot0));
 }
 
@@ -295,7 +295,7 @@ TEST_F(SessionManagerTest, ConcurrentOpenCloseDoesNotCrash) {
     for (int i = 0; i < kIter; ++i) {
       CK_SESSION_HANDLE h = 0;
       if (mgr.openSession(kSlot0, kFlagsRW, nullptr, nullptr, &h) == CKR_OK) {
-        mgr.closeSession(h);
+        (void)mgr.closeSession(h);
       }
     }
   };
@@ -323,8 +323,8 @@ TEST_F(SessionManagerTest, ConcurrentHaveSessionDoesNotDeadlock) {
   auto writer = [&]() {
     for (int i = 0; i < 50; ++i) {
       CK_SESSION_HANDLE h = 0;
-      mgr.openSession(kSlot0, kFlagsRW, nullptr, nullptr, &h);
-      mgr.closeSession(h);
+      (void)mgr.openSession(kSlot0, kFlagsRW, nullptr, nullptr, &h);
+      (void)mgr.closeSession(h);
     }
   };
 

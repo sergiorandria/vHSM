@@ -105,6 +105,7 @@ int rsa_bits_from_template(const HsmObject *priv) {
 CK_RV C_GenerateKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
                     CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount,
                     CK_OBJECT_HANDLE_PTR phKey) {
+  VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   if (!pMechanism || !phKey)
@@ -142,6 +143,7 @@ CK_RV C_GenerateKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
   *phKey = handle;
   publish_rotation_event(*s, label_from_template(pTemplate, ulCount), {handle});
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
@@ -151,6 +153,7 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
                         CK_ULONG ulPrivateKeyAttributeCount,
                         CK_OBJECT_HANDLE_PTR phPublicKey,
                         CK_OBJECT_HANDLE_PTR phPrivateKey) {
+  VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   if (!pMechanism || !phPublicKey || !phPrivateKey)
@@ -240,6 +243,7 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
   }
   publish_rotation_event(*s, rotationLabel, {hPub, hPriv});
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 } // namespace vhsm::pkcs11

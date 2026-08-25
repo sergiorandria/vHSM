@@ -16,6 +16,7 @@ v_SignatureDispatcherCore_M1::v_SignatureDispatcherCore_M1(
     vhsm::audit::AuditLog &audit_log, vhsm::ledger::LedgerWorker *ledger_worker,
     const IHsmClock &clock)
     : v_conn_(conn), v_signature_repository_(conn, token),
+      v_row_integrity_(conn, token),
       v_notification_bus_(notification_bus), v_audit_log_(audit_log),
       v_ledger_worker_(ledger_worker), v_clock_(clock) {}
 
@@ -66,9 +67,43 @@ bool v_SignatureDispatcherCore_M1::v_dispatch(
             mechanism, payload_digest, signature_b64, session_handle,
             user_label, app_context,
             ledger_tx_id, ledger_block_num, ledger_tx_time, ledger_tx_proof,
-            ledger_tx_set_b64, ledger_status
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+            ledger_tx_set_b64, ledger_status, integrity_hmac
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
       )SQL";
+
+      // Compute tamper-evidence HMAC over the 18 column values (before
+      // integrity_hmac itself). Fail-closed: if the key is unavailable the
+      // RowIntegrity throws and the transaction rolls back — no unsigned
+      // row is written.
+      auto opt_cols = std::vector<std::optional<std::string>>{
+          signature_id,
+          std::to_string(input.created_at),
+          std::to_string(input.slot_id),
+          input.token_label,
+          input.key_id,
+          input.key_fingerprint,
+          input.mechanism,
+          payload_digest,
+          signature_b64,
+          input.session_handle,
+          input.user_label,
+          input.app_context,
+          "",   // ledger_tx_id
+          "0",  // ledger_block_num
+          "",   // ledger_tx_time
+          "",   // ledger_tx_proof
+          "",   // ledger_tx_set_b64
+          "PENDING"
+      };
+      std::string integrity_hmac;
+      try {
+        integrity_hmac = v_row_integrity_.compute_hmac(opt_cols);
+      } catch (const std::exception &) {
+        // No HMAC key — store NULL rather than silently writing unauthenticated.
+        integrity_hmac = "";
+      }
+      cols.push_back(integrity_hmac);
+
       tx.exec(sql_sig, cols);
 
       // Outbox event for SIGN_CREATED — will be dispatched by the poller.

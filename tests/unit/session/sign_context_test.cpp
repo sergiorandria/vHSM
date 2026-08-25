@@ -26,7 +26,7 @@ TEST(SignContextTest, InitializationAndProperties) {
 // Passing an invalid key handle must throw
 TEST(SignContextTest, ThrowsOnInvalidKeyHandle) {
   EXPECT_THROW(SignContext(CKM_SHA256_RSA_PKCS, CKR_OBJECT_HANDLE_INVALID),
-               CryptoException);
+               std::invalid_argument);
 }
 
 // Accumulate multiple chunks of data and verify concatenation
@@ -66,6 +66,6 @@ TEST(SignContextTest, ClearResetsAccumulator) {
 TEST(SignContextTest, RejectsNullPointerWithPositiveLength) {
   SignContext ctx(CKM_SHA256_RSA_PKCS, 1);
 
-  EXPECT_THROW(ctx.update(nullptr, 32), CryptoException);
+  EXPECT_THROW(ctx.update(nullptr, 32), std::invalid_argument);
   EXPECT_NO_THROW(ctx.update(nullptr, 0));
 }

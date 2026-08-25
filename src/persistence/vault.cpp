@@ -52,42 +52,42 @@ std::uint32_t Vault::version() const noexcept { return version_; }
 // Internal: derive a KEK from the stored password and the header's salt.
 std::vector<u8> Vault::make_key(const std::vector<u8> &salt,
                                 std::uint32_t iterations) const {
-  return derive_vault_key(password_, salt, iterations, kVaultKeyLen);
+  return derive_vault_key(password_, salt, iterations, K_VAULT_KEY_LEN);
 }
 
 Vault::Vault(const std::filesystem::path &path, const std::string &password)
     : path_(path), password_(password) {
   const std::vector<std::uint8_t> raw = read_file_bytes(path_);
-  if (raw.size() < kVaultHeaderLen) {
+  if (raw.size() < K_VAULT_HEADER_LEN) {
     throw std::runtime_error("Vault: file too short to be a valid vault");
   }
-  if (!std::equal(kVaultMagic, kVaultMagic + 8, raw.begin())) {
+  if (!std::equal(K_VAULT_MAGIC, K_VAULT_MAGIC + 8, raw.begin())) {
     throw std::runtime_error("Vault: bad magic (not a vHSM vault)");
   }
   version_ = get_le32(raw.data() + 8);
-  if (version_ != kVaultFormatVersion) {
+  if (version_ != K_VAULT_FORMAT_VERSION) {
     throw std::runtime_error("Vault: unsupported format version: " +
                              std::to_string(version_));
   }
 
-  std::vector<u8> salt(kVaultSaltLen);
+  std::vector<u8> salt(K_VAULT_SALT_LEN);
   std::memcpy(salt.data(), raw.data() + 12, salt.size());
   const std::uint32_t iterations = get_le32(raw.data() + 28);
   if (iterations == 0) {
     throw std::runtime_error("Vault: invalid PBKDF2 iteration count");
   }
 
-  std::vector<u8> nonce(kVaultNonceLen);
+  std::vector<u8> nonce(K_VAULT_NONCE_LEN);
   std::memcpy(nonce.data(), raw.data() + 32, nonce.size());
-  std::vector<u8> tag(kVaultTagLen);
+  std::vector<u8> tag(K_VAULT_TAG_LEN);
   std::memcpy(tag.data(), raw.data() + 44, tag.size());
   const std::uint64_t ct_len = get_le64(raw.data() + 60);
-  if (raw.size() != kVaultHeaderLen + ct_len) {
+  if (raw.size() != K_VAULT_HEADER_LEN + ct_len) {
     throw std::runtime_error(
         "Vault: ciphertext length does not match file size");
   }
   std::vector<u8> ciphertext(
-      raw.begin() + static_cast<std::ptrdiff_t>(kVaultHeaderLen), raw.end());
+      raw.begin() + static_cast<std::ptrdiff_t>(K_VAULT_HEADER_LEN), raw.end());
 
   // Decrypt to authenticate; the GCM tag check throws on bad password or
   // corruption (fail-closed — never return wrong plaintext).
@@ -124,7 +124,7 @@ Vault Vault::create(const std::filesystem::path &path,
 // Internal ctor used by create(): never reads the file.
 Vault::Vault(const std::filesystem::path &path, const std::string &password,
              bool /*unused*/)
-    : path_(path), password_(password), version_(kVaultFormatVersion),
+    : path_(path), password_(password), version_(K_VAULT_FORMAT_VERSION),
       valid_(false) {}
 
 void Vault::save(const std::vector<u8> &payload) {
@@ -135,13 +135,13 @@ void Vault::save(const std::vector<u8> &payload) {
   // snapshots from ever reusing the same key for different snapshots, and
   // makes the vault resilient to a leaked single key (only one snapshot is
   // affected, not the whole history).
-  std::vector<u8> salt(kVaultSaltLen);
+  std::vector<u8> salt(K_VAULT_SALT_LEN);
   {
     vhsm::scrypto::SecureRng rng;
     rng.bytes(salt.data(), salt.size());
   }
 
-  const std::vector<u8> key = make_key(salt, kVaultPbkdf2Iterations);
+  const std::vector<u8> key = make_key(salt, K_VAULT_PBKDF2_ITERATIONS);
   const crypto::AESGCMResult enc = crypto::AESGCM::encrypt(key, payload);
 
   // Atomic write: write to a temp file in the SAME directory (so rename is
@@ -160,11 +160,11 @@ void Vault::save(const std::vector<u8> &payload) {
 
   // Build the vault image once — reused by both platform branches.
   std::vector<std::uint8_t> out;
-  out.reserve(kVaultHeaderLen + enc.ciphertext.size());
-  out.insert(out.end(), kVaultMagic, kVaultMagic + 8);
-  put_le32(out, kVaultFormatVersion);
+  out.reserve(K_VAULT_HEADER_LEN + enc.ciphertext.size());
+  out.insert(out.end(), K_VAULT_MAGIC, K_VAULT_MAGIC + 8);
+  put_le32(out, K_VAULT_FORMAT_VERSION);
   out.insert(out.end(), salt.begin(), salt.end());
-  put_le32(out, kVaultPbkdf2Iterations);
+  put_le32(out, K_VAULT_PBKDF2_ITERATIONS);
   out.insert(out.end(), enc.nonce.begin(), enc.nonce.end());
   out.insert(out.end(), enc.tag.begin(), enc.tag.end());
   put_le64(out, enc.ciphertext.size());
@@ -296,27 +296,27 @@ std::vector<u8> Vault::load() const {
     throw std::runtime_error("Vault::load: vault is not valid");
   }
   const std::vector<std::uint8_t> raw = read_file_bytes(path_);
-  if (raw.size() < kVaultHeaderLen ||
-      !std::equal(kVaultMagic, kVaultMagic + 8, raw.begin())) {
+  if (raw.size() < K_VAULT_HEADER_LEN ||
+      !std::equal(K_VAULT_MAGIC, K_VAULT_MAGIC + 8, raw.begin())) {
     throw std::runtime_error("Vault::load: file is not a valid vault");
   }
   const std::uint32_t v = get_le32(raw.data() + 8);
-  if (v != kVaultFormatVersion) {
+  if (v != K_VAULT_FORMAT_VERSION) {
     throw std::runtime_error("Vault::load: unsupported format version");
   }
-  std::vector<u8> salt(kVaultSaltLen);
+  std::vector<u8> salt(K_VAULT_SALT_LEN);
   std::memcpy(salt.data(), raw.data() + 12, salt.size());
   const std::uint32_t iterations = get_le32(raw.data() + 28);
-  std::vector<u8> nonce(kVaultNonceLen);
+  std::vector<u8> nonce(K_VAULT_NONCE_LEN);
   std::memcpy(nonce.data(), raw.data() + 32, nonce.size());
-  std::vector<u8> tag(kVaultTagLen);
+  std::vector<u8> tag(K_VAULT_TAG_LEN);
   std::memcpy(tag.data(), raw.data() + 44, tag.size());
   const std::uint64_t ct_len = get_le64(raw.data() + 60);
-  if (raw.size() != kVaultHeaderLen + ct_len) {
+  if (raw.size() != K_VAULT_HEADER_LEN + ct_len) {
     throw std::runtime_error("Vault::load: ciphertext length mismatch");
   }
   std::vector<u8> ciphertext(
-      raw.begin() + static_cast<std::ptrdiff_t>(kVaultHeaderLen), raw.end());
+      raw.begin() + static_cast<std::ptrdiff_t>(K_VAULT_HEADER_LEN), raw.end());
 
   const std::vector<u8> key = make_key(salt, iterations);
   crypto::AESGCMResult res{ciphertext, nonce, tag};

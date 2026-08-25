@@ -12,7 +12,8 @@
 #include "crypto_engine.h"
 
 #include "../core/error.h"
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/crypto/crypto_types.h"
 #include "vhsm/scrypto/hash.h"
 
 namespace vhsm::crypto {
@@ -23,12 +24,12 @@ namespace {
 // digest format persisted in SignatureRecord.payload_digest).
 std::string sha256_hex(const std::vector<u8> &data) {
   auto raw = vhsm::scrypto::sha256(data.data(), data.size());
-  static const char *kHex = "0123456789abcdef";
+  static constexpr char K_HEX[] = "0123456789abcdef";
   std::string hex;
   hex.reserve(raw.size() * 2);
   for (unsigned char b : raw) {
-    hex.push_back(kHex[b >> 4]);
-    hex.push_back(kHex[b & 0x0F]);
+    hex.push_back(K_HEX[b >> 4]);
+    hex.push_back(K_HEX[b & 0x0F]);
   }
   return hex;
 }
@@ -79,7 +80,7 @@ SignResult CryptoEngine::sign(const RSAKeyPair &key,
                               const std::vector<u8> &data,
                               const std::string &requested_mechanism,
                               MechanismPolicy policy) {
-  VHSM_CHECK_MSG(key.key != nullptr, "CryptoEngine::sign: key is null");
+  VHSM_CHECK_ARG(key.key != nullptr, "CryptoEngine::sign: key is null");
   check_family(requested_mechanism, /*rsa_key=*/true, policy);
   return make_result(RSAUtil::sign(key, data), data, "CKM_SHA256_RSA_PKCS");
 }
@@ -88,7 +89,7 @@ SignResult CryptoEngine::sign(const ECCKeyPair &key,
                               const std::vector<u8> &data,
                               const std::string &requested_mechanism,
                               MechanismPolicy policy) {
-  VHSM_CHECK_MSG(key.key != nullptr, "CryptoEngine::sign: key is null");
+  VHSM_CHECK_ARG(key.key != nullptr, "CryptoEngine::sign: key is null");
   check_family(requested_mechanism, /*rsa_key=*/false, policy);
   return make_result(ECC::sign(key, data), data, "CKM_ECDSA_SHA256");
 }

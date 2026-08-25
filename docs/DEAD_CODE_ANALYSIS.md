@@ -1,5 +1,20 @@
 # vHSM Dead Code Analysis Report
 
+> **STATUS: SUPERSEDED.** Several items in this report have been addressed or
+> overridden since it was written:
+>
+> - The `put_le32`/`get_le64` duplication is already fixed via
+>   `src/persistence/le_bytes.h` (shared header).
+> - **Do NOT remove the disabled chaincode functions** (`SubmitGrade`,
+>   `NotarizePv`, `GetAllThesesRaw`, `NotarizeThesis`). On Fabric, chaincode
+>   upgrades replace the whole definition — deleting a function causes old
+>   clients to get an opaque "unknown function" error instead of the clear,
+>   typed stub message (`"SubmitGrade is disabled: use SubmitJuryGrade"`).
+>   These stubs are the correct backward-compat pattern for an
+>   immutable-history ledger API.
+>
+> Treat this document as a historical snapshot, not a current backlog.
+
 **Date:** August 20, 2026  
 **Scope:** Full codebase analysis (C++ core, Go chaincode, REST API, chain adapters)  
 **Total Issues Found:** 15+ items across multiple categories

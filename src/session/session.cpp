@@ -2,7 +2,7 @@
 
 namespace vhsm::session {
 
-static constexpr CK_OBJECT_HANDLE kInvalidObjectHandle = 0;
+static constexpr CK_OBJECT_HANDLE K_INVALID_OBJECT_HANDLE = 0;
 
 Session::Session(CK_SESSION_HANDLE handle, CK_SLOT_ID slotID, CK_FLAGS flags,
                  CK_VOID_PTR pApplication, CK_NOTIFY notify)
@@ -97,7 +97,7 @@ CK_RV Session::logout() {
   }
   // Clear per-operation state
   activeMech_ = 0;
-  signKey_ = kInvalidObjectHandle;
+  signKey_ = K_INVALID_OBJECT_HANDLE;
   opBuf_.clear();
   opBuf_.shrink_to_fit();
   gcmIv_.clear();
@@ -149,7 +149,7 @@ CK_RV Session::finalizeOperation() {
 
   // Clear per-operation buffers
   activeMech_ = 0;
-  signKey_ = kInvalidObjectHandle;
+  signKey_ = K_INVALID_OBJECT_HANDLE;
   opBuf_.clear();
   opBuf_.shrink_to_fit();
   gcmIv_.clear();
@@ -183,7 +183,7 @@ CK_RV Session::opCheck() const {
 void Session::opEnd() {
   std::lock_guard<std::mutex> lock(mutex_);
   activeMech_ = 0;
-  signKey_ = kInvalidObjectHandle;
+  signKey_ = K_INVALID_OBJECT_HANDLE;
   opBuf_.clear();
   opBuf_.shrink_to_fit();
   gcmIv_.clear();

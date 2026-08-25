@@ -47,8 +47,8 @@ TEST(FindContextTest, ThrowsExceptionOnOverflow) {
   EXPECT_EQ(ctx.next(), 500);
   EXPECT_FALSE(ctx.has_next());
 
-  // Calling next() when has_next() is false must throw HsmException
-  EXPECT_THROW(ctx.next(), HsmException);
+  // Calling next() when has_next() is false must throw std::out_of_range
+  EXPECT_THROW(ctx.next(), std::out_of_range);
 }
 
 // Behavior when the initial list is empty
@@ -56,5 +56,5 @@ TEST(FindContextTest, EmptyListBehavior) {
   FindContext ctx(std::vector<CK_OBJECT_HANDLE>{});
 
   EXPECT_FALSE(ctx.has_next());
-  EXPECT_THROW(ctx.next(), HsmException);
+  EXPECT_THROW(ctx.next(), std::out_of_range);
 }

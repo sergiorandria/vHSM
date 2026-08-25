@@ -84,13 +84,14 @@ void fill_mech_info(CK_MECHANISM_TYPE t, CK_MECHANISM_INFO_PTR info) {
 
 CK_RV C_GetSlotList(CK_BBOOL tokenPresent, CK_SLOT_ID_PTR pSlotList,
                     CK_ULONG_PTR pulCount) {
+  VHSM_C_TRY
   if (!pulCount)
     return CKR_ARGUMENTS_BAD;
-  auto ids = vhsm::session::SlotManager::get_instance().get_slot_id_list();
+  auto ids = vhsm::session::detail::global_slot_manager().get_slot_id_list();
   if (tokenPresent) {
     std::vector<u64> filt;
     for (auto id : ids) {
-      auto sp = vhsm::session::SlotManager::get_instance().get_slot(id);
+      auto sp = vhsm::session::detail::global_slot_manager().get_slot(id);
       if (sp && sp->is_token_present())
         filt.push_back(id);
     }
@@ -108,9 +109,11 @@ CK_RV C_GetSlotList(CK_BBOOL tokenPresent, CK_SLOT_ID_PTR pSlotList,
     pSlotList[i] = static_cast<CK_SLOT_ID>(ids[i]);
   *pulCount = static_cast<CK_ULONG>(ids.size());
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_GetSlotInfo(CK_SLOT_ID slotID, CK_SLOT_INFO_PTR pInfo) {
+  VHSM_C_TRY
   if (!pInfo)
     return CKR_ARGUMENTS_BAD;
   keystore::Slot *slot = p11_get_slot(slotID);
@@ -127,9 +130,11 @@ CK_RV C_GetSlotInfo(CK_SLOT_ID slotID, CK_SLOT_INFO_PTR pInfo) {
   pInfo->firmwareVersion.major = 1;
   pInfo->firmwareVersion.minor = 0;
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO_PTR pInfo) {
+  VHSM_C_TRY
   if (!pInfo)
     return CKR_ARGUMENTS_BAD;
   keystore::Token *tok = p11_get_token(slotID);
@@ -166,11 +171,13 @@ CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO_PTR pInfo) {
   pInfo->firmwareVersion.major = 1;
   pInfo->firmwareVersion.minor = 0;
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_GetMechanismList(CK_SLOT_ID slotID,
                          CK_MECHANISM_TYPE_PTR pMechanismList,
                          CK_ULONG_PTR pulCount) {
+  VHSM_C_TRY
   (void)slotID;
   if (!pulCount)
     return CKR_ARGUMENTS_BAD;
@@ -187,10 +194,12 @@ CK_RV C_GetMechanismList(CK_SLOT_ID slotID,
     pMechanismList[i] = m[i];
   *pulCount = static_cast<CK_ULONG>(m.size());
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_GetMechanismInfo(CK_SLOT_ID slotID, CK_MECHANISM_TYPE type,
                          CK_MECHANISM_INFO_PTR pInfo) {
+  VHSM_C_TRY
   (void)slotID;
   if (!pInfo)
     return CKR_ARGUMENTS_BAD;
@@ -199,10 +208,12 @@ CK_RV C_GetMechanismInfo(CK_SLOT_ID slotID, CK_MECHANISM_TYPE type,
     return CKR_MECHANISM_INVALID;
   fill_mech_info(type, pInfo);
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_InitToken(CK_SLOT_ID slotID, CK_UTF8CHAR_PTR pPin, CK_ULONG ulPinLen,
                   CK_UTF8CHAR_PTR pLabel) {
+  VHSM_C_TRY
   keystore::Token *tok = p11_get_token(slotID);
   if (!tok)
     return CKR_SLOT_ID_INVALID;
@@ -214,10 +225,12 @@ CK_RV C_InitToken(CK_SLOT_ID slotID, CK_UTF8CHAR_PTR pPin, CK_ULONG ulPinLen,
   }
   (void)pLabel;
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_InitPIN(CK_SESSION_HANDLE hSession, CK_UTF8CHAR_PTR pPin,
                 CK_ULONG ulPinLen) {
+  VHSM_C_TRY
   keystore::Token *tok = p11_get_token_for_session(hSession);
   if (!tok)
     return CKR_SESSION_HANDLE_INVALID;
@@ -225,10 +238,12 @@ CK_RV C_InitPIN(CK_SESSION_HANDLE hSession, CK_UTF8CHAR_PTR pPin,
     return CKR_ARGUMENTS_BAD;
   return tok->initialize_user_pin(reinterpret_cast<const CK_CHAR *>(pPin),
                                   ulPinLen);
+VHSM_C_CATCH
 }
 
 CK_RV C_SetPIN(CK_SESSION_HANDLE hSession, CK_UTF8CHAR_PTR pOldPin,
                CK_ULONG ulOldLen, CK_UTF8CHAR_PTR pNewPin, CK_ULONG ulNewLen) {
+  VHSM_C_TRY
   keystore::Token *tok = p11_get_token_for_session(hSession);
   if (!tok)
     return CKR_SESSION_HANDLE_INVALID;
@@ -240,6 +255,7 @@ CK_RV C_SetPIN(CK_SESSION_HANDLE hSession, CK_UTF8CHAR_PTR pOldPin,
         reinterpret_cast<const CK_CHAR *>(pNewPin), ulNewLen);
   return tok->set_user_pin(
       nullptr, 0, reinterpret_cast<const CK_CHAR *>(pNewPin), ulNewLen);
+VHSM_C_CATCH
 }
 
 } // namespace vhsm::pkcs11

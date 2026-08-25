@@ -154,7 +154,7 @@ TEST(VaultSerializerIntegrationTest, WrongPasswordDoesNotClobber) {
   auto path = dir / "token.vault";
 
   keystore::Token source("src", "src-id");
-  source.initialize_user_pin(reinterpret_cast<const CK_CHAR *>("1234"), 4);
+  (void)source.initialize_user_pin(reinterpret_cast<const CK_CHAR *>("1234"), 4);
   auto vault =
       Vault::create(path, "right-password",
                     serialize_token_snapshot(snapshot_from_token(source)));

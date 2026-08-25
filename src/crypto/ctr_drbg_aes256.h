@@ -1,7 +1,8 @@
 #ifndef vHSM_RNG_H
 #define vHSM_RNG_H
 
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/crypto/crypto_types.h"
 
 #include <cstdint>
 #include <memory>

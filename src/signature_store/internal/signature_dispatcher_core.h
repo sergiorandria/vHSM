@@ -8,12 +8,14 @@
 
 #include "../../audit/audit_log.h"
 #include "../../core/hsm_clock.h"
-#include "../../core/types.h"
+#include "../../domain/core/kernel_types.h"
+#include "../../domain/crypto/crypto_types.h"
 #include "../../keystore/token.h"
 #include "../../ledger/ledger_worker.h"
 #include "../../notification/notification_bus.h"
 #include "../../notification/notification_event.h"
 #include "../db_connection.h"
+#include "../row_integrity.h"
 #include "../signature_repository.h"
 
 namespace vhsm::signature_store {
@@ -54,6 +56,7 @@ public:
 private:
   IDbConnection &v_conn_;
   SignatureRepository v_signature_repository_;
+  RowIntegrity v_row_integrity_;
   vhsm::notification::NotificationBus &v_notification_bus_;
   vhsm::audit::AuditLog &v_audit_log_;
   vhsm::ledger::LedgerWorker *v_ledger_worker_;

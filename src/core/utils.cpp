@@ -1,7 +1,7 @@
 // Should be reviewed
 
 #include "utils.h"
-#include "types.h"
+#include "../domain/core/kernel_types.h"
 
 #include <array>
 #include <cerrno>
@@ -83,7 +83,7 @@ vhsm::v1::Result<std::string> try_uuid_v4() noexcept {
 }
 
 // Base64
-static constexpr std::string_view kB64Chars =
+static constexpr std::string_view K_B64_CHARS =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 std::string base64_encode(std::span<const std::byte> data) {
@@ -98,11 +98,11 @@ std::string base64_encode(std::span<const std::byte> data) {
       const auto b1 = (i + 1 < data.size()) ? static_cast<u8>(data[i + 1]) : 0u;
       const auto b2 = (i + 2 < data.size()) ? static_cast<u8>(data[i + 2]) : 0u;
 
-      buf[dst++] = kB64Chars[b0 >> 2];
-      buf[dst++] = kB64Chars[(b0 & 0x03) << 4 | b1 >> 4];
+      buf[dst++] = K_B64_CHARS[b0 >> 2];
+      buf[dst++] = K_B64_CHARS[(b0 & 0x03) << 4 | b1 >> 4];
       buf[dst++] =
-          (i + 1 < data.size()) ? kB64Chars[(b1 & 0x0f) << 2 | b2 >> 6] : '=';
-      buf[dst++] = (i + 2 < data.size()) ? kB64Chars[b2 & 0x3f] : '=';
+          (i + 1 < data.size()) ? K_B64_CHARS[(b1 & 0x0f) << 2 | b2 >> 6] : '=';
+      buf[dst++] = (i + 2 < data.size()) ? K_B64_CHARS[b2 & 0x3f] : '=';
     }
     return dst;
   });
@@ -115,13 +115,13 @@ static constexpr auto make_b64_decode_table() {
   std::array<u8, 256> t{};
   t.fill(0xFF);
   for (u8 i = 0; i < 64; ++i) {
-    t[static_cast<u8>(kB64Chars[i])] = i;
+    t[static_cast<u8>(K_B64_CHARS[i])] = i;
   }
   t[static_cast<u8>('=')] = 0xFE;
   return t;
 }
 
-static constexpr auto kB64Decode = make_b64_decode_table();
+static constexpr auto K_B64_DECODE = make_b64_decode_table();
 
 std::optional<std::vector<std::byte>> base64_decode(std::string_view s) {
   if (s.size() % 4 != 0)
@@ -131,10 +131,10 @@ std::optional<std::vector<std::byte>> base64_decode(std::string_view s) {
   out.reserve((s.size() / 4) * 3);
 
   for (std::size_t i = 0; i < s.size(); i += 4) {
-    const u8 c0 = kB64Decode[static_cast<u8>(s[i])];
-    const u8 c1 = kB64Decode[static_cast<u8>(s[i + 1])];
-    const u8 c2 = kB64Decode[static_cast<u8>(s[i + 2])];
-    const u8 c3 = kB64Decode[static_cast<u8>(s[i + 3])];
+    const u8 c0 = K_B64_DECODE[static_cast<u8>(s[i])];
+    const u8 c1 = K_B64_DECODE[static_cast<u8>(s[i + 1])];
+    const u8 c2 = K_B64_DECODE[static_cast<u8>(s[i + 2])];
+    const u8 c3 = K_B64_DECODE[static_cast<u8>(s[i + 3])];
 
     if (c0 >= 0xFE || c1 >= 0xFE)
       return std::nullopt;
@@ -159,7 +159,7 @@ std::optional<std::vector<std::byte>> base64_decode(std::string_view s) {
 }
 
 // Hex
-static constexpr std::string_view kHexChars = "0123456789abcdef";
+static constexpr std::string_view K_HEX_CHARS = "0123456789abcdef";
 
 std::string hex_encode(std::span<const std::byte> data) {
   std::string out;
@@ -167,8 +167,8 @@ std::string hex_encode(std::span<const std::byte> data) {
     std::size_t dst = 0;
     for (const std::byte b_raw : data) {
       const auto b = static_cast<u8>(b_raw);
-      buf[dst++] = kHexChars[b >> 4];
-      buf[dst++] = kHexChars[b & 0x0f];
+      buf[dst++] = K_HEX_CHARS[b >> 4];
+      buf[dst++] = K_HEX_CHARS[b & 0x0f];
     }
     return dst;
   });
