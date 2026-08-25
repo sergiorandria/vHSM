@@ -118,8 +118,13 @@ endif()
 
 # Unity build: concatenates sources per target to cut full-build times.
 # OFF by default because merged TUs can collide on file-local symbols.
+# GCC additionally warns (-Werror=subobject-linkage) when gtest fixtures in
+# anonymous namespaces are merged — suppressed only in unity mode.
 option(VHSM_UNITY_BUILD "Unity build (faster clean builds, slower incremental)" OFF)
 set(CMAKE_UNITY_BUILD ${VHSM_UNITY_BUILD})
+if(VHSM_UNITY_BUILD AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-Wno-subobject-linkage)
+endif()
 
 # Optional linker override ("default" keeps the toolchain driver choice).
 # NOTE: lld is known-broken with GCC 16 LTO IR in some distros; keep "default"
@@ -212,6 +217,38 @@ endif()
 
 # --- Database backends ------------------------------------------------------
 find_package(SQLite3    QUIET)
+# Compatibility shim: system FindSQLite3 before CMake 4.3 provides only
+# SQLite::SQLite3, 4.3+ provides SQLite3::SQLite3 (+ deprecated alias).
+# Provide the missing alias so both spellings work on any runner
+# (Linux apt CMake 3.28 vs Windows vcpkg CMake 4.x) and handle vcpkg's
+# unofficial package name.
+if(TARGET SQLite::SQLite3 AND NOT TARGET SQLite3::SQLite3)
+  add_library(SQLite3::SQLite3 ALIAS SQLite::SQLite3)
+endif()
+if(TARGET SQLite3::SQLite3 AND NOT TARGET SQLite::SQLite3)
+  add_library(SQLite::SQLite3 ALIAS SQLite3::SQLite3)
+endif()
+if(NOT TARGET SQLite::SQLite3 AND NOT TARGET SQLite3::SQLite3)
+  if(TARGET unofficial::SQLite3::SQLite3)
+    add_library(SQLite::SQLite3 ALIAS unofficial::SQLite3::SQLite3)
+    add_library(SQLite3::SQLite3 ALIAS unofficial::SQLite3::SQLite3)
+  elseif(TARGET unofficial::sqlite3::sqlite3)
+    add_library(SQLite::SQLite3 ALIAS unofficial::sqlite3::sqlite3)
+    add_library(SQLite3::SQLite3 ALIAS unofficial::sqlite3::sqlite3)
+  elseif(SQLite3_FOUND)
+    # Fallback: variables only (some Find modules / vcpkg older ports)
+    add_library(SQLite::SQLite3 INTERFACE IMPORTED)
+    if(SQLite3_INCLUDE_DIRS)
+      set_target_properties(SQLite::SQLite3 PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${SQLite3_INCLUDE_DIRS}")
+    endif()
+    if(SQLite3_LIBRARIES)
+      set_target_properties(SQLite::SQLite3 PROPERTIES INTERFACE_LINK_LIBRARIES "${SQLite3_LIBRARIES}")
+    elseif(SQLITE3_LIBRARY)
+      set_target_properties(SQLite::SQLite3 PROPERTIES INTERFACE_LINK_LIBRARIES "${SQLITE3_LIBRARY}")
+    endif()
+    add_library(SQLite3::SQLite3 ALIAS SQLite::SQLite3)
+  endif()
+endif()
 find_package(PostgreSQL QUIET)
 # MySQL has no standard CMake module; try a config file, then pkg-config.
 find_package(MySQL      QUIET)
@@ -228,7 +265,7 @@ if(VHSM_DB_BACKEND STREQUAL "sqlite")
     if(NOT SQLite3_FOUND)
         message(FATAL_ERROR "SQLite3 not found but selected as DB backend")
     endif()
-    set(DB_LIBRARIES    SQLite3::SQLite3)         # modern imported target
+    set(DB_LIBRARIES    SQLite3::SQLite3)         # shim above ensures it exists on CMake <4.3
     set(DB_INCLUDE_DIRS ${SQLite3_INCLUDE_DIRS})
 
 elseif(VHSM_DB_BACKEND STREQUAL "postgres")
