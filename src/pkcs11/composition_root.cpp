@@ -29,6 +29,7 @@
 #include "../domain/signing/adapters/fabric_store_adapter.h"
 #endif
 
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
@@ -279,7 +280,8 @@ std::unique_ptr<AppContainer> create_app_container() {
       disp->add_adapter(grpc_push_adapter);
       disp->start();
       c->notif_dispatcher = std::move(disp);
-    } catch (...) {
+    } catch (const std::exception &e) {
+      std::fprintf(stderr, "VHSM: notification pipeline setup failed: %s\n", e.what());
     }
     // Outbox poller — replays PENDING event_outbox rows written
     // transactionally by the dispatcher. Started after the dispatcher so
@@ -289,7 +291,8 @@ std::unique_ptr<AppContainer> create_app_container() {
           std::make_unique<vhsm::signature_store::db::OutboxPoller>(*c->db,
                                                                     *c->bus);
       c->outbox_poller->start();
-    } catch (...) {
+    } catch (const std::exception &e) {
+      std::fprintf(stderr, "VHSM: outbox poller setup failed: %s\n", e.what());
     }
   }
 

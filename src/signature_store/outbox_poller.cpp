@@ -32,7 +32,8 @@ void OutboxPoller::loop() {
   while (running_.load(std::memory_order_acquire)) {
     try {
       poll_once();
-    } catch (...) {
+    } catch (const std::exception &e) {
+      std::fprintf(stderr, "VHSM: outbox poll error: %s\n", e.what());
     }
     std::this_thread::sleep_for(interval_);
   }
