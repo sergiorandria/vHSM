@@ -1,4 +1,5 @@
 // hsm_instance_test.cpp — Unit tests for HSM instance ID management
+#include "../../../src/signature_store/db_hsm_instance_provider.h"
 //
 // Tests verify:
 //   1. HsmInstanceId value object construction and equality
