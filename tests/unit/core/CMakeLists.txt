@@ -17,6 +17,7 @@ target_link_libraries(vhsm_core_test
     PRIVATE
         vhsm_core
         vhsm_threadpool
+        vhsm_log
         GTest::gtest
         GTest::gtest_main
 )
