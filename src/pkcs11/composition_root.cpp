@@ -268,7 +268,13 @@ std::unique_ptr<AppContainer> create_app_container() {
   }
 
   // Notification pipeline only makes sense with DB backend (needs tables).
-  if (c->backend == AppContainer::StoreBackend::Db && c->db) {
+  // Notification pipeline + outbox poller — enabled for BOTH backends.
+  // Previously gated to Db only, which meant ledger-mode deployments never
+  // dispatched SIGN_CREATED or DB_WRITE_FAILED events: the outbox table
+  // accumulated rows forever and no email/webhook/gRPC alert fired.
+  // After fix #1 (file-backed DB for ledger mode), both backends have a
+  // persistent event_outbox table that the poller can drain.
+  if (c->db) {
     try {
       c->notif_repo =
           std::make_unique<vhsm::signature_store::db::NotificationRepository>(
