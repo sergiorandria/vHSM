@@ -429,12 +429,12 @@ TEST_F(DbSchemaContentTest,
             std::string::npos); // no longer a valid ledger status
 }
 
-TEST_F(DbSchemaContentTest, SqlCreateSignatureRecords_NoIntegrityHmac) {
-  // The Fabric ledger anchoring design drops the local HMAC integrity scheme.
+TEST_F(DbSchemaContentTest, SqlCreateSignatureRecords_HasIntegrityHmac) {
+  // v7 re-adds integrity_hmac for DB-only tamper evidence (no ledger client).
   auto sql = schema_.sql_create_signature_records();
-  EXPECT_EQ(sql.find("integrity_hmac"), std::string::npos)
-      << "integrity_hmac should not exist in signature_records (dropped per "
-         "Fabric-ledger design)";
+  EXPECT_NE(sql.find("integrity_hmac"), std::string::npos)
+      << "integrity_hmac should exist in signature_records for tamper "
+         "evidence in DB-only mode";
 }
 
 TEST_F(DbSchemaContentTest, SqlCreateSignatureRecords_CoreColumnsPresent) {
