@@ -3,6 +3,7 @@
 #include "pkcs11_types.h"
 
 #include "../crypto/ecc.h"
+#include "../crypto/EvpPkeyGuard.h"
 #include "../keystore/key_wrap.h"
 #include "../notification/notification_event.h"
 
@@ -84,12 +85,12 @@ CK_RV create_from_raw(CK_SESSION_HANDLE hSession, const std::vector<u8> &raw,
   if (pk) {
     auto [h, ptr] = store.v_create_object<HsmObject>(ObjectType::PRIVATE_KEY,
                                                      true, true, false, true);
+    vhsm::crypto::EvpPkeyGuard pk_guard(pk);
     CK_RV rv = p11_apply_template(*ptr, pTemplate, ulCount);
     if (rv == CKR_OK)
-      p11_store_key(*ptr, pk, true,
+      p11_store_key(*ptr, static_cast<EVP_PKEY *>(pk_guard.get()), true,
                     EVP_PKEY_get_base_id(pk) == EVP_PKEY_RSA ? CKK_RSA
                                                              : CKK_EC);
-    EVP_PKEY_free(pk);
     if (rv != CKR_OK) {
       store.v_destroy_object(h);
       return rv;
@@ -155,7 +156,8 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
     }
   } else if (pMechanism->mechanism == CKM_RSA_PKCS ||
              pMechanism->mechanism == CKM_RSA_PKCS_OAEP) {
-    EVP_PKEY *wk = p11_evp_from_object(wkey.get());
+    vhsm::crypto::EvpPkeyGuard wk_guard(p11_evp_from_object(wkey.get()));
+    auto *wk = wk_guard.get();
     if (!wk)
       return CKR_WRAPPING_KEY_HANDLE_INVALID;
     int padding = (pMechanism->mechanism == CKM_RSA_PKCS_OAEP)
@@ -164,7 +166,6 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
     std::string md =
         (pMechanism->mechanism == CKM_RSA_PKCS_OAEP) ? "SHA-256" : "";
     rv = p11_rsa_encrypt(wk, raw, out, padding, nullptr, md);
-    EVP_PKEY_free(wk);
   } else {
     return CKR_MECHANISM_INVALID;
   }
@@ -243,7 +244,8 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
     }
   } else if (pMechanism->mechanism == CKM_RSA_PKCS ||
              pMechanism->mechanism == CKM_RSA_PKCS_OAEP) {
-    EVP_PKEY *uk = p11_evp_from_object(ukey.get());
+    vhsm::crypto::EvpPkeyGuard uk_guard(p11_evp_from_object(ukey.get()));
+    auto *uk = uk_guard.get();
     if (!uk)
       return CKR_UNWRAPPING_KEY_HANDLE_INVALID;
     int padding = (pMechanism->mechanism == CKM_RSA_PKCS_OAEP)
@@ -253,7 +255,6 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
         (pMechanism->mechanism == CKM_RSA_PKCS_OAEP) ? "SHA-256" : "";
     std::vector<u8> in(pWrappedKey, pWrappedKey + ulWrappedKeyLen);
     rv = p11_rsa_decrypt(uk, in, raw, padding, nullptr, md);
-    EVP_PKEY_free(uk);
   } else {
     return CKR_MECHANISM_INVALID;
   }
@@ -309,14 +310,10 @@ CK_RV C_DeriveKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
   auto bkey = p11_get_object(hSession, hBaseKey);
   if (!bkey)
     return CKR_KEY_HANDLE_INVALID;
-  EVP_PKEY *priv = p11_evp_from_object(bkey.get());
+  vhsm::crypto::EvpPkeyGuard priv_guard(p11_evp_from_object(bkey.get()));
+  auto *priv = priv_guard.get();
   if (!priv)
     return CKR_KEY_HANDLE_INVALID;
-  // RAII: early returns below (mechanism param checks) previously leaked priv
-  struct PrivGuard {
-    EVP_PKEY *p;
-    ~PrivGuard() { EVP_PKEY_free(p); }
-  } priv_guard{priv};
 
   if (!pMechanism->pParameter ||
       pMechanism->ulParameterLen < sizeof(CK_ECDH1_DERIVE_PARAMS)) {
@@ -326,15 +323,16 @@ CK_RV C_DeriveKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
   if (!params->pPublicData || params->ulPublicDataLen == 0) {
     return CKR_MECHANISM_PARAM_INVALID;
   }
-  const u8 *p = params->pPublicData;
-  EVP_PKEY *peer =
-      d2i_PUBKEY(nullptr, &p, static_cast<long>(params->ulPublicDataLen));
-  if (!peer) {
-    return CKR_MECHANISM_PARAM_INVALID;
-  }
 
-  std::vector<u8> secret = p11_ecdh_derive(priv, peer);
-  EVP_PKEY_free(peer);
+  const u8 *peer_data = params->pPublicData;
+  EVP_PKEY *raw_peer =
+      d2i_PUBKEY(nullptr, &peer_data,
+                 static_cast<long>(params->ulPublicDataLen));
+  if (!raw_peer)
+    return CKR_MECHANISM_PARAM_INVALID;
+  vhsm::crypto::EvpPkeyGuard peer_guard(raw_peer);
+
+  std::vector<u8> secret = p11_ecdh_derive(priv, peer_guard.get());
   if (secret.empty())
     return CKR_GENERAL_ERROR;
 
