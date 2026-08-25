@@ -198,6 +198,14 @@ static std::unique_ptr<vhsm::persistence::Vault> open_or_create_vault() {
 std::unique_ptr<AppContainer> create_app_container() {
   auto c = std::make_unique<AppContainer>();
 
+  // Logger: stderr sink always (Docker/container compat), syslog sink on
+  // Linux for journald/syslog integration. Both are thread-safe.
+  c->logger = std::make_shared<vhsm::log::Logger>();
+  c->logger->add_sink(std::make_shared<vhsm::log::StderrSink>());
+#ifdef __linux__
+  c->logger->add_sink(std::make_shared<vhsm::log::SyslogSink>("vhsmd"));
+#endif
+
   // Slot manager: owned by the container (not a singleton). Set as the
   // process-wide global for legacy PKCS#11 call sites during DI migration.
   c->slot_manager = std::make_unique<vhsm::session::SlotManager>();
@@ -294,7 +302,8 @@ std::unique_ptr<AppContainer> create_app_container() {
       disp->start();
       c->notif_dispatcher = std::move(disp);
     } catch (const std::exception &e) {
-      std::fprintf(stderr, "VHSM: notification pipeline setup failed: %s\n", e.what());
+      VHSM_LOG_WARNING(*c->logger, "pkcs11",
+                       "notification pipeline setup failed: " << e.what());
     }
     // Outbox poller — replays PENDING event_outbox rows written
     // transactionally by the dispatcher. Started after the dispatcher so
@@ -305,7 +314,8 @@ std::unique_ptr<AppContainer> create_app_container() {
                                                                     *c->bus);
       c->outbox_poller->start();
     } catch (const std::exception &e) {
-      std::fprintf(stderr, "VHSM: outbox poller setup failed: %s\n", e.what());
+      VHSM_LOG_WARNING(*c->logger, "pkcs11",
+                       "outbox poller setup failed: " << e.what());
     }
   }
 

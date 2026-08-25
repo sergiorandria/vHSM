@@ -6,6 +6,7 @@
 
 #include "../core/hsm_instance.h"
 #include "../domain/signing/isignature_store.h"
+#include "../log/logger.h"
 #include "../session/slot_manager.h"
 #include "../signature_store/db_connection.h"
 
@@ -104,6 +105,11 @@ struct AppContainer {
   // singleton) so tests can create isolated containers with independent
   // slot sets.
   std::unique_ptr<vhsm::session::SlotManager> slot_manager;
+
+  // Logger — central logging facility. Owned by the container; all modules
+  // log through this instance. Sinks are configurable per deployment
+  // (stderr for containers, syslog for systemd, etc.).
+  std::shared_ptr<vhsm::log::Logger> logger;
 
   AppContainer() = default;
   ~AppContainer();
