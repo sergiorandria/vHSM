@@ -276,9 +276,12 @@ std::unique_ptr<AppContainer> create_app_container() {
       auto disp =
           std::make_unique<vhsm::signature_store::db::NotificationDispatcher>(
               *c->bounded_bus, *c->notif_repo);
-      static vhsm::notification::EmailAdapter email_adapter;
-      static vhsm::notification::WebhookAdapter webhook_adapter;
-      static vhsm::notification::GrpcPushAdapter grpc_push_adapter;
+      // Per-container adapters (NOT static locals): static adapters are
+      // process-wide, so two AppContainer instances would share delivery
+      // state. Each container owns its own set.
+      vhsm::notification::EmailAdapter email_adapter;
+      vhsm::notification::WebhookAdapter webhook_adapter;
+      vhsm::notification::GrpcPushAdapter grpc_push_adapter;
       disp->add_adapter(email_adapter);
       disp->add_adapter(webhook_adapter);
       disp->add_adapter(grpc_push_adapter);
