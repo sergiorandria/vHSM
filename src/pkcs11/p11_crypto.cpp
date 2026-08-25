@@ -235,72 +235,75 @@ CK_RV do_decrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
 }
 
 // ----- Sign / Verify -----
+// Shared mechanism→(padding, hash) resolution for RSA sign/verify.
+static bool resolve_rsa_mech(CK_MECHANISM_TYPE mech,
+                              const std::vector<u8> &data, int &padding,
+                              std::string &mdName, std::string &mgf1,
+                              std::vector<u8> &tosign) {
+  padding = RSA_PKCS1_PADDING;
+  mdName.clear();
+  mgf1.clear();
+  tosign = data;
+  if (mech == CKM_RSA_PKCS) {
+  } else if (mech == CKM_RSA_X_509) {
+    padding = RSA_NO_PADDING;
+  } else if (mech == CKM_RSA_PKCS_PSS) {
+    padding = RSA_PKCS1_PSS_PADDING;
+    mdName = "SHA256";
+    mgf1 = "SHA256";
+    tosign = p11_hash(vhsm::crypto::HashAlgorithm::SHA256, data);
+  } else if (mech == CKM_RSA_PKCS_OAEP) {
+    return false;
+  } else {
+    auto ha = mech_to_hash(mech);
+    bool pss = (mech == CKM_SHA256_RSA_PKCS_PSS ||
+                mech == CKM_SHA384_RSA_PKCS_PSS ||
+                mech == CKM_SHA512_RSA_PKCS_PSS);
+    padding = pss ? RSA_PKCS1_PSS_PADDING : RSA_PKCS1_PADDING;
+    mdName = digest_name(ha);
+    mgf1 = pss ? mdName : std::string();
+    tosign = p11_hash(ha, data);
+  }
+  return true;
+}
+
+static std::vector<u8>
+resolve_ec_mech(CK_MECHANISM_TYPE mech, const std::vector<u8> &data) {
+  if (mech == CKM_ECDSA)
+    return data;
+  return p11_hash(mech_to_hash(mech), data);
+}
+
 CK_RV do_sign(CK_SESSION_HANDLE h, const std::vector<u8> &data,
               std::vector<u8> &sig) {
   auto *sess = op_session(h);
   if (!sess)
     return CKR_SESSION_HANDLE_INVALID;
-  // One Session read replaces the two separate g_stateMutex sections.
   const CK_MECHANISM_TYPE mech = sess->opMech();
   const CK_OBJECT_HANDLE k = sess->opKey();
   EVP_PKEY *pk = load_asym_key(h, k);
   if (!pk)
     return CKR_KEY_HANDLE_INVALID;
-  // PKCS#11: mechanism family must match key family — silent substitution
-  // (signing RSA-mech with an EC key) is CKR_KEY_TYPE_INCONSISTENT, not a
-  // best-effort native fallback.
   {
-    const int base = EVP_PKEY_get_base_id(pk);
+    int base = EVP_PKEY_get_base_id(pk);
     if ((is_rsa_mech(mech) && base != EVP_PKEY_RSA) ||
         (is_ec_mech(mech) && base != EVP_PKEY_EC)) {
       EVP_PKEY_free(pk);
       return CKR_KEY_TYPE_INCONSISTENT;
     }
   }
-
-  CK_RV rv = CKR_MECHANISM_INVALID;
+  CK_RV rv;
   if (is_rsa_mech(mech)) {
-    int padding = RSA_PKCS1_PADDING;
-    std::string mdName, mgf1;
-    std::vector<u8> tosign;
-    if (mech == CKM_RSA_PKCS) {
-      padding = RSA_PKCS1_PADDING;
-      mdName.clear();
-      tosign = data;
-    } else if (mech == CKM_RSA_X_509) {
-      padding = RSA_NO_PADDING;
-      mdName.clear();
-      tosign = data;
-    } else if (mech == CKM_RSA_PKCS_PSS) {
-      padding = RSA_PKCS1_PSS_PADDING;
-      mdName = "SHA256";
-      mgf1 = "SHA256";
-      tosign = p11_hash(vhsm::crypto::HashAlgorithm::SHA256, data);
-    } else if (mech == CKM_RSA_PKCS_OAEP) {
-      rv = CKR_MECHANISM_INVALID;
-    } else {
-      vhsm::crypto::HashAlgorithm ha = mech_to_hash(mech);
-      bool pss =
-          (mech == CKM_SHA256_RSA_PKCS_PSS || mech == CKM_SHA384_RSA_PKCS_PSS ||
-           mech == CKM_SHA512_RSA_PKCS_PSS);
-      padding = pss ? RSA_PKCS1_PSS_PADDING : RSA_PKCS1_PADDING;
-      mdName = digest_name(ha);
-      mgf1 = pss ? mdName : std::string();
-      tosign = p11_hash(ha, data);
-    }
-    if (rv == CKR_MECHANISM_INVALID) {
+    int padding; std::string mdName, mgf1; std::vector<u8> tosign;
+    if (!resolve_rsa_mech(mech, data, padding, mdName, mgf1, tosign)) {
       EVP_PKEY_free(pk);
-      return rv;
+      return CKR_MECHANISM_INVALID;
     }
     rv = p11_rsa_sign(pk, tosign, sig, padding, mdName, mgf1);
   } else if (is_ec_mech(mech)) {
-    std::vector<u8> tosign;
-    if (mech == CKM_ECDSA)
-      tosign = data;
-    else
-      tosign = p11_hash(mech_to_hash(mech), data);
-    rv = p11_ecdsa_sign(pk, tosign, sig);
-  }
+    rv = p11_ecdsa_sign(pk, resolve_ec_mech(mech, data), sig);
+  } else
+    rv = CKR_MECHANISM_INVALID;
   EVP_PKEY_free(pk);
   return rv;
 }
@@ -310,67 +313,31 @@ CK_RV do_verify(CK_SESSION_HANDLE h, const std::vector<u8> &data,
   auto *sess = op_session(h);
   if (!sess)
     return CKR_SESSION_HANDLE_INVALID;
-  // One Session read replaces the two separate g_stateMutex sections.
   const CK_MECHANISM_TYPE mech = sess->opMech();
   const CK_OBJECT_HANDLE k = sess->opKey();
   EVP_PKEY *pk = load_asym_key(h, k);
   if (!pk)
     return CKR_KEY_HANDLE_INVALID;
-  // PKCS#11: mechanism family must match key family — silent substitution
-  // (signing RSA-mech with an EC key) is CKR_KEY_TYPE_INCONSISTENT, not a
-  // best-effort native fallback.
   {
-    const int base = EVP_PKEY_get_base_id(pk);
+    int base = EVP_PKEY_get_base_id(pk);
     if ((is_rsa_mech(mech) && base != EVP_PKEY_RSA) ||
         (is_ec_mech(mech) && base != EVP_PKEY_EC)) {
       EVP_PKEY_free(pk);
       return CKR_KEY_TYPE_INCONSISTENT;
     }
   }
-
-  CK_RV rv = CKR_MECHANISM_INVALID;
+  CK_RV rv;
   if (is_rsa_mech(mech)) {
-    int padding = RSA_PKCS1_PADDING;
-    std::string mdName, mgf1;
-    std::vector<u8> tosign;
-    if (mech == CKM_RSA_PKCS) {
-      padding = RSA_PKCS1_PADDING;
-      mdName.clear();
-      tosign = data;
-    } else if (mech == CKM_RSA_X_509) {
-      padding = RSA_NO_PADDING;
-      mdName.clear();
-      tosign = data;
-    } else if (mech == CKM_RSA_PKCS_PSS) {
-      padding = RSA_PKCS1_PSS_PADDING;
-      mdName = "SHA256";
-      mgf1 = "SHA256";
-      tosign = p11_hash(vhsm::crypto::HashAlgorithm::SHA256, data);
-    } else if (mech == CKM_RSA_PKCS_OAEP) {
-      rv = CKR_MECHANISM_INVALID;
-    } else {
-      vhsm::crypto::HashAlgorithm ha = mech_to_hash(mech);
-      bool pss =
-          (mech == CKM_SHA256_RSA_PKCS_PSS || mech == CKM_SHA384_RSA_PKCS_PSS ||
-           mech == CKM_SHA512_RSA_PKCS_PSS);
-      padding = pss ? RSA_PKCS1_PSS_PADDING : RSA_PKCS1_PADDING;
-      mdName = digest_name(ha);
-      mgf1 = pss ? mdName : std::string();
-      tosign = p11_hash(ha, data);
-    }
-    if (rv == CKR_MECHANISM_INVALID) {
+    int padding; std::string mdName, mgf1; std::vector<u8> tosign;
+    if (!resolve_rsa_mech(mech, data, padding, mdName, mgf1, tosign)) {
       EVP_PKEY_free(pk);
-      return rv;
+      return CKR_MECHANISM_INVALID;
     }
     rv = p11_rsa_verify(pk, tosign, sig, padding, mdName, mgf1);
   } else if (is_ec_mech(mech)) {
-    std::vector<u8> tosign;
-    if (mech == CKM_ECDSA)
-      tosign = data;
-    else
-      tosign = p11_hash(mech_to_hash(mech), data);
-    rv = p11_ecdsa_verify(pk, tosign, sig);
-  }
+    rv = p11_ecdsa_verify(pk, resolve_ec_mech(mech, data), sig);
+  } else
+    rv = CKR_MECHANISM_INVALID;
   EVP_PKEY_free(pk);
   return rv;
 }
@@ -1026,50 +993,8 @@ CK_RV C_SignFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature,
         if (pk) {
           vhsm::crypto::SignResult sign_result;
           sign_result.signature = sig;
-          sign_result.mechanism_str = [&]() -> std::string {
-            switch (active_mech) {
-            case CKM_RSA_PKCS:
-              return "CKM_RSA_PKCS";
-            case CKM_RSA_X_509:
-              return "CKM_RSA_X_509";
-            case CKM_RSA_PKCS_PSS:
-              return "CKM_RSA_PKCS_PSS";
-            case CKM_SHA256_RSA_PKCS:
-              return "CKM_SHA256_RSA_PKCS";
-            case CKM_SHA384_RSA_PKCS:
-              return "CKM_SHA384_RSA_PKCS";
-            case CKM_SHA512_RSA_PKCS:
-              return "CKM_SHA512_RSA_PKCS";
-            case CKM_SHA256_RSA_PKCS_PSS:
-              return "CKM_SHA256_RSA_PKCS_PSS";
-            case CKM_SHA384_RSA_PKCS_PSS:
-              return "CKM_SHA384_RSA_PKCS_PSS";
-            case CKM_SHA512_RSA_PKCS_PSS:
-              return "CKM_SHA512_RSA_PKCS_PSS";
-            case CKM_ECDSA:
-              return "CKM_ECDSA";
-            case CKM_ECDSA_SHA256:
-              return "CKM_ECDSA_SHA256";
-            case CKM_ECDSA_SHA384:
-              return "CKM_ECDSA_SHA384";
-            case CKM_ECDSA_SHA512:
-              return "CKM_ECDSA_SHA512";
-            default:
-              return "CKM_VENDOR_DEFINED";
-            }
-          }();
-          sign_result.digest_alg = [&]() -> std::string {
-            vhsm::crypto::HashAlgorithm ha = mech_to_hash(active_mech);
-            switch (ha) {
-            case vhsm::crypto::HashAlgorithm::SHA256:
-              return "SHA-256";
-            case vhsm::crypto::HashAlgorithm::SHA384:
-              return "SHA-384";
-            case vhsm::crypto::HashAlgorithm::SHA512:
-              return "SHA-512";
-            }
-            return "SHA-256";
-          }();
+          sign_result.mechanism_str = mech_to_str(active_mech);
+          sign_result.digest_alg = digest_to_str(active_mech);
 
           // Compute payload digest (SHA-256 of data)
           auto payload_hash =

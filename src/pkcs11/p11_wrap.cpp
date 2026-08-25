@@ -307,6 +307,11 @@ CK_RV C_DeriveKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
   EVP_PKEY *priv = p11_evp_from_object(bkey.get());
   if (!priv)
     return CKR_KEY_HANDLE_INVALID;
+  // RAII: early returns below (mechanism param checks) previously leaked priv
+  struct PrivGuard {
+    EVP_PKEY *p;
+    ~PrivGuard() { EVP_PKEY_free(p); }
+  } priv_guard{priv};
 
   if (!pMechanism->pParameter ||
       pMechanism->ulParameterLen < sizeof(CK_ECDH1_DERIVE_PARAMS)) {
@@ -320,12 +325,10 @@ CK_RV C_DeriveKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
   EVP_PKEY *peer =
       d2i_PUBKEY(nullptr, &p, static_cast<long>(params->ulPublicDataLen));
   if (!peer) {
-    EVP_PKEY_free(priv);
     return CKR_MECHANISM_PARAM_INVALID;
   }
 
   std::vector<u8> secret = p11_ecdh_derive(priv, peer);
-  EVP_PKEY_free(priv);
   EVP_PKEY_free(peer);
   if (secret.empty())
     return CKR_GENERAL_ERROR;
