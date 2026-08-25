@@ -5,6 +5,7 @@
 #include "../core/hsm_instance.h"
 #include "../core/system_hsm_clock.h"
 #include "../crypto/crypto_engine.h"
+#include "../crypto/EvpPkeyGuard.h"
 #include "../signature_store/signature_dispatcher.h"
 
 #include <openssl/evp.h>
@@ -172,7 +173,8 @@ CK_RV do_encrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
     return rv;
   }
 
-  EVP_PKEY *pk = load_asym_key(h, k);
+  vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, k));
+  auto *pk = pk_guard.get();
   if (!pk)
     return CKR_KEY_HANDLE_INVALID;
   int padding = RSA_PKCS1_PADDING;
@@ -187,7 +189,6 @@ CK_RV do_encrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
       (mech == CKM_RSA_PKCS_OAEP && !oaep_label.empty()) ? &oaep_label
                                                          : nullptr;
   CK_RV rv = p11_rsa_encrypt(pk, in, out, padding, labelPtr, md);
-  EVP_PKEY_free(pk);
   return rv;
 }
 
@@ -215,7 +216,8 @@ CK_RV do_decrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
     return p11_aes_gcm_decrypt(key, gcm_iv, gcm_aad, ct, tag, out);
   }
 
-  EVP_PKEY *pk = load_asym_key(h, k);
+  vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, k));
+  auto *pk = pk_guard.get();
   if (!pk)
     return CKR_KEY_HANDLE_INVALID;
   int padding = RSA_PKCS1_PADDING;
@@ -230,7 +232,6 @@ CK_RV do_decrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
       (mech == CKM_RSA_PKCS_OAEP && !oaep_label.empty()) ? &oaep_label
                                                          : nullptr;
   CK_RV rv = p11_rsa_decrypt(pk, in, out, padding, labelPtr, md);
-  EVP_PKEY_free(pk);
   return rv;
 }
 
@@ -281,14 +282,14 @@ CK_RV do_sign(CK_SESSION_HANDLE h, const std::vector<u8> &data,
     return CKR_SESSION_HANDLE_INVALID;
   const CK_MECHANISM_TYPE mech = sess->opMech();
   const CK_OBJECT_HANDLE k = sess->opKey();
-  EVP_PKEY *pk = load_asym_key(h, k);
+  vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, k));
+  auto *pk = pk_guard.get();
   if (!pk)
     return CKR_KEY_HANDLE_INVALID;
   {
     int base = EVP_PKEY_get_base_id(pk);
     if ((is_rsa_mech(mech) && base != EVP_PKEY_RSA) ||
         (is_ec_mech(mech) && base != EVP_PKEY_EC)) {
-      EVP_PKEY_free(pk);
       return CKR_KEY_TYPE_INCONSISTENT;
     }
   }
@@ -296,7 +297,6 @@ CK_RV do_sign(CK_SESSION_HANDLE h, const std::vector<u8> &data,
   if (is_rsa_mech(mech)) {
     int padding; std::string mdName, mgf1; std::vector<u8> tosign;
     if (!resolve_rsa_mech(mech, data, padding, mdName, mgf1, tosign)) {
-      EVP_PKEY_free(pk);
       return CKR_MECHANISM_INVALID;
     }
     rv = p11_rsa_sign(pk, tosign, sig, padding, mdName, mgf1);
@@ -304,7 +304,6 @@ CK_RV do_sign(CK_SESSION_HANDLE h, const std::vector<u8> &data,
     rv = p11_ecdsa_sign(pk, resolve_ec_mech(mech, data), sig);
   } else
     rv = CKR_MECHANISM_INVALID;
-  EVP_PKEY_free(pk);
   return rv;
 }
 
@@ -315,14 +314,14 @@ CK_RV do_verify(CK_SESSION_HANDLE h, const std::vector<u8> &data,
     return CKR_SESSION_HANDLE_INVALID;
   const CK_MECHANISM_TYPE mech = sess->opMech();
   const CK_OBJECT_HANDLE k = sess->opKey();
-  EVP_PKEY *pk = load_asym_key(h, k);
+  vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, k));
+  auto *pk = pk_guard.get();
   if (!pk)
     return CKR_KEY_HANDLE_INVALID;
   {
     int base = EVP_PKEY_get_base_id(pk);
     if ((is_rsa_mech(mech) && base != EVP_PKEY_RSA) ||
         (is_ec_mech(mech) && base != EVP_PKEY_EC)) {
-      EVP_PKEY_free(pk);
       return CKR_KEY_TYPE_INCONSISTENT;
     }
   }
@@ -330,7 +329,6 @@ CK_RV do_verify(CK_SESSION_HANDLE h, const std::vector<u8> &data,
   if (is_rsa_mech(mech)) {
     int padding; std::string mdName, mgf1; std::vector<u8> tosign;
     if (!resolve_rsa_mech(mech, data, padding, mdName, mgf1, tosign)) {
-      EVP_PKEY_free(pk);
       return CKR_MECHANISM_INVALID;
     }
     rv = p11_rsa_verify(pk, tosign, sig, padding, mdName, mgf1);
@@ -338,7 +336,6 @@ CK_RV do_verify(CK_SESSION_HANDLE h, const std::vector<u8> &data,
     rv = p11_ecdsa_verify(pk, resolve_ec_mech(mech, data), sig);
   } else
     rv = CKR_MECHANISM_INVALID;
-  EVP_PKEY_free(pk);
   return rv;
 }
 
@@ -432,8 +429,6 @@ void publish_verify_event(CK_SESSION_HANDLE h, CK_RV rv,
 
   EVP_PKEY *pk = load_asym_key(h, k);
   std::string key_fp = pk ? p11_key_fingerprint(pk) : "unknown";
-  if (pk)
-    EVP_PKEY_free(pk);
 
   std::string mechanism_str = mech_to_str(active_mech);
   std::string digest_alg = digest_to_str(active_mech);
@@ -516,8 +511,6 @@ void publish_crypto_op_event(
 
   EVP_PKEY *pk = load_asym_key(h, k);
   std::string key_fp = pk ? p11_key_fingerprint(pk) : "unknown";
-  if (pk)
-    EVP_PKEY_free(pk);
 
   std::string mechanism_str = mech_to_str(active_mech);
 
@@ -602,7 +595,6 @@ static CK_RV dispatch_sign_result(
   auto obj = p11_get_object(h, k);
   std::string key_id = obj ? p11_key_id(obj.get()) : "unknown";
   std::string key_fp = p11_key_fingerprint(pk);
-  EVP_PKEY_free(pk);
 
   // Get session/token info
   auto *token = p11_get_token_for_session(h);
@@ -1072,7 +1064,6 @@ CK_RV C_SignFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature,
           if (!dispatch_ok) {
             rv = CKR_DEVICE_ERROR; // require_db_write enforcement
           }
-          EVP_PKEY_free(pk);
         }
       }
     }
