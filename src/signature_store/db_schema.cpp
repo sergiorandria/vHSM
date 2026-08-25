@@ -244,13 +244,6 @@ void DbSchema::bootstrap() {
                       ". Upgrade the vhsm binary.");
   }
 
-  // Idempotent column addition for DBs created before v7.
-  if (!column_exists("signature_records", "integrity_hmac")) {
-    conn_.with_transaction([&](IDbTransaction &tx) {
-      tx.exec("ALTER TABLE signature_records ADD COLUMN integrity_hmac TEXT;");
-    });
-  }
-
   if (version == -1) {
     // Brand-new DB — create all tables from scratch.
     conn_.with_transaction([this](IDbTransaction &tx) {
@@ -305,6 +298,15 @@ void DbSchema::bootstrap() {
 
   // Existing DB at an older version — run migrations.
   migrate();
+
+  // v7: idempotent column addition for DBs created before v7.
+  // For brand-new DBs the CREATE TABLE above already includes it; for
+  // existing DBs this ALTER adds the missing column.
+  if (!column_exists("signature_records", "integrity_hmac")) {
+    conn_.with_transaction([&](IDbTransaction &tx) {
+      tx.exec("ALTER TABLE signature_records ADD COLUMN integrity_hmac TEXT;");
+    });
+  }
 }
 
 int DbSchema::migrate() {
