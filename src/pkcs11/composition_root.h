@@ -81,15 +81,19 @@ struct AppContainer {
   // publish does not lose the event — no distributed transaction needed.
   std::unique_ptr<vhsm::signature_store::db::OutboxPoller> outbox_poller;
 
-  // Unified signature store port — points to either DbSignatureStore or
-  // FabricSignatureStore depending on backend. SignatureDispatcher will be
-  // constructed against this port in a future slice; for now dispatcher
-  // still takes the concrete DB/ledger pointers, but store is available
-  // for new code.
+  // Unified signature store port — scaffolding for a future migration.
+  // NOT the production write path: C_Sign/C_Verify use `dispatcher` below.
+  // The port exists so new code CAN target ISignatureStore, but the
+  // adapters are incomplete (DbStoreAdapter::load() fills only record_id;
+  // FabricStoreAdapter::load() returns nullopt; list() returns {} on both).
+  // Finishing this migration (routing C_Sign through store, deleting
+  // dispatcher) is tracked as future work — see ARCHITECTURE_REVIEW.md §3.
   std::unique_ptr<vhsm::domain::signing::ISignatureStore> store;
 
-  // Signature pipeline (concrete, for backward compat; new code should use
-  // store)
+  // Signature pipeline — THE production write path. C_Sign/C_SignFinal
+  // call p11_signature_dispatcher() which returns this object. Persists to
+  // signature_records table, publishes SIGN_CREATED to notification bus,
+  // optionally anchors to ledger via LedgerWorker.
   std::unique_ptr<vhsm::signature_store::db::SignatureDispatcher> dispatcher;
 
   // Vault (optional)
