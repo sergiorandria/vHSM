@@ -1,3 +1,4 @@
+#include "../log/logger.h"
 #include "ledger_worker.h"
 #include "../core/hsm_instance.h"
 #include <algorithm>
@@ -214,10 +215,9 @@ void LedgerWorker::submit_record(const SignatureRecord &record) {
     // Pool shutting down between running_ check and enqueue — record cannot
     // be anchored now. Signal the failure so operators know; LedgerRetryQueue
     // will replay PENDING rows on next C_Initialize.
-    std::fprintf(stderr,
-                 "VHSM: ledger submit_record dropped record %s during "
-                 "teardown: %s\n",
-                 record.record_id.c_str(), e.what());
+    vhsm::log::global_logger().error(
+        "ledger", "submit_record dropped record " + record.record_id +
+                      " during teardown: " + e.what());
     publish_failed(record);
   }
 }

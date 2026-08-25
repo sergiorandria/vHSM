@@ -24,7 +24,7 @@ target_link_libraries(vhsm_composition_root_test
         vhsm_crypto_provider
         GTest::gtest
         GTest::gtest_main
-        SQLite::SQLite3
+        SQLite3::SQLite3
 )
 
 target_compile_options(vhsm_composition_root_test PRIVATE -O1 -g)
