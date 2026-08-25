@@ -205,6 +205,9 @@ std::unique_ptr<AppContainer> create_app_container() {
 #ifdef __linux__
   c->logger->add_sink(std::make_shared<vhsm::log::SyslogSink>("vhsmd"));
 #endif
+  // Install as process-wide fallback so header-only modules (ThreadPool)
+  // and legacy call sites route through the same sinks.
+  vhsm::log::set_global_logger(c->logger.get());
 
   // Slot manager: owned by the container (not a singleton). Set as the
   // process-wide global for legacy PKCS#11 call sites during DI migration.

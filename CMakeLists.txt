@@ -166,6 +166,15 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 # (VHSM_SCRYPTO_PURE=OFF) and for fabric-gateway-cpp.
 if(VHSM_USE_SECURE_CRYPTO)
     add_subdirectory(third_party/vhsm-secure-crypto)
+    # The vendored library hardcodes -O2 via directory scope, which would
+    # override the config-owned optimization level (e.g. downgrade -O3 in
+    # Release). Re-append the correct level as a target option — target
+    # options come after directory options, so they win.
+    target_compile_options(vhsm_secure_crypto PRIVATE
+        $<$<CONFIG:Debug>:-O0>
+        $<$<CONFIG:Release>:-O3>
+        $<$<CONFIG:RelWithDebInfo>:-O2>
+    )
     add_library(vhsm_crypto_provider INTERFACE)
     target_link_libraries(vhsm_crypto_provider INTERFACE vhsm_secure_crypto)
     target_include_directories(vhsm_crypto_provider INTERFACE
@@ -219,7 +228,7 @@ if(VHSM_DB_BACKEND STREQUAL "sqlite")
     if(NOT SQLite3_FOUND)
         message(FATAL_ERROR "SQLite3 not found but selected as DB backend")
     endif()
-    set(DB_LIBRARIES    SQLite::SQLite3)          # modern imported target
+    set(DB_LIBRARIES    SQLite3::SQLite3)         # modern imported target
     set(DB_INCLUDE_DIRS ${SQLite3_INCLUDE_DIRS})
 
 elseif(VHSM_DB_BACKEND STREQUAL "postgres")

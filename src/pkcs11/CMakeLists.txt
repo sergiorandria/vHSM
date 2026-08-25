@@ -28,6 +28,7 @@ target_compile_options(vhsm_pkcs11 PRIVATE -fPIC -Wno-deprecated-declarations)
 target_link_libraries(vhsm_pkcs11
     PUBLIC
     vhsm_core
+    vhsm_log
     vhsm_crypto
     vhsm_keystore
     vhsm_persistence
@@ -51,6 +52,7 @@ target_compile_options(vhsm_pkcs11_mod PRIVATE -fPIC -Wno-deprecated-declaration
 target_link_libraries(vhsm_pkcs11_mod
     PUBLIC
     vhsm_core
+    vhsm_log
     vhsm_crypto
     vhsm_keystore
     vhsm_persistence
