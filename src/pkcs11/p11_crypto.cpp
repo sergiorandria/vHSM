@@ -147,25 +147,60 @@ static session::Session *op_session(CK_SESSION_HANDLE h) {
 }
 
 // ----- Encrypt / Decrypt -----
+// Shared session state read for encrypt/decrypt. All references point into
+// Session-owned storage (no copies).
+struct EncDecParams {
+  CK_MECHANISM_TYPE mech;
+  CK_OBJECT_HANDLE key;
+  const std::vector<u8> *gcm_iv;
+  const std::vector<u8> *gcm_aad;
+  const std::string *oaep_mgf1;
+  const std::vector<u8> *oaep_label;
+};
+
+static EncDecParams read_encdec_params(session::Session *sess) {
+  return {sess->opMech(),   sess->opKey(),        &sess->gcmIv(),
+          &sess->gcmAad(),  &sess->oaepMgf1(),    &sess->oaepLabel()};
+}
+
+// Shared RSA encrypt/decrypt padding+label resolution.
+struct RsaEncDecParams {
+  int padding;
+  std::string md;
+  const std::vector<u8> *label_ptr; // points into oaep_label
+};
+
+static RsaEncDecParams resolve_rsa_encdec(CK_MECHANISM_TYPE mech,
+                                           const std::string &oaep_mgf1,
+                                           const std::vector<u8> &oaep_label) {
+  RsaEncDecParams p;
+  p.padding = RSA_PKCS1_PADDING;
+  p.md.clear();
+  p.label_ptr = nullptr;
+  if (mech == CKM_RSA_X_509)
+    p.padding = RSA_NO_PADDING;
+  else if (mech == CKM_RSA_PKCS_OAEP) {
+    p.padding = RSA_PKCS1_OAEP_PADDING;
+    p.md = oaep_mgf1;
+    if (!oaep_label.empty())
+      p.label_ptr = &oaep_label;
+  }
+  return p;
+}
+
 CK_RV do_encrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
                  std::vector<u8> &out) {
   auto *sess = op_session(h);
   if (!sess)
     return CKR_SESSION_HANDLE_INVALID;
-  // Single Session read — replaces two g_stateMutex acquisitions.
-  CK_MECHANISM_TYPE mech = sess->opMech();
-  CK_OBJECT_HANDLE k = sess->opKey();
-  const std::vector<u8> &gcm_iv = sess->gcmIv();
-  const std::vector<u8> &gcm_aad = sess->gcmAad();
-  const std::string &oaep_mgf1 = sess->oaepMgf1();
-  const std::vector<u8> &oaep_label = sess->oaepLabel();
+  auto prm = read_encdec_params(sess);
 
-  if (mech == CKM_AES_GCM) {
-    std::vector<u8> key = load_secret_key(h, k);
+  if (prm.mech == CKM_AES_GCM) {
+    std::vector<u8> key = load_secret_key(h, prm.key);
     if (key.empty())
       return CKR_KEY_HANDLE_INVALID;
     std::vector<u8> ct, tag;
-    CK_RV rv = p11_aes_gcm_encrypt(key, gcm_iv, gcm_aad, in, ct, tag);
+    CK_RV rv = p11_aes_gcm_encrypt(key, *prm.gcm_iv, *prm.gcm_aad, in, ct, tag);
     if (rv == CKR_OK) {
       out = ct;
       out.insert(out.end(), tag.begin(), tag.end());
@@ -173,23 +208,12 @@ CK_RV do_encrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
     return rv;
   }
 
-  vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, k));
+  vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, prm.key));
   auto *pk = pk_guard.get();
   if (!pk)
     return CKR_KEY_HANDLE_INVALID;
-  int padding = RSA_PKCS1_PADDING;
-  std::string md;
-  if (mech == CKM_RSA_X_509)
-    padding = RSA_NO_PADDING;
-  else if (mech == CKM_RSA_PKCS_OAEP) {
-    padding = RSA_PKCS1_OAEP_PADDING;
-    md = oaep_mgf1;
-  }
-  const std::vector<u8> *labelPtr =
-      (mech == CKM_RSA_PKCS_OAEP && !oaep_label.empty()) ? &oaep_label
-                                                         : nullptr;
-  CK_RV rv = p11_rsa_encrypt(pk, in, out, padding, labelPtr, md);
-  return rv;
+  auto rsa = resolve_rsa_encdec(prm.mech, *prm.oaep_mgf1, *prm.oaep_label);
+  return p11_rsa_encrypt(pk, in, out, rsa.padding, rsa.label_ptr, rsa.md);
 }
 
 CK_RV do_decrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
@@ -197,42 +221,26 @@ CK_RV do_decrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
   auto *sess = op_session(h);
   if (!sess)
     return CKR_SESSION_HANDLE_INVALID;
-  CK_MECHANISM_TYPE mech = sess->opMech();
-  CK_OBJECT_HANDLE k = sess->opKey();
-  const std::vector<u8> &gcm_iv = sess->gcmIv();
-  const std::vector<u8> &gcm_aad = sess->gcmAad();
-  const std::string &oaep_mgf1 = sess->oaepMgf1();
-  const std::vector<u8> &oaep_label = sess->oaepLabel();
+  auto prm = read_encdec_params(sess);
 
-  if (mech == CKM_AES_GCM) {
-    std::vector<u8> key = load_secret_key(h, k);
+  if (prm.mech == CKM_AES_GCM) {
+    std::vector<u8> key = load_secret_key(h, prm.key);
     if (key.empty())
       return CKR_KEY_HANDLE_INVALID;
-    const size_t tagLen = 16;
-    if (in.size() < tagLen)
+    constexpr size_t kGcmTagLen = 16;
+    if (in.size() < kGcmTagLen)
       return CKR_ENCRYPTED_DATA_LEN_RANGE;
-    std::vector<u8> ct(in.begin(), in.end() - tagLen);
-    std::vector<u8> tag(in.end() - tagLen, in.end());
-    return p11_aes_gcm_decrypt(key, gcm_iv, gcm_aad, ct, tag, out);
+    std::vector<u8> ct(in.begin(), in.end() - kGcmTagLen);
+    std::vector<u8> tag(in.end() - kGcmTagLen, in.end());
+    return p11_aes_gcm_decrypt(key, *prm.gcm_iv, *prm.gcm_aad, ct, tag, out);
   }
 
-  vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, k));
+  vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, prm.key));
   auto *pk = pk_guard.get();
   if (!pk)
     return CKR_KEY_HANDLE_INVALID;
-  int padding = RSA_PKCS1_PADDING;
-  std::string md;
-  if (mech == CKM_RSA_X_509)
-    padding = RSA_NO_PADDING;
-  else if (mech == CKM_RSA_PKCS_OAEP) {
-    padding = RSA_PKCS1_OAEP_PADDING;
-    md = oaep_mgf1;
-  }
-  const std::vector<u8> *labelPtr =
-      (mech == CKM_RSA_PKCS_OAEP && !oaep_label.empty()) ? &oaep_label
-                                                         : nullptr;
-  CK_RV rv = p11_rsa_decrypt(pk, in, out, padding, labelPtr, md);
-  return rv;
+  auto rsa = resolve_rsa_encdec(prm.mech, *prm.oaep_mgf1, *prm.oaep_label);
+  return p11_rsa_decrypt(pk, in, out, rsa.padding, rsa.label_ptr, rsa.md);
 }
 
 // ----- Sign / Verify -----
