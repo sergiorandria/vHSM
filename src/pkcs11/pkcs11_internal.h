@@ -230,6 +230,37 @@ std::string p11_key_id(const HsmObject *obj);
 // Reset all per-session crypto-operation state (now delegates to Session).
 void p11_reset_op(CK_SESSION_HANDLE h);
 
+// ─── Exception-to-CKR shield for extern "C" entry points ──────────────────
+// PKCS#11 is a C ABI; any C++ exception escaping an entry point is undefined
+// behaviour (the caller has no unwind tables for our frames). These macros
+// wrap every extern "C" function body so exceptions are caught and mapped to
+// CKR_GENERAL_ERROR. Returns inside the try pass through normally.
+//
+// Usage:
+//   CK_RV C_Foo(args) {
+//     VHSM_C_TRY
+//       // existing body unchanged
+//     VHSM_C_CATCH
+//   }
+#define VHSM_C_TRY try {
+#define VHSM_C_CATCH                                                          \
+    }                                                                         \
+    catch (const std::invalid_argument &) {                                   \
+      return CKR_ARGUMENTS_BAD;                                               \
+    }                                                                         \
+    catch (const std::out_of_range &) {                                       \
+      return CKR_BUFFER_TOO_SMALL;                                            \
+    }                                                                         \
+    catch (const std::bad_alloc &) {                                          \
+      return CKR_HOST_MEMORY;                                                 \
+    }                                                                         \
+    catch (const std::runtime_error &) {                                      \
+      return CKR_GENERAL_ERROR;                                               \
+    }                                                                         \
+    catch (...) {                                                             \
+      return CKR_GENERAL_ERROR;                                              \
+    }
+
 // WHY extern "C": The PKCS#11 API functions (C_Initialize, C_GetSlotList, etc.)
 // must have C linkage so they are not name-mangled.  The declarations below let
 // each p11_*.cpp implementation file see C linkage when it defines the

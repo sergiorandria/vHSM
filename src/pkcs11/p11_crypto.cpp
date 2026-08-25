@@ -637,6 +637,7 @@ static CK_RV dispatch_sign_result(
 
 CK_RV C_EncryptInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m,
                     CK_OBJECT_HANDLE hKey) {
+  VHSM_C_TRY
   if (!m)
     return CKR_ARGUMENTS_BAD;
   if (m->mechanism != CKM_RSA_PKCS && m->mechanism != CKM_RSA_X_509 &&
@@ -673,10 +674,12 @@ CK_RV C_EncryptInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m,
     }
   }
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_Encrypt(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
                 CK_BYTE_PTR pEncryptedData, CK_ULONG_PTR pulEncryptedDataLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pData == nullptr && ulDataLen > 0)
@@ -695,11 +698,13 @@ CK_RV C_Encrypt(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
   }
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 CK_RV C_EncryptUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart,
                       CK_ULONG ulPartLen, CK_BYTE_PTR pEncryptedPart,
                       CK_ULONG_PTR pulEncryptedPartLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pPart == nullptr && ulPartLen > 0)
@@ -714,10 +719,12 @@ CK_RV C_EncryptUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart,
   if (pulEncryptedPartLen)
     *pulEncryptedPartLen = 0;
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_EncryptFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pLastEncryptedPart,
                      CK_ULONG_PTR pulLastEncryptedPartLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   auto s_final = p11_get_session(h);
@@ -739,6 +746,7 @@ CK_RV C_EncryptFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pLastEncryptedPart,
   }
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 // ---------------------------------------------------------------------------
@@ -746,6 +754,7 @@ CK_RV C_EncryptFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pLastEncryptedPart,
 // ---------------------------------------------------------------------------
 CK_RV C_DecryptInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m,
                     CK_OBJECT_HANDLE hKey) {
+  VHSM_C_TRY
   if (!m)
     return CKR_ARGUMENTS_BAD;
   if (m->mechanism != CKM_RSA_PKCS && m->mechanism != CKM_RSA_X_509 &&
@@ -782,11 +791,13 @@ CK_RV C_DecryptInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m,
     }
   }
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_Decrypt(CK_SESSION_HANDLE h, CK_BYTE_PTR pEncryptedData,
                 CK_ULONG ulEncryptedDataLen, CK_BYTE_PTR pData,
                 CK_ULONG_PTR pulDataLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pEncryptedData == nullptr && ulEncryptedDataLen > 0)
@@ -805,11 +816,13 @@ CK_RV C_Decrypt(CK_SESSION_HANDLE h, CK_BYTE_PTR pEncryptedData,
   }
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 CK_RV C_DecryptUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pEncryptedPart,
                       CK_ULONG ulEncryptedPartLen, CK_BYTE_PTR pPart,
                       CK_ULONG_PTR pulPartLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pEncryptedPart == nullptr && ulEncryptedPartLen > 0)
@@ -824,10 +837,12 @@ CK_RV C_DecryptUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pEncryptedPart,
   if (pulPartLen)
     *pulPartLen = 0;
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_DecryptFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pLastPart,
                      CK_ULONG_PTR pulLastPartLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   auto s_fin = p11_get_session(h);
@@ -848,21 +863,25 @@ CK_RV C_DecryptFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pLastPart,
   }
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 // ---------------------------------------------------------------------------
 // Digest
 // ---------------------------------------------------------------------------
 CK_RV C_DigestInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m) {
+  VHSM_C_TRY
   if (!m)
     return CKR_ARGUMENTS_BAD;
   if (!is_digest_mech(m->mechanism))
     return CKR_MECHANISM_INVALID;
   return op_begin(h, m, CK_INVALID_HANDLE, false);
+VHSM_C_CATCH
 }
 
 CK_RV C_Digest(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
                CK_BYTE_PTR pDigest, CK_ULONG_PTR pulDigestLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pData == nullptr && ulDataLen > 0)
@@ -876,10 +895,12 @@ CK_RV C_Digest(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
   CK_RV rv = finish_output(out, pDigest, pulDigestLen);
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 CK_RV C_DigestUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart,
                      CK_ULONG ulPartLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pPart == nullptr && ulPartLen > 0)
@@ -887,9 +908,11 @@ CK_RV C_DigestUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart,
   if (auto s = p11_get_session(h))
     s->opUpdate(pPart, ulPartLen);
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_DigestKey(CK_SESSION_HANDLE h, CK_OBJECT_HANDLE hKey) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   std::vector<u8> key = load_secret_key(h, hKey);
@@ -898,10 +921,12 @@ CK_RV C_DigestKey(CK_SESSION_HANDLE h, CK_OBJECT_HANDLE hKey) {
   if (auto s = p11_get_session(h))
     s->opUpdate(key.data(), key.size());
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_DigestFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pDigest,
                     CK_ULONG_PTR pulDigestLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   auto s_dg = p11_get_session(h);
@@ -913,6 +938,7 @@ CK_RV C_DigestFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pDigest,
   CK_RV rv = finish_output(out, pDigest, pulDigestLen);
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 // ---------------------------------------------------------------------------
@@ -920,15 +946,18 @@ CK_RV C_DigestFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pDigest,
 // ---------------------------------------------------------------------------
 CK_RV C_SignInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m,
                  CK_OBJECT_HANDLE hKey) {
+  VHSM_C_TRY
   if (!m)
     return CKR_ARGUMENTS_BAD;
   if (!is_rsa_mech(m->mechanism) && !is_ec_mech(m->mechanism))
     return CKR_MECHANISM_INVALID;
   return op_begin(h, m, hKey, true);
+VHSM_C_CATCH
 }
 
 CK_RV C_Sign(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
              CK_BYTE_PTR pSignature, CK_ULONG_PTR pulSignatureLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pData == nullptr && ulDataLen > 0)
@@ -948,9 +977,11 @@ CK_RV C_Sign(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
   }
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 CK_RV C_SignUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart, CK_ULONG ulPartLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pPart == nullptr && ulPartLen > 0)
@@ -958,10 +989,12 @@ CK_RV C_SignUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart, CK_ULONG ulPartLen) {
   if (auto s = p11_get_session(h))
     s->opUpdate(pPart, ulPartLen);
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_SignFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature,
                   CK_ULONG_PTR pulSignatureLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   auto s_sf = p11_get_session(h);
@@ -1046,6 +1079,7 @@ CK_RV C_SignFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature,
   }
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 // ---------------------------------------------------------------------------
@@ -1053,15 +1087,18 @@ CK_RV C_SignFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature,
 // ---------------------------------------------------------------------------
 CK_RV C_VerifyInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m,
                    CK_OBJECT_HANDLE hKey) {
+  VHSM_C_TRY
   if (!m)
     return CKR_ARGUMENTS_BAD;
   if (!is_rsa_mech(m->mechanism) && !is_ec_mech(m->mechanism))
     return CKR_MECHANISM_INVALID;
   return op_begin(h, m, hKey, true);
+VHSM_C_CATCH
 }
 
 CK_RV C_Verify(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
                CK_BYTE_PTR pSignature, CK_ULONG ulSignatureLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pData == nullptr && ulDataLen > 0)
@@ -1079,10 +1116,12 @@ CK_RV C_Verify(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
 
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 CK_RV C_VerifyUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart,
                      CK_ULONG ulPartLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pPart == nullptr && ulPartLen > 0)
@@ -1090,10 +1129,12 @@ CK_RV C_VerifyUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart,
   if (auto s = p11_get_session(h))
     s->opUpdate(pPart, ulPartLen);
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_VerifyFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature,
                     CK_ULONG ulSignatureLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pSignature == nullptr && ulSignatureLen > 0)
@@ -1113,6 +1154,7 @@ CK_RV C_VerifyFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature,
 
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 // ---------------------------------------------------------------------------
@@ -1121,75 +1163,91 @@ CK_RV C_VerifyFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature,
 CK_RV C_DigestEncryptUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart,
                             CK_ULONG ulPartLen, CK_BYTE_PTR pEncryptedPart,
                             CK_ULONG_PTR pulEncryptedPartLen) {
+  VHSM_C_TRY
   (void)h;
   (void)pPart;
   (void)ulPartLen;
   (void)pEncryptedPart;
   (void)pulEncryptedPartLen;
   return CKR_FUNCTION_NOT_SUPPORTED;
+VHSM_C_CATCH
 }
 CK_RV C_DecryptDigestUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pEncryptedPart,
                             CK_ULONG ulEncryptedPartLen, CK_BYTE_PTR pPart,
                             CK_ULONG_PTR pulPartLen) {
+  VHSM_C_TRY
   (void)h;
   (void)pEncryptedPart;
   (void)ulEncryptedPartLen;
   (void)pPart;
   (void)pulPartLen;
   return CKR_FUNCTION_NOT_SUPPORTED;
+VHSM_C_CATCH
 }
 CK_RV C_SignEncryptUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart,
                           CK_ULONG ulPartLen, CK_BYTE_PTR pEncryptedPart,
                           CK_ULONG_PTR pulEncryptedPartLen) {
+  VHSM_C_TRY
   (void)h;
   (void)pPart;
   (void)ulPartLen;
   (void)pEncryptedPart;
   (void)pulEncryptedPartLen;
   return CKR_FUNCTION_NOT_SUPPORTED;
+VHSM_C_CATCH
 }
 CK_RV C_DecryptVerifyUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pEncryptedPart,
                             CK_ULONG ulEncryptedPartLen, CK_BYTE_PTR pPart,
                             CK_ULONG_PTR pulPartLen) {
+  VHSM_C_TRY
   (void)h;
   (void)pEncryptedPart;
   (void)ulEncryptedPartLen;
   (void)pPart;
   (void)pulPartLen;
   return CKR_FUNCTION_NOT_SUPPORTED;
+VHSM_C_CATCH
 }
 CK_RV C_SignRecoverInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m,
                         CK_OBJECT_HANDLE hKey) {
+  VHSM_C_TRY
   (void)h;
   (void)m;
   (void)hKey;
   return CKR_FUNCTION_NOT_SUPPORTED;
+VHSM_C_CATCH
 }
 CK_RV C_SignRecover(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
                     CK_BYTE_PTR pSignature, CK_ULONG_PTR pulSignatureLen) {
+  VHSM_C_TRY
   (void)h;
   (void)pData;
   (void)ulDataLen;
   (void)pSignature;
   (void)pulSignatureLen;
   return CKR_FUNCTION_NOT_SUPPORTED;
+VHSM_C_CATCH
 }
 CK_RV C_VerifyRecoverInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m,
                           CK_OBJECT_HANDLE hKey) {
+  VHSM_C_TRY
   (void)h;
   (void)m;
   (void)hKey;
   return CKR_FUNCTION_NOT_SUPPORTED;
+VHSM_C_CATCH
 }
 CK_RV C_VerifyRecover(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature,
                       CK_ULONG ulSignatureLen, CK_BYTE_PTR pData,
                       CK_ULONG_PTR pulDataLen) {
+  VHSM_C_TRY
   (void)h;
   (void)pSignature;
   (void)ulSignatureLen;
   (void)pData;
   (void)pulDataLen;
   return CKR_FUNCTION_NOT_SUPPORTED;
+VHSM_C_CATCH
 }
 
 } // namespace vhsm::pkcs11
