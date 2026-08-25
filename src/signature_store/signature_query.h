@@ -5,7 +5,9 @@
 #include <string>
 #include <vector>
 
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/crypto/crypto_types.h"
+#include "../domain/signing/signature_record.h"
 #include "../ledger/ledger_client.h"
 #include "db_connection.h"
 #include "internal/signature_query_core.h"

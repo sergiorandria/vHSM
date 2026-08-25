@@ -1,7 +1,9 @@
 #ifndef VHSM_SIGSTORE_LEDGER_RETRY_QUEUE_H
 #define VHSM_SIGSTORE_LEDGER_RETRY_QUEUE_H
 
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/crypto/crypto_types.h"
+#include "../domain/signing/signature_record.h"
 #include "db_connection.h"
 #include <optional>
 #include <string>

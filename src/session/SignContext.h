@@ -1,7 +1,8 @@
 #ifndef vHSM_SIGN_CONTEXT_H
 #define vHSM_SIGN_CONTEXT_H
 
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/pkcs11/pkcs11_types.h"
 #include "OpContext.h"
 #include <memory>
 #include <vector>

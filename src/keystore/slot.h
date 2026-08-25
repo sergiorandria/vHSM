@@ -7,7 +7,8 @@
 #include <string>
 
 #include "../core/error.h"
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/pkcs11/pkcs11_types.h"
 #include "token.h"
 
 namespace vhsm::keystore {

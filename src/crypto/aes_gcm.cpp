@@ -3,7 +3,8 @@
  */
 #include "aes_gcm.h"
 #include "../core/error.h"
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/crypto/crypto_types.h"
 #include "vhsm/scrypto/aes_gcm.h"
 #include "vhsm/scrypto/mem.h"
 #include <stdexcept>

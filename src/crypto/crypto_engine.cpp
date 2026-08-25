@@ -12,7 +12,8 @@
 #include "crypto_engine.h"
 
 #include "../core/error.h"
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/crypto/crypto_types.h"
 #include "vhsm/scrypto/hash.h"
 
 namespace vhsm::crypto {

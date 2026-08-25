@@ -1,7 +1,9 @@
 #ifndef VHSM_SIGSTORE_VERIFICATION_SERVICE_H
 #define VHSM_SIGSTORE_VERIFICATION_SERVICE_H
 
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/crypto/crypto_types.h"
+#include "../domain/signing/signature_record.h"
 #include "../ledger/ledger_client.h"
 #include "db_connection.h"
 #include "internal/verification_service_core.h"

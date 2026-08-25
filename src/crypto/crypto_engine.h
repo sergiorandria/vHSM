@@ -12,7 +12,8 @@
 
 #pragma once
 
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/crypto/crypto_types.h"
 #include "ecc.h"
 #include "rsa.h"
 

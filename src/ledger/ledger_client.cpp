@@ -1,5 +1,7 @@
 #include "ledger_client.h"
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/crypto/crypto_types.h"
+#include "../domain/signing/signature_record.h"
 #include "ledger_entry.h"
 
 #include <chrono>

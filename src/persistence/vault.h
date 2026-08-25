@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
 #include "vault_format.h"
 
 // WHY a Vault: PLAN.md Phase 7 requires encrypted-at-rest storage of sensitive

@@ -2,8 +2,7 @@
 #define VHSM_KEYSTORE_ATTRIBUTE_STORE_H
 
 #include "../core/secure_buffer.h"
-#include "pkcs11/pkcs11_types.h"  // resolved via -I src
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
 #include "hsm_object.h"
 
 #include <cstring>

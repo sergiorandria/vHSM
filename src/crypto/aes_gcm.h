@@ -31,7 +31,8 @@
 #include <cstdint>
 #include <vector>
 
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/crypto/crypto_types.h"
 
 namespace vhsm::crypto {
 // WHY separate struct: Bundling the three components (ciphertext, nonce, tag)
