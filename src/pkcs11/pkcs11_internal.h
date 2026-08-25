@@ -52,21 +52,8 @@
 #include <unordered_map>
 #include <vector>
 
-// Concrete implementations for NotificationBus and AuditLog (defined here for
-// use in C_Initialize)
-class P11NotificationBus : public vhsm::notification::NotificationBus {
-public:
-  void publish(const vhsm::notification::NotificationEvent &event) override {
-    // In production, this would publish to a message queue, database, etc.
-    // For now, log to stderr for debugging
-    std::cerr << "[NOTIFICATION] type=" << static_cast<int>(event.type)
-              << " severity=" << static_cast<int>(event.severity)
-              << " source=" << event.source << " actor=" << event.actor
-              << " summary=" << event.summary << " detail=" << event.detail_json
-              << std::endl;
-  }
-};
-
+// AuditLog implementation — writes to stderr (stub; production should
+// persist to DB via the notification pipeline). Owned by AppContainer.
 class P11AuditLog : public vhsm::audit::AuditLog {
 public:
   void append(const std::string &event_id,
