@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS db_meta (
 
 std::string DbSchema::sql_create_signature_records() const {
   // Column ordering is canonical — do not reorder.
-  // No integrity_hmac column — the Fabric ledger provides tamper evidence.
+  // integrity_hmac: HMAC-SHA256 over all other columns (see RowIntegrity).
+  // NULL for legacy rows or when no HMAC key is available.
   return R"SQL(
 CREATE TABLE IF NOT EXISTS signature_records (
     id                TEXT    NOT NULL PRIMARY KEY,
@@ -64,7 +65,8 @@ CREATE TABLE IF NOT EXISTS signature_records (
     ledger_tx_proof   TEXT,
     ledger_tx_set_b64 TEXT,
     ledger_status     TEXT    NOT NULL DEFAULT 'PENDING'
-        CHECK(ledger_status IN ('PENDING','COMMITTED','FAILED'))
+        CHECK(ledger_status IN ('PENDING','COMMITTED','FAILED')),
+    integrity_hmac    TEXT
 );
 )SQL";
 }
@@ -240,6 +242,13 @@ void DbSchema::bootstrap() {
                       " is newer than compiled version " +
                       std::to_string(K_CURRENT_SCHEMA_VERSION) +
                       ". Upgrade the vhsm binary.");
+  }
+
+  // Idempotent column addition for DBs created before v7.
+  if (!column_exists("signature_records", "integrity_hmac")) {
+    conn_.with_transaction([&](IDbTransaction &tx) {
+      tx.exec("ALTER TABLE signature_records ADD COLUMN integrity_hmac TEXT;");
+    });
   }
 
   if (version == -1) {
