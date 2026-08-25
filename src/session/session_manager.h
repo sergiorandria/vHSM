@@ -2,7 +2,8 @@
 #define VHSM_SESSION_SESSION_MANAGER_H
 
 #include "../core/system_hsm_clock.h"
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/pkcs11/pkcs11_types.h"
 #include "internal/session_manager_core.h"
 #include "session.h"
 

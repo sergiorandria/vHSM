@@ -1,7 +1,8 @@
 #ifndef VHSM_KEYSTORE_OBJECT_STORE_H
 #define VHSM_KEYSTORE_OBJECT_STORE_H
 
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/pkcs11/pkcs11_types.h"
 #include "hsm_object.h"
 
 #include <atomic>

@@ -5,7 +5,8 @@
 #include <string>
 #include <vector>
 
-#include "../../core/types.h"
+#include "../../domain/core/kernel_types.h"
+#include "../../domain/crypto/crypto_types.h"
 #include "../../keystore/token.h"
 #include "../../ledger/ledger_client.h"
 #include "../db_connection.h"

@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
 
 // WHY KDF utilities live in persistence: PBKDF2 and HKDF are used to turn a
 // human-entered password into the vault AES key and to derive the DB HMAC key

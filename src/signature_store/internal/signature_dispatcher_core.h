@@ -8,7 +8,8 @@
 
 #include "../../audit/audit_log.h"
 #include "../../core/hsm_clock.h"
-#include "../../core/types.h"
+#include "../../domain/core/kernel_types.h"
+#include "../../domain/crypto/crypto_types.h"
 #include "../../keystore/token.h"
 #include "../../ledger/ledger_worker.h"
 #include "../../notification/notification_bus.h"

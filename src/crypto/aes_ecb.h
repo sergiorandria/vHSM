@@ -1,7 +1,8 @@
 #ifndef vHSM_AES_ECB_H
 #define vHSM_AES_ECB_H
 
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/crypto/crypto_types.h"
 #include <cstdint>
 #include <stdexcept>
 
