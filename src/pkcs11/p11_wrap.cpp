@@ -118,6 +118,7 @@ CK_RV create_from_raw(CK_SESSION_HANDLE hSession, const std::vector<u8> &raw,
 CK_RV C_WrapKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
                 CK_OBJECT_HANDLE hWrappingKey, CK_OBJECT_HANDLE hKey,
                 CK_BYTE_PTR pWrappedKey, CK_ULONG_PTR pulWrappedKeyLen) {
+  VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   if (!pMechanism || !pulWrappedKeyLen)
@@ -206,12 +207,14 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
         detail_ss.str(), std::nullopt, "C_WrapKey");
   }
   return rv;
+VHSM_C_CATCH
 }
 
 CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
                   CK_OBJECT_HANDLE hUnwrappingKey, CK_BYTE_PTR pWrappedKey,
                   CK_ULONG ulWrappedKeyLen, CK_ATTRIBUTE_PTR pTemplate,
                   CK_ULONG ulAttributeCount, CK_OBJECT_HANDLE_PTR phKey) {
+  VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   if (!pMechanism || !pWrappedKey || !phKey)
@@ -285,11 +288,13 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
         detail_ss.str(), std::nullopt, "C_UnwrapKey");
   }
   return crv;
+VHSM_C_CATCH
 }
 
 CK_RV C_DeriveKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
                   CK_OBJECT_HANDLE hBaseKey, CK_ATTRIBUTE_PTR pTemplate,
                   CK_ULONG ulAttributeCount, CK_OBJECT_HANDLE_PTR phKey) {
+  VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   if (!pMechanism || !phKey)
@@ -359,6 +364,7 @@ CK_RV C_DeriveKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
       "C_DeriveKey (ECDH1) completed from base key " + std::to_string(hBaseKey),
       detail_ss.str(), std::nullopt, "C_DeriveKey");
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 } // namespace vhsm::pkcs11

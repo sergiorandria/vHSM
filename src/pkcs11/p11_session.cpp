@@ -9,6 +9,7 @@ namespace vhsm::pkcs11 {
 
 CK_RV C_OpenSession(CK_SLOT_ID slotID, CK_FLAGS flags, CK_VOID_PTR pApplication,
                     CK_NOTIFY Notify, CK_SESSION_HANDLE_PTR phSession) {
+  VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   if (!phSession)
@@ -17,26 +18,32 @@ CK_RV C_OpenSession(CK_SLOT_ID slotID, CK_FLAGS flags, CK_VOID_PTR pApplication,
     return CKR_SLOT_ID_INVALID;
   return g_sessionManager.openSession(slotID, flags, pApplication, Notify,
                                       phSession);
+VHSM_C_CATCH
 }
 
 CK_RV C_CloseSession(CK_SESSION_HANDLE hSession) {
+  VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   // SessionManager::closeSession destroys the Session object, which owns all
   // per-session operation/find state — nothing global left to clear.
   return g_sessionManager.closeSession(hSession);
+VHSM_C_CATCH
 }
 
 CK_RV C_CloseAllSessions(CK_SLOT_ID slotID) {
+  VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   // SessionManager::closeAllSessions destroys every Session for the slot.
   // Per-session state (op buffers, find results, login state) dies with the
   // Session objects; no parallel global maps to clean up.
   return g_sessionManager.closeAllSessions(slotID);
+VHSM_C_CATCH
 }
 
 CK_RV C_GetSessionInfo(CK_SESSION_HANDLE hSession, CK_SESSION_INFO_PTR pInfo) {
+  VHSM_C_TRY
   if (!pInfo)
     return CKR_ARGUMENTS_BAD;
   auto s = p11_get_session(hSession);
@@ -56,10 +63,12 @@ CK_RV C_GetSessionInfo(CK_SESSION_HANDLE hSession, CK_SESSION_INFO_PTR pInfo) {
     pInfo->state = rw ? CKS_RW_PUBLIC_SESSION : CKS_RO_PUBLIC_SESSION;
   pInfo->ulDeviceError = 0;
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_Login(CK_SESSION_HANDLE hSession, CK_USER_TYPE userType,
               CK_UTF8CHAR_PTR pPin, CK_ULONG ulPinLen) {
+  VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   if (userType != CKU_USER && userType != CKU_SO)
@@ -105,9 +114,11 @@ CK_RV C_Login(CK_SESSION_HANDLE hSession, CK_USER_TYPE userType,
         detail_ss.str(), std::nullopt, "C_Login");
   }
   return rv;
+VHSM_C_CATCH
 }
 
 CK_RV C_Logout(CK_SESSION_HANDLE hSession) {
+  VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   keystore::Token *tok = p11_get_token_for_session(hSession);
@@ -127,6 +138,7 @@ CK_RV C_Logout(CK_SESSION_HANDLE hSession) {
       rv = CKR_OK; // idempotent logout is friendlier and matches old behavior
   }
   return rv;
+VHSM_C_CATCH
 }
 
 } // namespace vhsm::pkcs11
