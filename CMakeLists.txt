@@ -3,6 +3,26 @@ project(VirtualHSM VERSION 1.0.0 LANGUAGES C CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ---------------------------------------------------------------------------
+# Build performance
+#
+# - Default build type: an empty CMAKE_BUILD_TYPE silently drops ALL
+#   optimization flags, so fall back to RelWithDebInfo (-O2 -g).
+# - ccache: enabled automatically when installed on the host.
+# ---------------------------------------------------------------------------
+get_property(_vhsm_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(NOT CMAKE_BUILD_TYPE AND NOT _vhsm_multi_config)
+    set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo MinSizeRel)
+endif()
+
+find_program(VHSM_CCACHE_PROGRAM ccache)
+if(VHSM_CCACHE_PROGRAM)
+    set(CMAKE_C_COMPILER_LAUNCHER   "${VHSM_CCACHE_PROGRAM}")
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${VHSM_CCACHE_PROGRAM}")
+    message(STATUS "VHSM: compiler cache enabled (${VHSM_CCACHE_PROGRAM})")
+endif()
+
+# ---------------------------------------------------------------------------
 # Options
 # ---------------------------------------------------------------------------
 set(VHSM_DB_BACKEND "sqlite" CACHE STRING "Database backend: sqlite|postgres|mysql")
@@ -47,10 +67,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Compiler hardening flags
 # NOTE: -fPIE / -pie and -Wl,... are linker flags, not compile flags.
 #       Pass them through the correct CMake variables.
+# NOTE: Optimization level (-O*) is intentionally NOT set here — it is owned
+#       by CMAKE_BUILD_TYPE so Debug builds stay debuggable and Release/LTO
+#       settings apply consistently.
 # ---------------------------------------------------------------------------
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(
-        -O2
         -Wall
         -Wextra
         -Werror
@@ -71,6 +93,48 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
         /W4 /WX /GS /GL /sdl
         /guard:cf /dynamicbase /nxcompat /highentropyva
     )
+endif()
+
+# ---------------------------------------------------------------------------
+# Interprocedural optimization (LTO)
+#
+# Applied through CMake's IPO support (per-config properties) instead of
+# hand-rolled -flto flags so that every target — including the shared
+# PKCS#11 module — links with matching LTO objects automatically.
+# ---------------------------------------------------------------------------
+include(CheckIPOSupported)
+check_ipo_supported(RESULT _vhsm_ipo_ok OUTPUT _vhsm_ipo_reason)
+option(VHSM_ENABLE_IPO "Enable interprocedural optimization / LTO" ${_vhsm_ipo_ok})
+if(VHSM_ENABLE_IPO)
+    if(NOT _vhsm_ipo_ok)
+        message(WARNING "VHSM_ENABLE_IPO=ON but LTO is not supported by this toolchain: ${_vhsm_ipo_reason}")
+    else()
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE          TRUE)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO   TRUE)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL       TRUE)
+        # Debug keeps -O0 so sanitizers/debuggers behave predictably.
+    endif()
+endif()
+
+# Unity build: concatenates sources per target to cut full-build times.
+# OFF by default because merged TUs can collide on file-local symbols.
+option(VHSM_UNITY_BUILD "Unity build (faster clean builds, slower incremental)" OFF)
+set(CMAKE_UNITY_BUILD ${VHSM_UNITY_BUILD})
+
+# Optional linker override ("default" keeps the toolchain driver choice).
+# NOTE: lld is known-broken with GCC 16 LTO IR in some distros; keep "default"
+# unless you have verified your combination.
+set(VHSM_LINKER "default" CACHE STRING "Linker to use: default|bfd|lld|mold")
+set_property(CACHE VHSM_LINKER PROPERTY STRINGS default bfd lld mold)
+if(NOT VHSM_LINKER STREQUAL "default")
+    include(CheckLinkerFlag)
+    check_linker_flag(CXX "-fuse-ld=${VHSM_LINKER}" _vhsm_have_ld_${VHSM_LINKER})
+    if(_vhsm_have_ld_${VHSM_LINKER})
+        add_link_options(-fuse-ld=${VHSM_LINKER})
+        message(STATUS "VHSM: using ${VHSM_LINKER} linker")
+    else()
+        message(WARNING "VHSM_LINKER=${VHSM_LINKER} not supported by this toolchain — keeping default")
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------

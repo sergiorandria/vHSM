@@ -1,43 +1,28 @@
-# Compiler hardening — peak: LTO + hidden visibility + sanitizer-ready.
-# Usage: add_hardening_flags(my_target) after target creation.
-function(add_hardening_flags TARGET)
+# Per-target hardening extras.
+#
+# Global hardening (warnings, stack protector, FORTIFY_SOURCE, relro/now,
+# PIE) and optimization/LTO are configured centrally in the top-level
+# CMakeLists.txt via add_compile_options()/CMAKE_INTERPROCEDURAL_OPTIMIZATION.
+# This helper only adds flags that must stay opt-in per target.
+#
+# Usage: vhsm_target_hardening(my_target)
+#
+# NOTE: -fvisibility=hidden hides ALL symbols; only use on targets that
+# export explicitly annotated symbols (e.g. PKCS#11 modules exporting
+# C_GetFunctionList). Never apply it to targets relying on default exports.
+function(vhsm_target_hardening TARGET)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(${TARGET} PRIVATE
-            -Wall
-            -Wextra
-            -Werror
-            -Wpedantic
-            -Wconversion
-            -fstack-protector-strong
-            -D_FORTIFY_SOURCE=2
-            -fPIC
             -fvisibility=hidden
             -fvisibility-inlines-hidden
         )
-        # Release → LTO + fat LTO objects for peak devirtualization;
-        # RelWithDebInfo keeps -g for profiling.
-        if(CMAKE_BUILD_TYPE STREQUAL "Release")
-            target_compile_options(${TARGET} PRIVATE -O3 -flto)
-            target_link_options(${TARGET} PRIVATE -flto)
-        elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-            target_compile_options(${TARGET} PRIVATE -O2 -g -flto)
-            target_link_options(${TARGET} PRIVATE -flto)
-        endif()
-        target_link_options(${TARGET} PRIVATE
-            -Wl,-z,relro,-z,now
-            -Wl,--as-needed
-        )
     elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-        target_compile_options(${TARGET} PRIVATE
-            /W4
-            /WX
-            /GS
-            /GL
-            /sdl
-            /guard:cf
-            /dynamicbase
-            /nxcompat
-            /highentropyva
-        )
+        # /GL (whole program opt) and linker-side equivalents are handled
+        # by CMAKE_INTERPROCEDURAL_OPTIMIZATION_* in the top-level file.
     endif()
+endfunction()
+
+# Backwards-compatible alias for the previous name.
+function(add_hardening_flags TARGET)
+    vhsm_target_hardening(${TARGET})
 endfunction()
