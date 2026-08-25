@@ -11,7 +11,7 @@
 namespace vhsm::threadpool {
 
 // Maximum payload stored inline, without a heap allocation, per task.
-constexpr std::size_t k_task_worker_capacity = 256;
+constexpr std::size_t K_TASK_WORKER_CAPACITY = 256;
 
 // Move-only, type-erased holder for a nullary callable.
 //
@@ -19,7 +19,7 @@ constexpr std::size_t k_task_worker_capacity = 256;
 // inline buffer and is relocated (never copied) via type-erased function
 // pointers, so enqueuing/running a task performs no heap allocation in the
 // common case.  A callable is only stored inline if BOTH it fits in
-// k_task_worker_capacity AND its move constructor is noexcept; otherwise
+// K_TASK_WORKER_CAPACITY AND its move constructor is noexcept; otherwise
 // it falls back to a single heap allocation.  This matters because
 // heap-stored payloads are relocated by stealing a pointer (never throws),
 // while inline payloads are relocated by invoking the move constructor
@@ -68,7 +68,7 @@ private:
   //   data_ != nullptr && heap_        caller-allocated block
   //   data_ == nullptr                 empty
   void *data_ = nullptr;
-  alignas(std::max_align_t) std::byte buffer_[k_task_worker_capacity];
+  alignas(std::max_align_t) std::byte buffer_[K_TASK_WORKER_CAPACITY];
   bool heap_allocated_ = false;
 
   std::size_t uid_ = 0;
@@ -104,7 +104,7 @@ template <typename Callable> TaskWorker::TaskWorker(Callable &&task) {
   // else (too big, or a throwing move ctor) goes on the heap, where
   // "relocation" is a pointer steal in transfer() -- always noexcept.
   constexpr bool fits_inline =
-      sizeof(callable_type) <= k_task_worker_capacity &&
+      sizeof(callable_type) <= K_TASK_WORKER_CAPACITY &&
       std::is_nothrow_move_constructible_v<callable_type>;
 
   if constexpr (fits_inline) {

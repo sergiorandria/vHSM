@@ -61,7 +61,7 @@ sqlite3_stmt* SqliteConnection::v_get_cached_stmt(const std::string &sql) {
     sqlite3_clear_bindings(stmt);
     return stmt;
   }
-  if (v_stmt_cache_.size() >= kCacheLimit) {
+  if (v_stmt_cache_.size() >= K_CACHE_LIMIT) {
     v_evict_one();
   }
   sqlite3_stmt *raw = nullptr;

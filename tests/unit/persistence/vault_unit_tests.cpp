@@ -37,7 +37,7 @@ TEST_F(VaultTest, CreateAndLoadRoundTrip) {
   auto vault = Vault::create(path, "correct horse", payload);
   EXPECT_TRUE(vault.is_valid());
   EXPECT_EQ(vault.load(), payload);
-  EXPECT_EQ(vault.version(), kVaultFormatVersion);
+  EXPECT_EQ(vault.version(), K_VAULT_FORMAT_VERSION);
 }
 
 TEST_F(VaultTest, WrongPasswordFails) {

@@ -13,7 +13,7 @@ namespace {
 // SignatureRecord row column order (matches sql_create_signature_records()).
 enum Column : std::size_t {
   kId = 0,
-  kCreatedAt,
+  K_CREATED_AT,
   kSlotId,
   kTokenLabel,
   kKeyId,
