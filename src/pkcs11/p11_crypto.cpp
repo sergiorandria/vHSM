@@ -1009,71 +1009,11 @@ CK_RV C_SignFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature,
     rv = finish_output(sig, pSignature, pulSignatureLen);
 
     // Dispatch to SignatureDispatcher for persistence/audit/notification
+    // Uses shared dispatch_sign_result() — same as C_Sign.
     if (rv == CKR_OK) {
-      auto *dispatcher = p11_signature_dispatcher();
-      if (dispatcher) {
-        // Reload key to get EVP_PKEY for fingerprint
-        auto s_fin = p11_get_session(h);
-        CK_OBJECT_HANDLE k = s_fin ? s_fin->opKey() : CK_INVALID_HANDLE;
-        CK_MECHANISM_TYPE active_mech = s_fin ? s_fin->opMech() : 0;
-        std::optional<std::string> user_label;
-        if (s_fin) {
-          CK_USER_TYPE ut = s_fin->getUserType();
-          if (ut != CKU_INVALID)
-            user_label = "user-" + std::to_string(static_cast<int>(ut));
-        }
-        EVP_PKEY *pk = load_asym_key(h, k);
-        if (pk) {
-          vhsm::crypto::SignResult sign_result;
-          sign_result.signature = sig;
-          sign_result.mechanism_str = mech_to_str(active_mech);
-          sign_result.digest_alg = digest_to_str(active_mech);
-
-          // Compute payload digest (SHA-256 of data)
-          auto payload_hash =
-              p11_hash(vhsm::crypto::HashAlgorithm::SHA256, data);
-          std::ostringstream oss;
-          for (u8 b : payload_hash) {
-            oss << std::hex << std::setw(2) << std::setfill('0')
-                << static_cast<int>(b);
-          }
-          sign_result.payload_digest = oss.str();
-          sign_result.payload_size = data.size();
-
-          // Get key metadata
-          auto obj = p11_get_object(h, k);
-          std::string key_id = obj ? p11_key_id(obj.get()) : "unknown";
-          std::string key_fp = pk ? p11_key_fingerprint(pk) : "unknown";
-
-          // Get session/token info
-          auto *token = p11_get_token_for_session(h);
-          auto session = p11_get_session(h);
-          int slot_id = session ? static_cast<int>(session->getSlotID()) : 0;
-          std::string token_label = token ? token->get_label() : "unknown";
-
-          // Dispatch - enforce require_db_write
-          // Use std::chrono for timestamp (SystemHsmClock::now() is instance
-          // method)
-          int64_t created_at =
-              std::chrono::duration_cast<std::chrono::milliseconds>(
-                  std::chrono::system_clock::now().time_since_epoch())
-                  .count();
-
-          bool dispatch_ok = false;
-          try {
-            dispatch_ok = dispatcher->dispatch(
-                sign_result, created_at, slot_id, token_label, key_id, key_fp,
-                sign_result.mechanism_str, sign_result.digest_alg,
-                std::to_string(h), user_label, std::nullopt);
-          } catch (const std::exception &) {
-            dispatch_ok = false; // DB write failure must not escape the C ABI.
-          }
-
-          if (!dispatch_ok) {
-            rv = CKR_DEVICE_ERROR; // require_db_write enforcement
-          }
-        }
-      }
+      auto sf_sess = p11_get_session(h);
+      CK_MECHANISM_TYPE active_mech = sf_sess ? sf_sess->opMech() : 0;
+      rv = dispatch_sign_result(h, active_mech, data, sig);
     }
   }
   op_end(h);
