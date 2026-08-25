@@ -16,7 +16,7 @@ void rsa_free_key(RSAKeyPair &kp) noexcept {
 }
 
 RSAKeyPair RSAUtil::generate_key(int bits) {
-  VHSM_CHECK_MSG(bits >= 2048,
+  VHSM_CHECK_ARG(bits >= 2048,
                  "RSAUtil::generate_key: key size must be >= 2048 bits");
   auto kp = vhsm::scrypto::rsa_generate(bits);
   return RSAKeyPair{kp.handle, kp.bits};
@@ -24,14 +24,14 @@ RSAKeyPair RSAUtil::generate_key(int bits) {
 
 std::vector<uint8_t> RSAUtil::sign(const RSAKeyPair &key,
                                    const std::vector<uint8_t> &data) {
-  VHSM_CHECK_MSG(key.key != nullptr, "RSAUtil::sign: key is null");
+  VHSM_CHECK_ARG(key.key != nullptr, "RSAUtil::sign: key is null");
   return vhsm::scrypto::rsa_sign({key.key, key.bits}, data,
                                  vhsm::scrypto::RsaPadding::PKCS1, "SHA256");
 }
 
 bool RSAUtil::verify(const RSAKeyPair &key, const std::vector<uint8_t> &data,
                      const std::vector<uint8_t> &signature) {
-  VHSM_CHECK_MSG(key.key != nullptr, "RSAUtil::verify: key is null");
+  VHSM_CHECK_ARG(key.key != nullptr, "RSAUtil::verify: key is null");
   try {
     return vhsm::scrypto::rsa_verify({key.key, key.bits}, data, signature,
                                      vhsm::scrypto::RsaPadding::PKCS1,
