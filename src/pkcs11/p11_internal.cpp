@@ -35,6 +35,10 @@
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
+#include "../crypto/MdCtxGuard.h"
+#include "../crypto/PkeyCtxGuard.h"
+#include "../crypto/CipherCtxGuard.h"
+#include "../crypto/EvpPkeyGuard.h"
 #include <openssl/rsa.h>
 
 #include <algorithm>
@@ -455,11 +459,10 @@ std::vector<u8> p11_hash(vhsm::crypto::HashAlgorithm h,
   const EVP_MD *md = EVP_get_digestbyname(digest_name(h));
   std::vector<u8> out(EVP_MD_size(md));
   unsigned int sz = 0;
-  EVP_MD_CTX *ctx = EVP_MD_CTX_new();
-  EVP_DigestInit_ex(ctx, md, nullptr);
-  EVP_DigestUpdate(ctx, data.data(), data.size());
-  EVP_DigestFinal_ex(ctx, out.data(), &sz);
-  EVP_MD_CTX_free(ctx);
+  vhsm::crypto::MdCtxGuard ctx(EVP_MD_CTX_new());
+  EVP_DigestInit_ex(ctx.getCtx(), md, nullptr);
+  EVP_DigestUpdate(ctx.getCtx(), data.data(), data.size());
+  EVP_DigestFinal_ex(ctx.getCtx(), out.data(), &sz);
   out.resize(sz);
   return out;
 }
@@ -469,15 +472,14 @@ CK_RV p11_rsa_encrypt(EVP_PKEY *key, const std::vector<u8> &in,
                       const std::vector<u8> *label,
                       const std::string &mgf1_md) {
   ERR_clear_error();
-  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(key, nullptr);
+  vhsm::crypto::PkeyCtxGuard ctxGuard(EVP_PKEY_CTX_new(key, nullptr));
+  auto *ctx = ctxGuard.getCtx();
   if (!ctx)
     return CKR_HOST_MEMORY;
   if (EVP_PKEY_encrypt_init(ctx) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return CKR_GENERAL_ERROR;
   }
   if (EVP_PKEY_CTX_set_rsa_padding(ctx, padding) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return CKR_GENERAL_ERROR;
   }
   if (padding == RSA_PKCS1_OAEP_PADDING) {
@@ -496,16 +498,13 @@ CK_RV p11_rsa_encrypt(EVP_PKEY *key, const std::vector<u8> &in,
   }
   size_t outlen = 0;
   if (EVP_PKEY_encrypt(ctx, nullptr, &outlen, in.data(), in.size()) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return CKR_GENERAL_ERROR;
   }
   out.resize(outlen);
   if (EVP_PKEY_encrypt(ctx, out.data(), &outlen, in.data(), in.size()) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return CKR_GENERAL_ERROR;
   }
   out.resize(outlen);
-  EVP_PKEY_CTX_free(ctx);
   return CKR_OK;
 }
 
@@ -514,15 +513,14 @@ CK_RV p11_rsa_decrypt(EVP_PKEY *key, const std::vector<u8> &in,
                       const std::vector<u8> *label,
                       const std::string &mgf1_md) {
   ERR_clear_error();
-  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(key, nullptr);
+  vhsm::crypto::PkeyCtxGuard ctxGuard(EVP_PKEY_CTX_new(key, nullptr));
+  auto *ctx = ctxGuard.getCtx();
   if (!ctx)
     return CKR_HOST_MEMORY;
   if (EVP_PKEY_decrypt_init(ctx) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return CKR_GENERAL_ERROR;
   }
   if (EVP_PKEY_CTX_set_rsa_padding(ctx, padding) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return CKR_GENERAL_ERROR;
   }
   if (padding == RSA_PKCS1_OAEP_PADDING) {
@@ -541,16 +539,13 @@ CK_RV p11_rsa_decrypt(EVP_PKEY *key, const std::vector<u8> &in,
   }
   size_t outlen = 0;
   if (EVP_PKEY_decrypt(ctx, nullptr, &outlen, in.data(), in.size()) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return CKR_GENERAL_ERROR;
   }
   out.resize(outlen);
   if (EVP_PKEY_decrypt(ctx, out.data(), &outlen, in.data(), in.size()) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return CKR_GENERAL_ERROR;
   }
   out.resize(outlen);
-  EVP_PKEY_CTX_free(ctx);
   return CKR_OK;
 }
 
@@ -558,11 +553,11 @@ CK_RV p11_rsa_sign(EVP_PKEY *key, const std::vector<u8> &digest,
                    std::vector<u8> &sig, int padding, const std::string &mdName,
                    const std::string &mgf1_md) {
   ERR_clear_error();
-  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(key, nullptr);
+  vhsm::crypto::PkeyCtxGuard ctxGuard(EVP_PKEY_CTX_new(key, nullptr));
+  auto *ctx = ctxGuard.getCtx();
   if (!ctx)
     return CKR_HOST_MEMORY;
   if (EVP_PKEY_sign_init(ctx) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return CKR_GENERAL_ERROR;
   }
   EVP_PKEY_CTX_set_rsa_padding(ctx, padding);
@@ -579,17 +574,14 @@ CK_RV p11_rsa_sign(EVP_PKEY *key, const std::vector<u8> &digest,
   }
   size_t siglen = 0;
   if (EVP_PKEY_sign(ctx, nullptr, &siglen, digest.data(), digest.size()) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return CKR_GENERAL_ERROR;
   }
   sig.resize(siglen);
   if (EVP_PKEY_sign(ctx, sig.data(), &siglen, digest.data(), digest.size()) <=
       0) {
-    EVP_PKEY_CTX_free(ctx);
     return CKR_GENERAL_ERROR;
   }
   sig.resize(siglen);
-  EVP_PKEY_CTX_free(ctx);
   return CKR_OK;
 }
 
@@ -597,11 +589,11 @@ CK_RV p11_rsa_verify(EVP_PKEY *key, const std::vector<u8> &digest,
                      const std::vector<u8> &sig, int padding,
                      const std::string &mdName, const std::string &mgf1_md) {
   ERR_clear_error();
-  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(key, nullptr);
+  vhsm::crypto::PkeyCtxGuard ctxGuard(EVP_PKEY_CTX_new(key, nullptr));
+  auto *ctx = ctxGuard.getCtx();
   if (!ctx)
     return CKR_HOST_MEMORY;
   if (EVP_PKEY_verify_init(ctx) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return CKR_GENERAL_ERROR;
   }
   EVP_PKEY_CTX_set_rsa_padding(ctx, padding);
@@ -618,78 +610,69 @@ CK_RV p11_rsa_verify(EVP_PKEY *key, const std::vector<u8> &digest,
   }
   int rc = EVP_PKEY_verify(ctx, sig.data(), sig.size(), digest.data(),
                            digest.size());
-  EVP_PKEY_CTX_free(ctx);
   return rc == 1 ? CKR_OK : CKR_SIGNATURE_INVALID;
 }
 
 CK_RV p11_ecdsa_sign(EVP_PKEY *key, const std::vector<u8> &digest,
                      std::vector<u8> &sig) {
   ERR_clear_error();
-  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(key, nullptr);
+  vhsm::crypto::PkeyCtxGuard ctxGuard(EVP_PKEY_CTX_new(key, nullptr));
+  auto *ctx = ctxGuard.getCtx();
   if (!ctx)
     return CKR_HOST_MEMORY;
   if (EVP_PKEY_sign_init(ctx) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return CKR_GENERAL_ERROR;
   }
   size_t siglen = 0;
   if (EVP_PKEY_sign(ctx, nullptr, &siglen, digest.data(), digest.size()) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return CKR_GENERAL_ERROR;
   }
   sig.resize(siglen);
   if (EVP_PKEY_sign(ctx, sig.data(), &siglen, digest.data(), digest.size()) <=
       0) {
-    EVP_PKEY_CTX_free(ctx);
     return CKR_GENERAL_ERROR;
   }
   sig.resize(siglen);
-  EVP_PKEY_CTX_free(ctx);
   return CKR_OK;
 }
 
 CK_RV p11_ecdsa_verify(EVP_PKEY *key, const std::vector<u8> &digest,
                        const std::vector<u8> &sig) {
   ERR_clear_error();
-  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(key, nullptr);
+  vhsm::crypto::PkeyCtxGuard ctxGuard(EVP_PKEY_CTX_new(key, nullptr));
+  auto *ctx = ctxGuard.getCtx();
   if (!ctx)
     return CKR_HOST_MEMORY;
   if (EVP_PKEY_verify_init(ctx) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return CKR_GENERAL_ERROR;
   }
   int rc = EVP_PKEY_verify(ctx, sig.data(), sig.size(), digest.data(),
                            digest.size());
-  EVP_PKEY_CTX_free(ctx);
   return rc == 1 ? CKR_OK : CKR_SIGNATURE_INVALID;
 }
 
 std::vector<u8> p11_ecdh_derive(EVP_PKEY *priv, EVP_PKEY *peer) {
   ERR_clear_error();
-  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(priv, nullptr);
+  vhsm::crypto::PkeyCtxGuard ctxGuard(EVP_PKEY_CTX_new(priv, nullptr));
+  auto *ctx = ctxGuard.getCtx();
   std::vector<u8> secret;
   if (!ctx)
     return secret;
   if (EVP_PKEY_derive_init(ctx) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return secret;
   }
   if (EVP_PKEY_derive_set_peer(ctx, peer) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return secret;
   }
   size_t len = 0;
   if (EVP_PKEY_derive(ctx, nullptr, &len) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return secret;
   }
   secret.resize(len);
   if (EVP_PKEY_derive(ctx, secret.data(), &len) <= 0) {
-    EVP_PKEY_CTX_free(ctx);
     return {};
   }
   secret.resize(len);
-  EVP_PKEY_CTX_free(ctx);
   return secret;
 }
 
@@ -700,7 +683,8 @@ CK_RV p11_aes_gcm_encrypt(const std::vector<u8> &key, const std::vector<u8> &iv,
   const EVP_CIPHER *cipher = (key.size() == 32)   ? EVP_aes_256_gcm()
                              : (key.size() == 24) ? EVP_aes_192_gcm()
                                                   : EVP_aes_128_gcm();
-  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+  vhsm::crypto::CipherCtxGuard ctxGuard(EVP_CIPHER_CTX_new());
+  auto *ctx = ctxGuard.getCtx();
   if (!ctx)
     return CKR_HOST_MEMORY;
   int rc = CKR_OK;
@@ -742,7 +726,6 @@ CK_RV p11_aes_gcm_encrypt(const std::vector<u8> &key, const std::vector<u8> &iv,
       break;
     }
   } while (0);
-  EVP_CIPHER_CTX_free(ctx);
   return rc;
 }
 
@@ -755,7 +738,8 @@ CK_RV p11_aes_gcm_decrypt(const std::vector<u8> &key, const std::vector<u8> &iv,
   const EVP_CIPHER *cipher = (key.size() == 32)   ? EVP_aes_256_gcm()
                              : (key.size() == 24) ? EVP_aes_192_gcm()
                                                   : EVP_aes_128_gcm();
-  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+  vhsm::crypto::CipherCtxGuard ctxGuard(EVP_CIPHER_CTX_new());
+  auto *ctx = ctxGuard.getCtx();
   if (!ctx)
     return CKR_HOST_MEMORY;
   int rc = CKR_GENERAL_ERROR;
@@ -785,7 +769,6 @@ CK_RV p11_aes_gcm_decrypt(const std::vector<u8> &key, const std::vector<u8> &iv,
       rc = CKR_OK;
     }
   } while (0);
-  EVP_CIPHER_CTX_free(ctx);
   return rc;
 }
 
@@ -902,11 +885,11 @@ std::string p11_key_fingerprint(EVP_PKEY *pkey) {
         const EVP_MD *md = EVP_sha256();
         std::vector<u8> hash(EVP_MD_size(md));
         unsigned int hash_len = 0;
-        EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+        vhsm::crypto::MdCtxGuard mdGuard(EVP_MD_CTX_new());
+        auto *ctx = mdGuard.getCtx();
         EVP_DigestInit_ex(ctx, md, nullptr);
         EVP_DigestUpdate(ctx, der.data(), der.size());
         EVP_DigestFinal_ex(ctx, hash.data(), &hash_len);
-        EVP_MD_CTX_free(ctx);
 
         // Convert to hex
         std::ostringstream oss;
@@ -930,11 +913,11 @@ std::string p11_key_fingerprint(EVP_PKEY *pkey) {
         const EVP_MD *md = EVP_sha256();
         std::vector<u8> hash(EVP_MD_size(md));
         unsigned int hash_len = 0;
-        EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+        vhsm::crypto::MdCtxGuard mdGuard(EVP_MD_CTX_new());
+        auto *ctx = mdGuard.getCtx();
         EVP_DigestInit_ex(ctx, md, nullptr);
         EVP_DigestUpdate(ctx, der.data(), der.size());
         EVP_DigestFinal_ex(ctx, hash.data(), &hash_len);
-        EVP_MD_CTX_free(ctx);
 
         // Convert to hex
         std::ostringstream oss;
