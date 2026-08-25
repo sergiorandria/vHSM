@@ -23,6 +23,8 @@ jobs:
 
   windows:
     runs-on: windows-latest
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,9 +33,10 @@ jobs:
         with: { go-version: '1.22' }
       - name: Setup vcpkg
         run: |
-          git clone https://github.com/microsoft/vcpkg $env:VCPKG_ROOT
+          if (-not (Test-Path $env:VCPKG_ROOT)) {
+            git clone https://github.com/microsoft/vcpkg $env:VCPKG_ROOT
+          }
           & "$env:VCPKG_ROOT/bootstrap-vcpkg.bat"
-          vcpkg install --triplet x64-windows sqlite3 openssl curl nlohmann-json gtest --x-manifest-root=.
         shell: pwsh
       - name: Configure (db backend, MSVC)
         run: cmake --preset windows-msvc -DVHSM_STORE_BACKEND=db
