@@ -25,7 +25,7 @@ namespace vhsm::session {
 /// but different cursors would be confusing (are they independent iterations?).
 /// Move is allowed to let callers transfer ownership without copying.
 ///
-/// WHY throw HsmException on next() when empty: Calling next() without checking
+/// WHY throw std::out_of_range on next() when empty: Calling next() without checking
 /// has_next() is a logic error. Throwing makes the error explicit
 /// (fail-closed). Some callers may catch the exception; others rely on the
 /// check.
@@ -57,10 +57,10 @@ public:
   /// WHY next() returns a single handle (not a batch): Callers may want to
   /// process one handle at a time (e.g., C_FindObjects returns
   /// CK_OBJECT_HANDLE[ulMaxObjectCount], a variable-size array). next() lets
-  /// them fetch one at a time, simplifying the API. Throws HsmException if no
+  /// them fetch one at a time, simplifying the API. Throws std::out_of_range if no
   /// matches remain (fail-closed: better than returning a sentinel or null).
   /// Return the next ObjectHandle and advance the internal cursor.
-  /// Throws HsmException if no matches remain.
+  /// Throws std::out_of_range if no matches remain.
   CK_OBJECT_HANDLE next();
 
   /// WHY reset() is separate: Sometimes applications want to start a find
