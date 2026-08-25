@@ -41,7 +41,7 @@ private:
   // LRU eviction at 32 entries to bound memory; hot statements (insert,
   // update_ledger, etc.) stay cached across C_Sign calls.
   std::unordered_map<std::string, sqlite3_stmt*> v_stmt_cache_;
-  static constexpr size_t kCacheLimit = 32;
+  static constexpr size_t K_CACHE_LIMIT = 32;
 
   sqlite3_stmt* v_get_cached_stmt(const std::string &sql);
   void v_evict_one();

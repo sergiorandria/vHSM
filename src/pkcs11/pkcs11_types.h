@@ -44,7 +44,7 @@
 #ifndef VHSM_PKCS11_TYPES_H
 #define VHSM_PKCS11_TYPES_H
 
-#include "../core/types.h"
+#include "../domain/pkcs11/pkcs11_types.h"
 
 #include <cstddef>
 
@@ -55,11 +55,9 @@
 // indicate "information not available" (e.g., ulFreePublicMemory when not
 // supported). Defined as a macro for C compatibility; also used as a
 // placeholder in token info.
-#define CK_UNAVAILABLE_INFORMATION (~(CK_ULONG)0)
 
 // WHY CK_EFFECTIVELY_INFINITE: Represents unlimited capacity (e.g., max session
 // count). Set to 0UL by convention; callers interpret 0 as "unlimited".
-#define CK_EFFECTIVELY_INFINITE 0UL
 
 // WHY CK_INVALID_HANDLE: All PKCS#11 handles (slot, session, object) use
 // CK_ULONG. 0 is reserved to mean "invalid" (CK_INVALID_HANDLE). Valid handles
@@ -258,128 +256,6 @@ typedef CK_MECHANISM_INFO *CK_MECHANISM_INFO_PTR;
 // operations are valid (e.g., CKO_PRIVATE_KEY can be used to sign;
 // CKO_PUBLIC_KEY can verify). vHSM supports PRIVATE_KEY, PUBLIC_KEY, and
 // CERTIFICATE.
-inline constexpr CK_ULONG CKO_DATA = 0x00000000UL;
-inline constexpr CK_ULONG CKO_CERTIFICATE = 0x00000001UL;
-inline constexpr CK_ULONG CKO_PUBLIC_KEY = 0x00000002UL;
-inline constexpr CK_ULONG CKO_PRIVATE_KEY = 0x00000003UL;
-inline constexpr CK_ULONG CKO_SECRET_KEY = 0x00000004UL;
-inline constexpr CK_ULONG CKO_HW_FEATURE = 0x00000005UL;
-inline constexpr CK_ULONG CKO_DOMAIN_PARAMETERS = 0x00000006UL;
-inline constexpr CK_ULONG CKO_MECHANISM = 0x00000007UL;
-inline constexpr CK_ULONG CKO_OTP_KEY = 0x00000008UL;
-inline constexpr CK_ULONG CKO_OTHER = 0x00000010UL;
-inline constexpr CK_ULONG CKO_VENDOR_DEFINED = 0x80000000UL;
-
-// ---------------------------------------------------------------------------
-// Key types
-// ---------------------------------------------------------------------------
-// WHY key types (CKK_RSA, CKK_EC, CKK_AES): Specify the algorithm of a key.
-// CKK_RSA = RSA key. CKK_EC = Elliptic curve key. CKK_AES = AES symmetric key.
-// vHSM supports RSA and EC for signing/verification, AES for (potential)
-// encryption. The key type determines which operations are valid (e.g., RSA can
-// sign with PKCS or PSS).
-inline constexpr CK_ULONG CKK_RSA = 0x00000000UL;
-inline constexpr CK_ULONG CKK_DSA = 0x00000001UL;
-inline constexpr CK_ULONG CKK_DH = 0x00000002UL;
-inline constexpr CK_ULONG CKK_EC = 0x00000003UL;
-inline constexpr CK_ULONG CKK_X9_42_DH = 0x00000004UL;
-inline constexpr CK_ULONG CKK_KEA = 0x00000005UL;
-inline constexpr CK_ULONG CKK_GENERIC_SECRET = 0x00000010UL;
-inline constexpr CK_ULONG CKK_RC4 = 0x00000012UL;
-inline constexpr CK_ULONG CKK_DES = 0x00000013UL;
-inline constexpr CK_ULONG CKK_DES2 = 0x00000014UL;
-inline constexpr CK_ULONG CKK_DES3 = 0x00000015UL;
-inline constexpr CK_ULONG CKK_CAST128 = 0x00000018UL;
-inline constexpr CK_ULONG CKK_RC5 = 0x00000019UL;
-inline constexpr CK_ULONG CKK_AES = 0x0000001FUL;
-inline constexpr CK_ULONG CKK_BLOWFISH = 0x00000020UL;
-inline constexpr CK_ULONG CKK_TWOFISH = 0x00000021UL;
-inline constexpr CK_ULONG CKK_SHA_1_HMAC = 0x00000028UL;
-inline constexpr CK_ULONG CKK_SHA256_HMAC = 0x0000002BUL;
-inline constexpr CK_ULONG CKK_SHA384_HMAC = 0x0000002CUL;
-inline constexpr CK_ULONG CKK_SHA512_HMAC = 0x0000002DUL;
-inline constexpr CK_ULONG CKK_EC_EDWARDS = 0x00000040UL;
-inline constexpr CK_ULONG CKK_EC_MONTGOMERY = 0x00000041UL;
-inline constexpr CK_ULONG CKK_VENDOR_DEFINED = 0x80000000UL;
-
-// ---------------------------------------------------------------------------
-// Attribute types
-// ---------------------------------------------------------------------------
-// WHY attribute types (CKA_LABEL, CKA_ID, CKA_SIGN, etc.): Objects are
-// described by attributes. CKA_LABEL is the human-readable name. CKA_ID is a
-// unique identifier within a token. CKA_SIGN indicates if the key can be used
-// for signing. CKA_PRIVATE indicates if the object is private (session or token
-// private) or public. vHSM validates attributes on object creation
-// (C_CreateObject) and supports querying them (C_GetAttributeValue).
-inline constexpr CK_ULONG CKA_CLASS = 0x00000000UL;
-inline constexpr CK_ULONG CKA_TOKEN = 0x00000001UL;
-inline constexpr CK_ULONG CKA_PRIVATE = 0x00000002UL;
-inline constexpr CK_ULONG CKA_LABEL = 0x00000003UL;
-inline constexpr CK_ULONG CKA_APPLICATION = 0x00000010UL;
-inline constexpr CK_ULONG CKA_VALUE = 0x00000011UL;
-inline constexpr CK_ULONG CKA_OBJECT_ID = 0x00000012UL;
-inline constexpr CK_ULONG CKA_CERTIFICATE_TYPE = 0x00000080UL;
-inline constexpr CK_ULONG CKA_ISSUER = 0x00000081UL;
-inline constexpr CK_ULONG CKA_SERIAL_NUMBER = 0x00000082UL;
-inline constexpr CK_ULONG CKA_ATTR_TYPES = 0x00000085UL;
-inline constexpr CK_ULONG CKA_TRUSTED = 0x00000086UL;
-inline constexpr CK_ULONG CKA_URL = 0x00000089UL;
-inline constexpr CK_ULONG CKA_CHECK_VALUE = 0x00000090UL;
-inline constexpr CK_ULONG CKA_KEY_TYPE = 0x00000100UL;
-inline constexpr CK_ULONG CKA_SUBJECT = 0x00000101UL;
-inline constexpr CK_ULONG CKA_ID = 0x00000102UL;
-inline constexpr CK_ULONG CKA_SENSITIVE = 0x00000103UL;
-inline constexpr CK_ULONG CKA_ENCRYPT = 0x00000104UL;
-inline constexpr CK_ULONG CKA_DECRYPT = 0x00000105UL;
-inline constexpr CK_ULONG CKA_WRAP = 0x00000106UL;
-inline constexpr CK_ULONG CKA_UNWRAP = 0x00000107UL;
-inline constexpr CK_ULONG CKA_SIGN = 0x00000108UL;
-inline constexpr CK_ULONG CKA_SIGN_RECOVER = 0x00000109UL;
-inline constexpr CK_ULONG CKA_VERIFY = 0x0000010AUL;
-inline constexpr CK_ULONG CKA_VERIFY_RECOVER = 0x0000010BUL;
-inline constexpr CK_ULONG CKA_DERIVE = 0x0000010CUL;
-inline constexpr CK_ULONG CKA_START_DATE = 0x00000110UL;
-inline constexpr CK_ULONG CKA_END_DATE = 0x00000111UL;
-inline constexpr CK_ULONG CKA_MODULUS = 0x00000120UL;
-inline constexpr CK_ULONG CKA_MODULUS_BITS = 0x00000121UL;
-inline constexpr CK_ULONG CKA_PUBLIC_EXPONENT = 0x00000122UL;
-inline constexpr CK_ULONG CKA_PRIVATE_EXPONENT = 0x00000123UL;
-inline constexpr CK_ULONG CKA_PRIME_1 = 0x00000124UL;
-inline constexpr CK_ULONG CKA_PRIME_2 = 0x00000125UL;
-inline constexpr CK_ULONG CKA_EXPONENT_1 = 0x00000126UL;
-inline constexpr CK_ULONG CKA_EXPONENT_2 = 0x00000127UL;
-inline constexpr CK_ULONG CKA_COEFFICIENT = 0x00000128UL;
-inline constexpr CK_ULONG CKA_PUBLIC_KEY_INFO = 0x00000129UL;
-inline constexpr CK_ULONG CKA_PRIME = 0x00000130UL;
-inline constexpr CK_ULONG CKA_SUBPRIME = 0x00000131UL;
-inline constexpr CK_ULONG CKA_BASE = 0x00000132UL;
-inline constexpr CK_ULONG CKA_PRIME_BITS = 0x00000133UL;
-inline constexpr CK_ULONG CKA_SUBPRIME_BITS = 0x00000134UL;
-inline constexpr CK_ULONG CKA_VALUE_BITS = 0x00000160UL;
-inline constexpr CK_ULONG CKA_VALUE_LEN = 0x00000161UL;
-inline constexpr CK_ULONG CKA_EXTRACTABLE = 0x00000162UL;
-inline constexpr CK_ULONG CKA_LOCAL = 0x00000163UL;
-inline constexpr CK_ULONG CKA_NEVER_EXTRACTABLE = 0x00000164UL;
-inline constexpr CK_ULONG CKA_ALWAYS_SENSITIVE = 0x00000165UL;
-inline constexpr CK_ULONG CKA_KEY_GEN_MECHANISM = 0x00000166UL;
-inline constexpr CK_ULONG CKA_MODIFIABLE = 0x00000170UL;
-inline constexpr CK_ULONG CKA_COPYABLE = 0x00000171UL;
-inline constexpr CK_ULONG CKA_DESTROYABLE = 0x00000172UL;
-inline constexpr CK_ULONG CKA_EC_PARAMS = 0x00000180UL;
-inline constexpr CK_ULONG CKA_EC_POINT = 0x00000181UL;
-inline constexpr CK_ULONG CKA_ALWAYS_AUTHENTICATE = 0x00000202UL;
-inline constexpr CK_ULONG CKA_WRAP_WITH_TRUSTED = 0x00000210UL;
-inline constexpr CK_ULONG CKA_ALLOWED_MECHANISMS = 0x00000600UL;
-inline constexpr CK_ULONG CKA_VENDOR_DEFINED = 0x80000000UL;
-
-// ---------------------------------------------------------------------------
-// Remaining return codes
-// ---------------------------------------------------------------------------
-// WHY error codes (CKR_*): Each C function returns a CK_RV (return value). The
-// standard defines error codes like CKR_OK (success), CKR_ARGUMENTS_BAD
-// (invalid args), CKR_SIGNATURE_INVALID (verify failed). The C++ implementation
-// throws exceptions; the C wrapper converts exceptions to error codes before
-// returning. This preserves the PKCS#11 error model for C applications.
 #define CKR_CRYPTOKI_NOT_INITIALIZED ((CK_RV)0x000000D0UL)
 #define CKR_CRYPTOKI_ALREADY_INITIALIZED ((CK_RV)0x000000D1UL)
 #define CKR_FUNCTION_NOT_PARALLEL ((CK_RV)0x000000D2UL)

@@ -1,7 +1,8 @@
 #ifndef vHSM_SIGN_CONTEXT_H
 #define vHSM_SIGN_CONTEXT_H
 
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/pkcs11/pkcs11_types.h"
 #include "OpContext.h"
 #include <memory>
 #include <vector>
@@ -21,7 +22,7 @@ namespace vhsm::session {
 /// them in the context ensures they're available when C_SignFinal is called
 /// (possibly much later).
 ///
-/// WHY throw CryptoException on invalid key_handle: If the handle is
+/// WHY throw std::invalid_argument on invalid key_handle: If the handle is
 /// INVALID_HANDLE (0), the signing will fail anyway. Throwing early (in the
 /// constructor) catches the bug immediately and provides a clear error message.
 /// Better than deferring the error to C_SignFinal (where the context for

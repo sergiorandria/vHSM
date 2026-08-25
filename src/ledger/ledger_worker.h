@@ -7,7 +7,9 @@
 #include <memory>
 #include <string>
 
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/crypto/crypto_types.h"
+#include "../domain/signing/signature_record.h"
 #include "../notification/notification_bus.h"
 #include "../threadpool/capability_token.h"
 #include "../threadpool/thread_pool.h"

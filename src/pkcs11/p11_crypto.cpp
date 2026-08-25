@@ -5,6 +5,7 @@
 #include "../core/hsm_instance.h"
 #include "../core/system_hsm_clock.h"
 #include "../crypto/crypto_engine.h"
+#include "../crypto/EvpPkeyGuard.h"
 #include "../signature_store/signature_dispatcher.h"
 
 #include <openssl/evp.h>
@@ -146,25 +147,60 @@ static session::Session *op_session(CK_SESSION_HANDLE h) {
 }
 
 // ----- Encrypt / Decrypt -----
+// Shared session state read for encrypt/decrypt. All references point into
+// Session-owned storage (no copies).
+struct EncDecParams {
+  CK_MECHANISM_TYPE mech;
+  CK_OBJECT_HANDLE key;
+  const std::vector<u8> *gcm_iv;
+  const std::vector<u8> *gcm_aad;
+  const std::string *oaep_mgf1;
+  const std::vector<u8> *oaep_label;
+};
+
+static EncDecParams read_encdec_params(session::Session *sess) {
+  return {sess->opMech(),   sess->opKey(),        &sess->gcmIv(),
+          &sess->gcmAad(),  &sess->oaepMgf1(),    &sess->oaepLabel()};
+}
+
+// Shared RSA encrypt/decrypt padding+label resolution.
+struct RsaEncDecParams {
+  int padding;
+  std::string md;
+  const std::vector<u8> *label_ptr; // points into oaep_label
+};
+
+static RsaEncDecParams resolve_rsa_encdec(CK_MECHANISM_TYPE mech,
+                                           const std::string &oaep_mgf1,
+                                           const std::vector<u8> &oaep_label) {
+  RsaEncDecParams p;
+  p.padding = RSA_PKCS1_PADDING;
+  p.md.clear();
+  p.label_ptr = nullptr;
+  if (mech == CKM_RSA_X_509)
+    p.padding = RSA_NO_PADDING;
+  else if (mech == CKM_RSA_PKCS_OAEP) {
+    p.padding = RSA_PKCS1_OAEP_PADDING;
+    p.md = oaep_mgf1;
+    if (!oaep_label.empty())
+      p.label_ptr = &oaep_label;
+  }
+  return p;
+}
+
 CK_RV do_encrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
                  std::vector<u8> &out) {
   auto *sess = op_session(h);
   if (!sess)
     return CKR_SESSION_HANDLE_INVALID;
-  // Single Session read — replaces two g_stateMutex acquisitions.
-  CK_MECHANISM_TYPE mech = sess->opMech();
-  CK_OBJECT_HANDLE k = sess->opKey();
-  const std::vector<u8> &gcm_iv = sess->gcmIv();
-  const std::vector<u8> &gcm_aad = sess->gcmAad();
-  const std::string &oaep_mgf1 = sess->oaepMgf1();
-  const std::vector<u8> &oaep_label = sess->oaepLabel();
+  auto prm = read_encdec_params(sess);
 
-  if (mech == CKM_AES_GCM) {
-    std::vector<u8> key = load_secret_key(h, k);
+  if (prm.mech == CKM_AES_GCM) {
+    std::vector<u8> key = load_secret_key(h, prm.key);
     if (key.empty())
       return CKR_KEY_HANDLE_INVALID;
     std::vector<u8> ct, tag;
-    CK_RV rv = p11_aes_gcm_encrypt(key, gcm_iv, gcm_aad, in, ct, tag);
+    CK_RV rv = p11_aes_gcm_encrypt(key, *prm.gcm_iv, *prm.gcm_aad, in, ct, tag);
     if (rv == CKR_OK) {
       out = ct;
       out.insert(out.end(), tag.begin(), tag.end());
@@ -172,23 +208,12 @@ CK_RV do_encrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
     return rv;
   }
 
-  EVP_PKEY *pk = load_asym_key(h, k);
+  vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, prm.key));
+  auto *pk = pk_guard.get();
   if (!pk)
     return CKR_KEY_HANDLE_INVALID;
-  int padding = RSA_PKCS1_PADDING;
-  std::string md;
-  if (mech == CKM_RSA_X_509)
-    padding = RSA_NO_PADDING;
-  else if (mech == CKM_RSA_PKCS_OAEP) {
-    padding = RSA_PKCS1_OAEP_PADDING;
-    md = oaep_mgf1;
-  }
-  const std::vector<u8> *labelPtr =
-      (mech == CKM_RSA_PKCS_OAEP && !oaep_label.empty()) ? &oaep_label
-                                                         : nullptr;
-  CK_RV rv = p11_rsa_encrypt(pk, in, out, padding, labelPtr, md);
-  EVP_PKEY_free(pk);
-  return rv;
+  auto rsa = resolve_rsa_encdec(prm.mech, *prm.oaep_mgf1, *prm.oaep_label);
+  return p11_rsa_encrypt(pk, in, out, rsa.padding, rsa.label_ptr, rsa.md);
 }
 
 CK_RV do_decrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
@@ -196,112 +221,97 @@ CK_RV do_decrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
   auto *sess = op_session(h);
   if (!sess)
     return CKR_SESSION_HANDLE_INVALID;
-  CK_MECHANISM_TYPE mech = sess->opMech();
-  CK_OBJECT_HANDLE k = sess->opKey();
-  const std::vector<u8> &gcm_iv = sess->gcmIv();
-  const std::vector<u8> &gcm_aad = sess->gcmAad();
-  const std::string &oaep_mgf1 = sess->oaepMgf1();
-  const std::vector<u8> &oaep_label = sess->oaepLabel();
+  auto prm = read_encdec_params(sess);
 
-  if (mech == CKM_AES_GCM) {
-    std::vector<u8> key = load_secret_key(h, k);
+  if (prm.mech == CKM_AES_GCM) {
+    std::vector<u8> key = load_secret_key(h, prm.key);
     if (key.empty())
       return CKR_KEY_HANDLE_INVALID;
-    const size_t tagLen = 16;
-    if (in.size() < tagLen)
+    constexpr size_t kGcmTagLen = 16;
+    if (in.size() < kGcmTagLen)
       return CKR_ENCRYPTED_DATA_LEN_RANGE;
-    std::vector<u8> ct(in.begin(), in.end() - tagLen);
-    std::vector<u8> tag(in.end() - tagLen, in.end());
-    return p11_aes_gcm_decrypt(key, gcm_iv, gcm_aad, ct, tag, out);
+    std::vector<u8> ct(in.begin(), in.end() - kGcmTagLen);
+    std::vector<u8> tag(in.end() - kGcmTagLen, in.end());
+    return p11_aes_gcm_decrypt(key, *prm.gcm_iv, *prm.gcm_aad, ct, tag, out);
   }
 
-  EVP_PKEY *pk = load_asym_key(h, k);
+  vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, prm.key));
+  auto *pk = pk_guard.get();
   if (!pk)
     return CKR_KEY_HANDLE_INVALID;
-  int padding = RSA_PKCS1_PADDING;
-  std::string md;
-  if (mech == CKM_RSA_X_509)
-    padding = RSA_NO_PADDING;
-  else if (mech == CKM_RSA_PKCS_OAEP) {
-    padding = RSA_PKCS1_OAEP_PADDING;
-    md = oaep_mgf1;
-  }
-  const std::vector<u8> *labelPtr =
-      (mech == CKM_RSA_PKCS_OAEP && !oaep_label.empty()) ? &oaep_label
-                                                         : nullptr;
-  CK_RV rv = p11_rsa_decrypt(pk, in, out, padding, labelPtr, md);
-  EVP_PKEY_free(pk);
-  return rv;
+  auto rsa = resolve_rsa_encdec(prm.mech, *prm.oaep_mgf1, *prm.oaep_label);
+  return p11_rsa_decrypt(pk, in, out, rsa.padding, rsa.label_ptr, rsa.md);
 }
 
 // ----- Sign / Verify -----
+// Shared mechanism→(padding, hash) resolution for RSA sign/verify.
+static bool resolve_rsa_mech(CK_MECHANISM_TYPE mech,
+                              const std::vector<u8> &data, int &padding,
+                              std::string &mdName, std::string &mgf1,
+                              std::vector<u8> &tosign) {
+  padding = RSA_PKCS1_PADDING;
+  mdName.clear();
+  mgf1.clear();
+  tosign = data;
+  if (mech == CKM_RSA_PKCS) {
+  } else if (mech == CKM_RSA_X_509) {
+    padding = RSA_NO_PADDING;
+  } else if (mech == CKM_RSA_PKCS_PSS) {
+    padding = RSA_PKCS1_PSS_PADDING;
+    mdName = "SHA256";
+    mgf1 = "SHA256";
+    tosign = p11_hash(vhsm::crypto::HashAlgorithm::SHA256, data);
+  } else if (mech == CKM_RSA_PKCS_OAEP) {
+    return false;
+  } else {
+    auto ha = mech_to_hash(mech);
+    bool pss = (mech == CKM_SHA256_RSA_PKCS_PSS ||
+                mech == CKM_SHA384_RSA_PKCS_PSS ||
+                mech == CKM_SHA512_RSA_PKCS_PSS);
+    padding = pss ? RSA_PKCS1_PSS_PADDING : RSA_PKCS1_PADDING;
+    mdName = digest_name(ha);
+    mgf1 = pss ? mdName : std::string();
+    tosign = p11_hash(ha, data);
+  }
+  return true;
+}
+
+static std::vector<u8>
+resolve_ec_mech(CK_MECHANISM_TYPE mech, const std::vector<u8> &data) {
+  if (mech == CKM_ECDSA)
+    return data;
+  return p11_hash(mech_to_hash(mech), data);
+}
+
 CK_RV do_sign(CK_SESSION_HANDLE h, const std::vector<u8> &data,
               std::vector<u8> &sig) {
   auto *sess = op_session(h);
   if (!sess)
     return CKR_SESSION_HANDLE_INVALID;
-  // One Session read replaces the two separate g_stateMutex sections.
   const CK_MECHANISM_TYPE mech = sess->opMech();
   const CK_OBJECT_HANDLE k = sess->opKey();
-  EVP_PKEY *pk = load_asym_key(h, k);
+  vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, k));
+  auto *pk = pk_guard.get();
   if (!pk)
     return CKR_KEY_HANDLE_INVALID;
-  // PKCS#11: mechanism family must match key family — silent substitution
-  // (signing RSA-mech with an EC key) is CKR_KEY_TYPE_INCONSISTENT, not a
-  // best-effort native fallback.
   {
-    const int base = EVP_PKEY_get_base_id(pk);
+    int base = EVP_PKEY_get_base_id(pk);
     if ((is_rsa_mech(mech) && base != EVP_PKEY_RSA) ||
         (is_ec_mech(mech) && base != EVP_PKEY_EC)) {
-      EVP_PKEY_free(pk);
       return CKR_KEY_TYPE_INCONSISTENT;
     }
   }
-
-  CK_RV rv = CKR_MECHANISM_INVALID;
+  CK_RV rv;
   if (is_rsa_mech(mech)) {
-    int padding = RSA_PKCS1_PADDING;
-    std::string mdName, mgf1;
-    std::vector<u8> tosign;
-    if (mech == CKM_RSA_PKCS) {
-      padding = RSA_PKCS1_PADDING;
-      mdName.clear();
-      tosign = data;
-    } else if (mech == CKM_RSA_X_509) {
-      padding = RSA_NO_PADDING;
-      mdName.clear();
-      tosign = data;
-    } else if (mech == CKM_RSA_PKCS_PSS) {
-      padding = RSA_PKCS1_PSS_PADDING;
-      mdName = "SHA256";
-      mgf1 = "SHA256";
-      tosign = p11_hash(vhsm::crypto::HashAlgorithm::SHA256, data);
-    } else if (mech == CKM_RSA_PKCS_OAEP) {
-      rv = CKR_MECHANISM_INVALID;
-    } else {
-      vhsm::crypto::HashAlgorithm ha = mech_to_hash(mech);
-      bool pss =
-          (mech == CKM_SHA256_RSA_PKCS_PSS || mech == CKM_SHA384_RSA_PKCS_PSS ||
-           mech == CKM_SHA512_RSA_PKCS_PSS);
-      padding = pss ? RSA_PKCS1_PSS_PADDING : RSA_PKCS1_PADDING;
-      mdName = digest_name(ha);
-      mgf1 = pss ? mdName : std::string();
-      tosign = p11_hash(ha, data);
-    }
-    if (rv == CKR_MECHANISM_INVALID) {
-      EVP_PKEY_free(pk);
-      return rv;
+    int padding; std::string mdName, mgf1; std::vector<u8> tosign;
+    if (!resolve_rsa_mech(mech, data, padding, mdName, mgf1, tosign)) {
+      return CKR_MECHANISM_INVALID;
     }
     rv = p11_rsa_sign(pk, tosign, sig, padding, mdName, mgf1);
   } else if (is_ec_mech(mech)) {
-    std::vector<u8> tosign;
-    if (mech == CKM_ECDSA)
-      tosign = data;
-    else
-      tosign = p11_hash(mech_to_hash(mech), data);
-    rv = p11_ecdsa_sign(pk, tosign, sig);
-  }
-  EVP_PKEY_free(pk);
+    rv = p11_ecdsa_sign(pk, resolve_ec_mech(mech, data), sig);
+  } else
+    rv = CKR_MECHANISM_INVALID;
   return rv;
 }
 
@@ -310,68 +320,30 @@ CK_RV do_verify(CK_SESSION_HANDLE h, const std::vector<u8> &data,
   auto *sess = op_session(h);
   if (!sess)
     return CKR_SESSION_HANDLE_INVALID;
-  // One Session read replaces the two separate g_stateMutex sections.
   const CK_MECHANISM_TYPE mech = sess->opMech();
   const CK_OBJECT_HANDLE k = sess->opKey();
-  EVP_PKEY *pk = load_asym_key(h, k);
+  vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, k));
+  auto *pk = pk_guard.get();
   if (!pk)
     return CKR_KEY_HANDLE_INVALID;
-  // PKCS#11: mechanism family must match key family — silent substitution
-  // (signing RSA-mech with an EC key) is CKR_KEY_TYPE_INCONSISTENT, not a
-  // best-effort native fallback.
   {
-    const int base = EVP_PKEY_get_base_id(pk);
+    int base = EVP_PKEY_get_base_id(pk);
     if ((is_rsa_mech(mech) && base != EVP_PKEY_RSA) ||
         (is_ec_mech(mech) && base != EVP_PKEY_EC)) {
-      EVP_PKEY_free(pk);
       return CKR_KEY_TYPE_INCONSISTENT;
     }
   }
-
-  CK_RV rv = CKR_MECHANISM_INVALID;
+  CK_RV rv;
   if (is_rsa_mech(mech)) {
-    int padding = RSA_PKCS1_PADDING;
-    std::string mdName, mgf1;
-    std::vector<u8> tosign;
-    if (mech == CKM_RSA_PKCS) {
-      padding = RSA_PKCS1_PADDING;
-      mdName.clear();
-      tosign = data;
-    } else if (mech == CKM_RSA_X_509) {
-      padding = RSA_NO_PADDING;
-      mdName.clear();
-      tosign = data;
-    } else if (mech == CKM_RSA_PKCS_PSS) {
-      padding = RSA_PKCS1_PSS_PADDING;
-      mdName = "SHA256";
-      mgf1 = "SHA256";
-      tosign = p11_hash(vhsm::crypto::HashAlgorithm::SHA256, data);
-    } else if (mech == CKM_RSA_PKCS_OAEP) {
-      rv = CKR_MECHANISM_INVALID;
-    } else {
-      vhsm::crypto::HashAlgorithm ha = mech_to_hash(mech);
-      bool pss =
-          (mech == CKM_SHA256_RSA_PKCS_PSS || mech == CKM_SHA384_RSA_PKCS_PSS ||
-           mech == CKM_SHA512_RSA_PKCS_PSS);
-      padding = pss ? RSA_PKCS1_PSS_PADDING : RSA_PKCS1_PADDING;
-      mdName = digest_name(ha);
-      mgf1 = pss ? mdName : std::string();
-      tosign = p11_hash(ha, data);
-    }
-    if (rv == CKR_MECHANISM_INVALID) {
-      EVP_PKEY_free(pk);
-      return rv;
+    int padding; std::string mdName, mgf1; std::vector<u8> tosign;
+    if (!resolve_rsa_mech(mech, data, padding, mdName, mgf1, tosign)) {
+      return CKR_MECHANISM_INVALID;
     }
     rv = p11_rsa_verify(pk, tosign, sig, padding, mdName, mgf1);
   } else if (is_ec_mech(mech)) {
-    std::vector<u8> tosign;
-    if (mech == CKM_ECDSA)
-      tosign = data;
-    else
-      tosign = p11_hash(mech_to_hash(mech), data);
-    rv = p11_ecdsa_verify(pk, tosign, sig);
-  }
-  EVP_PKEY_free(pk);
+    rv = p11_ecdsa_verify(pk, resolve_ec_mech(mech, data), sig);
+  } else
+    rv = CKR_MECHANISM_INVALID;
   return rv;
 }
 
@@ -465,8 +437,6 @@ void publish_verify_event(CK_SESSION_HANDLE h, CK_RV rv,
 
   EVP_PKEY *pk = load_asym_key(h, k);
   std::string key_fp = pk ? p11_key_fingerprint(pk) : "unknown";
-  if (pk)
-    EVP_PKEY_free(pk);
 
   std::string mechanism_str = mech_to_str(active_mech);
   std::string digest_alg = digest_to_str(active_mech);
@@ -549,8 +519,6 @@ void publish_crypto_op_event(
 
   EVP_PKEY *pk = load_asym_key(h, k);
   std::string key_fp = pk ? p11_key_fingerprint(pk) : "unknown";
-  if (pk)
-    EVP_PKEY_free(pk);
 
   std::string mechanism_str = mech_to_str(active_mech);
 
@@ -596,8 +564,80 @@ void publish_crypto_op_event(
 // ---------------------------------------------------------------------------
 // Encrypt
 // ---------------------------------------------------------------------------
+
+// Dispatch a completed signature to the SignatureDispatcher for persistence,
+// audit, and notification. Shared by C_Sign and C_SignFinal — previously
+// duplicated verbatim (~100 lines), one divergence away from mis-labeling
+// multi-part signatures when the next mechanism is added to only one copy.
+// Returns CKR_OK on success or CKR_DEVICE_ERROR if require_db_write fails.
+static CK_RV dispatch_sign_result(
+    CK_SESSION_HANDLE h, CK_MECHANISM_TYPE mech, const std::vector<u8> &data,
+    const std::vector<u8> &sig) {
+  auto *dispatcher = p11_signature_dispatcher();
+  if (!dispatcher)
+    return CKR_OK; // no dispatcher configured (tests) — skip silently
+
+  auto session_sp = p11_get_session(h);
+  session::Session *sess = session_sp.get();
+  CK_OBJECT_HANDLE k = sess ? sess->opKey() : CK_INVALID_HANDLE;
+
+  EVP_PKEY *pk = load_asym_key(h, k);
+  if (!pk)
+    return CKR_OK; // can't fingerprint without key — don't block signing
+
+  vhsm::crypto::SignResult sign_result;
+  sign_result.signature = sig;
+  sign_result.mechanism_str = mech_to_str(mech);
+  sign_result.digest_alg = digest_to_str(mech);
+
+  // Compute payload digest (SHA-256 of data)
+  auto payload_hash = p11_hash(vhsm::crypto::HashAlgorithm::SHA256, data);
+  std::ostringstream oss;
+  for (u8 b : payload_hash) {
+    oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b);
+  }
+  sign_result.payload_digest = oss.str();
+  sign_result.payload_size = static_cast<int>(data.size());
+
+  // Get key metadata
+  auto obj = p11_get_object(h, k);
+  std::string key_id = obj ? p11_key_id(obj.get()) : "unknown";
+  std::string key_fp = p11_key_fingerprint(pk);
+
+  // Get session/token info
+  auto *token = p11_get_token_for_session(h);
+  int slot_id = sess ? static_cast<int>(sess->getSlotID()) : 0;
+  std::string token_label = token ? token->get_label() : "unknown";
+
+  // Get user label if logged in
+  std::optional<std::string> user_label;
+  {
+    CK_USER_TYPE ut = sess ? sess->getUserType() : CKU_INVALID;
+    if (ut != CKU_INVALID)
+      user_label = "user-" + std::to_string(static_cast<int>(ut));
+  }
+
+  int64_t created_at = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           std::chrono::system_clock::now().time_since_epoch())
+                           .count();
+
+  bool dispatch_ok = false;
+  try {
+    dispatch_ok =
+        dispatcher->dispatch(sign_result, created_at, slot_id, token_label,
+                             key_id, key_fp, sign_result.mechanism_str,
+                             sign_result.digest_alg, std::to_string(h),
+                             user_label, std::nullopt);
+  } catch (const std::exception &) {
+    dispatch_ok = false; // DB write failure must not escape the C ABI.
+  }
+
+  return dispatch_ok ? CKR_OK : CKR_DEVICE_ERROR;
+}
+
 CK_RV C_EncryptInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m,
                     CK_OBJECT_HANDLE hKey) {
+  VHSM_C_TRY
   if (!m)
     return CKR_ARGUMENTS_BAD;
   if (m->mechanism != CKM_RSA_PKCS && m->mechanism != CKM_RSA_X_509 &&
@@ -634,10 +674,12 @@ CK_RV C_EncryptInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m,
     }
   }
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_Encrypt(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
                 CK_BYTE_PTR pEncryptedData, CK_ULONG_PTR pulEncryptedDataLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pData == nullptr && ulDataLen > 0)
@@ -656,11 +698,13 @@ CK_RV C_Encrypt(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
   }
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 CK_RV C_EncryptUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart,
                       CK_ULONG ulPartLen, CK_BYTE_PTR pEncryptedPart,
                       CK_ULONG_PTR pulEncryptedPartLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pPart == nullptr && ulPartLen > 0)
@@ -675,10 +719,12 @@ CK_RV C_EncryptUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart,
   if (pulEncryptedPartLen)
     *pulEncryptedPartLen = 0;
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_EncryptFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pLastEncryptedPart,
                      CK_ULONG_PTR pulLastEncryptedPartLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   auto s_final = p11_get_session(h);
@@ -700,6 +746,7 @@ CK_RV C_EncryptFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pLastEncryptedPart,
   }
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 // ---------------------------------------------------------------------------
@@ -707,6 +754,7 @@ CK_RV C_EncryptFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pLastEncryptedPart,
 // ---------------------------------------------------------------------------
 CK_RV C_DecryptInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m,
                     CK_OBJECT_HANDLE hKey) {
+  VHSM_C_TRY
   if (!m)
     return CKR_ARGUMENTS_BAD;
   if (m->mechanism != CKM_RSA_PKCS && m->mechanism != CKM_RSA_X_509 &&
@@ -743,11 +791,13 @@ CK_RV C_DecryptInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m,
     }
   }
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_Decrypt(CK_SESSION_HANDLE h, CK_BYTE_PTR pEncryptedData,
                 CK_ULONG ulEncryptedDataLen, CK_BYTE_PTR pData,
                 CK_ULONG_PTR pulDataLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pEncryptedData == nullptr && ulEncryptedDataLen > 0)
@@ -766,11 +816,13 @@ CK_RV C_Decrypt(CK_SESSION_HANDLE h, CK_BYTE_PTR pEncryptedData,
   }
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 CK_RV C_DecryptUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pEncryptedPart,
                       CK_ULONG ulEncryptedPartLen, CK_BYTE_PTR pPart,
                       CK_ULONG_PTR pulPartLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pEncryptedPart == nullptr && ulEncryptedPartLen > 0)
@@ -785,10 +837,12 @@ CK_RV C_DecryptUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pEncryptedPart,
   if (pulPartLen)
     *pulPartLen = 0;
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_DecryptFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pLastPart,
                      CK_ULONG_PTR pulLastPartLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   auto s_fin = p11_get_session(h);
@@ -809,21 +863,25 @@ CK_RV C_DecryptFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pLastPart,
   }
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 // ---------------------------------------------------------------------------
 // Digest
 // ---------------------------------------------------------------------------
 CK_RV C_DigestInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m) {
+  VHSM_C_TRY
   if (!m)
     return CKR_ARGUMENTS_BAD;
   if (!is_digest_mech(m->mechanism))
     return CKR_MECHANISM_INVALID;
   return op_begin(h, m, CK_INVALID_HANDLE, false);
+VHSM_C_CATCH
 }
 
 CK_RV C_Digest(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
                CK_BYTE_PTR pDigest, CK_ULONG_PTR pulDigestLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pData == nullptr && ulDataLen > 0)
@@ -837,10 +895,12 @@ CK_RV C_Digest(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
   CK_RV rv = finish_output(out, pDigest, pulDigestLen);
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 CK_RV C_DigestUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart,
                      CK_ULONG ulPartLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pPart == nullptr && ulPartLen > 0)
@@ -848,9 +908,11 @@ CK_RV C_DigestUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart,
   if (auto s = p11_get_session(h))
     s->opUpdate(pPart, ulPartLen);
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_DigestKey(CK_SESSION_HANDLE h, CK_OBJECT_HANDLE hKey) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   std::vector<u8> key = load_secret_key(h, hKey);
@@ -859,10 +921,12 @@ CK_RV C_DigestKey(CK_SESSION_HANDLE h, CK_OBJECT_HANDLE hKey) {
   if (auto s = p11_get_session(h))
     s->opUpdate(key.data(), key.size());
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_DigestFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pDigest,
                     CK_ULONG_PTR pulDigestLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   auto s_dg = p11_get_session(h);
@@ -874,6 +938,7 @@ CK_RV C_DigestFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pDigest,
   CK_RV rv = finish_output(out, pDigest, pulDigestLen);
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 // ---------------------------------------------------------------------------
@@ -881,15 +946,18 @@ CK_RV C_DigestFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pDigest,
 // ---------------------------------------------------------------------------
 CK_RV C_SignInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m,
                  CK_OBJECT_HANDLE hKey) {
+  VHSM_C_TRY
   if (!m)
     return CKR_ARGUMENTS_BAD;
   if (!is_rsa_mech(m->mechanism) && !is_ec_mech(m->mechanism))
     return CKR_MECHANISM_INVALID;
   return op_begin(h, m, hKey, true);
+VHSM_C_CATCH
 }
 
 CK_RV C_Sign(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
              CK_BYTE_PTR pSignature, CK_ULONG_PTR pulSignatureLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pData == nullptr && ulDataLen > 0)
@@ -902,122 +970,18 @@ CK_RV C_Sign(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
 
     // Dispatch to SignatureDispatcher for persistence/audit/notification
     if (rv == CKR_OK) {
-      auto *dispatcher = p11_signature_dispatcher();
-      if (dispatcher) {
-        // Reload key to get EVP_PKEY for fingerprint
-        auto s_disp = p11_get_session(h);
-        CK_OBJECT_HANDLE k = s_disp ? s_disp->opKey() : CK_INVALID_HANDLE;
-        CK_MECHANISM_TYPE active_mech = s_disp ? s_disp->opMech() : 0;
-        EVP_PKEY *pk = load_asym_key(h, k);
-        if (pk) {
-          vhsm::crypto::SignResult sign_result;
-          sign_result.signature = sig;
-          sign_result.mechanism_str = [&]() -> std::string {
-            switch (active_mech) {
-            case CKM_RSA_PKCS:
-              return "CKM_RSA_PKCS";
-            case CKM_RSA_X_509:
-              return "CKM_RSA_X_509";
-            case CKM_RSA_PKCS_PSS:
-              return "CKM_RSA_PKCS_PSS";
-            case CKM_SHA256_RSA_PKCS:
-              return "CKM_SHA256_RSA_PKCS";
-            case CKM_SHA384_RSA_PKCS:
-              return "CKM_SHA384_RSA_PKCS";
-            case CKM_SHA512_RSA_PKCS:
-              return "CKM_SHA512_RSA_PKCS";
-            case CKM_SHA256_RSA_PKCS_PSS:
-              return "CKM_SHA256_RSA_PKCS_PSS";
-            case CKM_SHA384_RSA_PKCS_PSS:
-              return "CKM_SHA384_RSA_PKCS_PSS";
-            case CKM_SHA512_RSA_PKCS_PSS:
-              return "CKM_SHA512_RSA_PKCS_PSS";
-            case CKM_ECDSA:
-              return "CKM_ECDSA";
-            case CKM_ECDSA_SHA256:
-              return "CKM_ECDSA_SHA256";
-            case CKM_ECDSA_SHA384:
-              return "CKM_ECDSA_SHA384";
-            case CKM_ECDSA_SHA512:
-              return "CKM_ECDSA_SHA512";
-            default:
-              return "CKM_VENDOR_DEFINED";
-            }
-          }();
-          sign_result.digest_alg = [&]() -> std::string {
-            vhsm::crypto::HashAlgorithm ha = mech_to_hash(active_mech);
-            switch (ha) {
-            case vhsm::crypto::HashAlgorithm::SHA256:
-              return "SHA-256";
-            case vhsm::crypto::HashAlgorithm::SHA384:
-              return "SHA-384";
-            case vhsm::crypto::HashAlgorithm::SHA512:
-              return "SHA-512";
-            }
-            return "SHA-256";
-          }();
-
-          // Compute payload digest (SHA-256 of data)
-          auto payload_hash =
-              p11_hash(vhsm::crypto::HashAlgorithm::SHA256, data);
-          std::ostringstream oss;
-          for (u8 b : payload_hash) {
-            oss << std::hex << std::setw(2) << std::setfill('0')
-                << static_cast<int>(b);
-          }
-          sign_result.payload_digest = oss.str();
-          sign_result.payload_size = data.size();
-
-          // Get key metadata
-          auto obj = p11_get_object(h, k);
-          std::string key_id = obj ? p11_key_id(obj.get()) : "unknown";
-          std::string key_fp = pk ? p11_key_fingerprint(pk) : "unknown";
-
-          // Get session/token info
-          auto *token = p11_get_token_for_session(h);
-          auto session = p11_get_session(h);
-          int slot_id = session ? static_cast<int>(session->getSlotID()) : 0;
-          std::string token_label = token ? token->get_label() : "unknown";
-
-          // Get user label if logged in
-          std::optional<std::string> user_label;
-          if (s_disp) {
-            CK_USER_TYPE ut = s_disp->getUserType();
-            if (ut != CKU_INVALID)
-              user_label = "user-" + std::to_string(static_cast<int>(ut));
-          }
-
-          // Dispatch - enforce require_db_write
-          // Use std::chrono for timestamp (SystemHsmClock::now() is instance
-          // method)
-          int64_t created_at =
-              std::chrono::duration_cast<std::chrono::milliseconds>(
-                  std::chrono::system_clock::now().time_since_epoch())
-                  .count();
-
-          bool dispatch_ok = false;
-          try {
-            dispatch_ok = dispatcher->dispatch(
-                sign_result, created_at, slot_id, token_label, key_id, key_fp,
-                sign_result.mechanism_str, sign_result.digest_alg,
-                std::to_string(h), user_label, std::nullopt);
-          } catch (const std::exception &) {
-            dispatch_ok = false; // DB write failure must not escape the C ABI.
-          }
-
-          if (!dispatch_ok) {
-            rv = CKR_DEVICE_ERROR; // require_db_write enforcement
-          }
-          EVP_PKEY_free(pk);
-        }
-      }
+      auto sf_sess = p11_get_session(h);
+      CK_MECHANISM_TYPE active_mech = sf_sess ? sf_sess->opMech() : 0;
+      rv = dispatch_sign_result(h, active_mech, data, sig);
     }
   }
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 CK_RV C_SignUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart, CK_ULONG ulPartLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pPart == nullptr && ulPartLen > 0)
@@ -1025,10 +989,12 @@ CK_RV C_SignUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart, CK_ULONG ulPartLen) {
   if (auto s = p11_get_session(h))
     s->opUpdate(pPart, ulPartLen);
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_SignFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature,
                   CK_ULONG_PTR pulSignatureLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   auto s_sf = p11_get_session(h);
@@ -1043,118 +1009,16 @@ CK_RV C_SignFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature,
     rv = finish_output(sig, pSignature, pulSignatureLen);
 
     // Dispatch to SignatureDispatcher for persistence/audit/notification
+    // Uses shared dispatch_sign_result() — same as C_Sign.
     if (rv == CKR_OK) {
-      auto *dispatcher = p11_signature_dispatcher();
-      if (dispatcher) {
-        // Reload key to get EVP_PKEY for fingerprint
-        auto s_fin = p11_get_session(h);
-        CK_OBJECT_HANDLE k = s_fin ? s_fin->opKey() : CK_INVALID_HANDLE;
-        CK_MECHANISM_TYPE active_mech = s_fin ? s_fin->opMech() : 0;
-        std::optional<std::string> user_label;
-        if (s_fin) {
-          CK_USER_TYPE ut = s_fin->getUserType();
-          if (ut != CKU_INVALID)
-            user_label = "user-" + std::to_string(static_cast<int>(ut));
-        }
-        EVP_PKEY *pk = load_asym_key(h, k);
-        if (pk) {
-          vhsm::crypto::SignResult sign_result;
-          sign_result.signature = sig;
-          sign_result.mechanism_str = [&]() -> std::string {
-            switch (active_mech) {
-            case CKM_RSA_PKCS:
-              return "CKM_RSA_PKCS";
-            case CKM_RSA_X_509:
-              return "CKM_RSA_X_509";
-            case CKM_RSA_PKCS_PSS:
-              return "CKM_RSA_PKCS_PSS";
-            case CKM_SHA256_RSA_PKCS:
-              return "CKM_SHA256_RSA_PKCS";
-            case CKM_SHA384_RSA_PKCS:
-              return "CKM_SHA384_RSA_PKCS";
-            case CKM_SHA512_RSA_PKCS:
-              return "CKM_SHA512_RSA_PKCS";
-            case CKM_SHA256_RSA_PKCS_PSS:
-              return "CKM_SHA256_RSA_PKCS_PSS";
-            case CKM_SHA384_RSA_PKCS_PSS:
-              return "CKM_SHA384_RSA_PKCS_PSS";
-            case CKM_SHA512_RSA_PKCS_PSS:
-              return "CKM_SHA512_RSA_PKCS_PSS";
-            case CKM_ECDSA:
-              return "CKM_ECDSA";
-            case CKM_ECDSA_SHA256:
-              return "CKM_ECDSA_SHA256";
-            case CKM_ECDSA_SHA384:
-              return "CKM_ECDSA_SHA384";
-            case CKM_ECDSA_SHA512:
-              return "CKM_ECDSA_SHA512";
-            default:
-              return "CKM_VENDOR_DEFINED";
-            }
-          }();
-          sign_result.digest_alg = [&]() -> std::string {
-            vhsm::crypto::HashAlgorithm ha = mech_to_hash(active_mech);
-            switch (ha) {
-            case vhsm::crypto::HashAlgorithm::SHA256:
-              return "SHA-256";
-            case vhsm::crypto::HashAlgorithm::SHA384:
-              return "SHA-384";
-            case vhsm::crypto::HashAlgorithm::SHA512:
-              return "SHA-512";
-            }
-            return "SHA-256";
-          }();
-
-          // Compute payload digest (SHA-256 of data)
-          auto payload_hash =
-              p11_hash(vhsm::crypto::HashAlgorithm::SHA256, data);
-          std::ostringstream oss;
-          for (u8 b : payload_hash) {
-            oss << std::hex << std::setw(2) << std::setfill('0')
-                << static_cast<int>(b);
-          }
-          sign_result.payload_digest = oss.str();
-          sign_result.payload_size = data.size();
-
-          // Get key metadata
-          auto obj = p11_get_object(h, k);
-          std::string key_id = obj ? p11_key_id(obj.get()) : "unknown";
-          std::string key_fp = pk ? p11_key_fingerprint(pk) : "unknown";
-
-          // Get session/token info
-          auto *token = p11_get_token_for_session(h);
-          auto session = p11_get_session(h);
-          int slot_id = session ? static_cast<int>(session->getSlotID()) : 0;
-          std::string token_label = token ? token->get_label() : "unknown";
-
-          // Dispatch - enforce require_db_write
-          // Use std::chrono for timestamp (SystemHsmClock::now() is instance
-          // method)
-          int64_t created_at =
-              std::chrono::duration_cast<std::chrono::milliseconds>(
-                  std::chrono::system_clock::now().time_since_epoch())
-                  .count();
-
-          bool dispatch_ok = false;
-          try {
-            dispatch_ok = dispatcher->dispatch(
-                sign_result, created_at, slot_id, token_label, key_id, key_fp,
-                sign_result.mechanism_str, sign_result.digest_alg,
-                std::to_string(h), user_label, std::nullopt);
-          } catch (const std::exception &) {
-            dispatch_ok = false; // DB write failure must not escape the C ABI.
-          }
-
-          if (!dispatch_ok) {
-            rv = CKR_DEVICE_ERROR; // require_db_write enforcement
-          }
-          EVP_PKEY_free(pk);
-        }
-      }
+      auto sf_sess = p11_get_session(h);
+      CK_MECHANISM_TYPE active_mech = sf_sess ? sf_sess->opMech() : 0;
+      rv = dispatch_sign_result(h, active_mech, data, sig);
     }
   }
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 // ---------------------------------------------------------------------------
@@ -1162,15 +1026,18 @@ CK_RV C_SignFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature,
 // ---------------------------------------------------------------------------
 CK_RV C_VerifyInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m,
                    CK_OBJECT_HANDLE hKey) {
+  VHSM_C_TRY
   if (!m)
     return CKR_ARGUMENTS_BAD;
   if (!is_rsa_mech(m->mechanism) && !is_ec_mech(m->mechanism))
     return CKR_MECHANISM_INVALID;
   return op_begin(h, m, hKey, true);
+VHSM_C_CATCH
 }
 
 CK_RV C_Verify(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
                CK_BYTE_PTR pSignature, CK_ULONG ulSignatureLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pData == nullptr && ulDataLen > 0)
@@ -1188,10 +1055,12 @@ CK_RV C_Verify(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
 
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 CK_RV C_VerifyUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart,
                      CK_ULONG ulPartLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pPart == nullptr && ulPartLen > 0)
@@ -1199,10 +1068,12 @@ CK_RV C_VerifyUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart,
   if (auto s = p11_get_session(h))
     s->opUpdate(pPart, ulPartLen);
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_VerifyFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature,
                     CK_ULONG ulSignatureLen) {
+  VHSM_C_TRY
   if (op_check(h) != CKR_OK)
     return CKR_OPERATION_NOT_INITIALIZED;
   if (pSignature == nullptr && ulSignatureLen > 0)
@@ -1222,6 +1093,7 @@ CK_RV C_VerifyFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature,
 
   op_end(h);
   return rv;
+VHSM_C_CATCH
 }
 
 // ---------------------------------------------------------------------------
@@ -1230,75 +1102,91 @@ CK_RV C_VerifyFinal(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature,
 CK_RV C_DigestEncryptUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart,
                             CK_ULONG ulPartLen, CK_BYTE_PTR pEncryptedPart,
                             CK_ULONG_PTR pulEncryptedPartLen) {
+  VHSM_C_TRY
   (void)h;
   (void)pPart;
   (void)ulPartLen;
   (void)pEncryptedPart;
   (void)pulEncryptedPartLen;
   return CKR_FUNCTION_NOT_SUPPORTED;
+VHSM_C_CATCH
 }
 CK_RV C_DecryptDigestUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pEncryptedPart,
                             CK_ULONG ulEncryptedPartLen, CK_BYTE_PTR pPart,
                             CK_ULONG_PTR pulPartLen) {
+  VHSM_C_TRY
   (void)h;
   (void)pEncryptedPart;
   (void)ulEncryptedPartLen;
   (void)pPart;
   (void)pulPartLen;
   return CKR_FUNCTION_NOT_SUPPORTED;
+VHSM_C_CATCH
 }
 CK_RV C_SignEncryptUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pPart,
                           CK_ULONG ulPartLen, CK_BYTE_PTR pEncryptedPart,
                           CK_ULONG_PTR pulEncryptedPartLen) {
+  VHSM_C_TRY
   (void)h;
   (void)pPart;
   (void)ulPartLen;
   (void)pEncryptedPart;
   (void)pulEncryptedPartLen;
   return CKR_FUNCTION_NOT_SUPPORTED;
+VHSM_C_CATCH
 }
 CK_RV C_DecryptVerifyUpdate(CK_SESSION_HANDLE h, CK_BYTE_PTR pEncryptedPart,
                             CK_ULONG ulEncryptedPartLen, CK_BYTE_PTR pPart,
                             CK_ULONG_PTR pulPartLen) {
+  VHSM_C_TRY
   (void)h;
   (void)pEncryptedPart;
   (void)ulEncryptedPartLen;
   (void)pPart;
   (void)pulPartLen;
   return CKR_FUNCTION_NOT_SUPPORTED;
+VHSM_C_CATCH
 }
 CK_RV C_SignRecoverInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m,
                         CK_OBJECT_HANDLE hKey) {
+  VHSM_C_TRY
   (void)h;
   (void)m;
   (void)hKey;
   return CKR_FUNCTION_NOT_SUPPORTED;
+VHSM_C_CATCH
 }
 CK_RV C_SignRecover(CK_SESSION_HANDLE h, CK_BYTE_PTR pData, CK_ULONG ulDataLen,
                     CK_BYTE_PTR pSignature, CK_ULONG_PTR pulSignatureLen) {
+  VHSM_C_TRY
   (void)h;
   (void)pData;
   (void)ulDataLen;
   (void)pSignature;
   (void)pulSignatureLen;
   return CKR_FUNCTION_NOT_SUPPORTED;
+VHSM_C_CATCH
 }
 CK_RV C_VerifyRecoverInit(CK_SESSION_HANDLE h, CK_MECHANISM_PTR m,
                           CK_OBJECT_HANDLE hKey) {
+  VHSM_C_TRY
   (void)h;
   (void)m;
   (void)hKey;
   return CKR_FUNCTION_NOT_SUPPORTED;
+VHSM_C_CATCH
 }
 CK_RV C_VerifyRecover(CK_SESSION_HANDLE h, CK_BYTE_PTR pSignature,
                       CK_ULONG ulSignatureLen, CK_BYTE_PTR pData,
                       CK_ULONG_PTR pulDataLen) {
+  VHSM_C_TRY
   (void)h;
   (void)pSignature;
   (void)ulSignatureLen;
   (void)pData;
   (void)pulDataLen;
   return CKR_FUNCTION_NOT_SUPPORTED;
+VHSM_C_CATCH
 }
 
 } // namespace vhsm::pkcs11

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstdio>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
@@ -206,7 +207,10 @@ inline auto ThreadPool::enqueue(const CapabilityToken &token,
   TaskWorker worker([t = std::move(task)]() {
     try {
       t();
+    } catch (const std::exception &e) {
+      std::fprintf(stderr, "VHSM: task threw: %s\n", e.what());
     } catch (...) {
+      std::fprintf(stderr, "VHSM: task threw unknown exception\n");
     }
   });
   bool accepted = enqueue_locked(token.tier(), std::move(worker));

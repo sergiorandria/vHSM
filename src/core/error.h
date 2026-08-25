@@ -4,23 +4,38 @@
 #include <stdexcept>
 #include <string>
 
-// WHY exception hierarchy instead of flat error codes: PKCS#11 defines error
-// codes (CKR_*), but C++ programs throw exceptions. The hierarchy (HsmException
-// → CryptoException, DbError) allows callers to catch domain-specific errors
-// without inspecting error codes. Example: catch (CryptoException&) handles all
-// cryptographic failures; catch (DbError&) handles all database issues. This
-// enables fine-grained error recovery strategies.
+// ─── Error handling convention ─────────────────────────────────────────────
 //
-// WHY VHSM_CHECK macro embeds file/line: Production code needs debugging
-// context. Embedding __FILE__ and __LINE__ in the exception message provides
-// immediate attribution (which function, which file, which line failed). This
-// beats printf debugging and manual stack traces in most scenarios. The macro
-// expands at compile time (zero runtime overhead compared to manual throw
-// statements with formatted messages).
+// Three layers, three mechanisms:
+//
+//   pkcs11/ (extern "C")     → CK_RV return codes (C ABI requirement).
+//                              VHSM_C_TRY/VHSM_C_CATCH shield maps std::
+//                              exceptions to CKR_* before they cross.
+//
+//   internal C++ layers       → std:: exception types (this header's macros
+//                              + DbError). The shield maps them:
+//                                invalid_argument → CKR_ARGUMENTS_BAD
+//                                out_of_range      → CKR_BUFFER_TOO_SMALL
+//                                bad_alloc         → CKR_HOST_MEMORY
+//                                runtime_error     → CKR_GENERAL_ERROR
+//
+//   abi/result.h              → Result<T> for future ABI boundaries where
+//                              exceptions must not be used at all. Not yet
+//                              adopted in production code.
+//
+// Usage rules:
+// - Caller-supplied precondition failure → throw std::invalid_argument
+//   (use VHSM_CHECK_ARG)
+// - Operational failure (I/O, auth, state) → throw std::runtime_error
+//   (use VHSM_CHECK_MSG)
+// - Database failure → throw DbError with appropriate Kind
+// - Buffer/index bounds → throw std::out_of_range
 
-/// Macro to check a condition and throw std::runtime_error if false.
-/// Includes the condition expression, file, and line number in the error
-/// message.
+// ─── Macros ────────────────────────────────────────────────────────────────
+
+/// Check a condition and throw std::runtime_error if false.
+/// For operational failures: I/O errors, authentication failures,
+/// unexpected state. Maps to CKR_GENERAL_ERROR via the C ABI shield.
 #define VHSM_CHECK(condition)                                                  \
   do {                                                                         \
     if (!(condition)) {                                                        \
@@ -30,14 +45,8 @@
     }                                                                          \
   } while (0)
 
-/// Macro to check a condition and throw std::runtime_error with a custom
-/// message if false. Includes the custom message, file, and line number in the
-/// error message.
-///
-/// WHY separate from VHSM_CHECK: Sometimes a default message (condition
-/// expression) isn't helpful. VHSM_CHECK_MSG lets the caller provide
-/// context-specific text (e.g., "KeyWrap: KEK must be 32 bytes"). This makes
-/// errors immediately actionable without reading source code.
+/// Check a condition and throw std::runtime_error with a custom message.
+/// Same mapping as VHSM_CHECK but with caller-provided context text.
 #define VHSM_CHECK_MSG(condition, msg)                                         \
   do {                                                                         \
     if (!(condition)) {                                                        \
@@ -47,48 +56,19 @@
     }                                                                          \
   } while (0)
 
-#define VHSM_CHECK_PTR_MSG(condition, msg)                                     \
+/// Check a caller-supplied argument and throw std::invalid_argument if false.
+/// Maps to CKR_ARGUMENTS_BAD via the C ABI shield — NOT CKR_GENERAL_ERROR.
+/// Use for null pointers, wrong sizes, invalid enum values, etc.
+/// For operational failures use VHSM_CHECK_MSG instead.
+#define VHSM_CHECK_ARG(condition, msg)                                         \
   do {                                                                         \
     if (!(condition)) {                                                        \
-      throw std::runtime_error(std::string(msg) + std::string(" at ") +        \
-                               __FILE__ + std::string(":") +                   \
-                               std::to_string(__LINE__));                      \
+      throw std::invalid_argument(std::string(msg) + std::string(" at ") +     \
+                                  __FILE__ + ":" + std::to_string(__LINE__));  \
     }                                                                          \
   } while (0)
 
-/// Base class for session-related errors.
-/// Encapsulates an explanatory message.
-///
-/// WHY exception hierarchy: HsmException is the base; CryptoException and
-/// DbError inherit. Callers can catch (HsmException&) to handle all HSM-related
-/// errors uniformly, or catch specific subclasses to apply specialized recovery
-/// logic. This is the standard C++ pattern for domain-specific error
-/// hierarchies.
-class HsmException : public std::runtime_error {
-public:
-  explicit HsmException(const std::string &message)
-      : std::runtime_error(message) {}
-};
-
-/// Errors originating from cryptographic operations (signature, digest, etc.).
-///
-/// WHY separate CryptoException: Cryptographic failures (invalid key, bad
-/// signature) are distinct from database errors or system errors. Applications
-/// sign transactions frequently; if a signature fails, the system should log it
-/// differently than if the database connection dropped. Fine-grained exception
-/// types enable that distinction.
-class CryptoException : public HsmException {
-public:
-  explicit CryptoException(const std::string &message)
-      : HsmException(message) {}
-};
-
-/// Version/compatibility errors.
-class VersionException : public std::runtime_error {
-public:
-  explicit VersionException(const std::string &message)
-      : std::runtime_error(message) {}
-};
+// ─── DbError ───────────────────────────────────────────────────────────────
 
 /// Database errors with classified error kinds.
 ///
@@ -99,9 +79,6 @@ public:
 /// whether to retry, fail fast, or escalate.
 class DbError : public std::runtime_error {
 public:
-  // WHY Kind enum: Classifies database failures so recovery strategies can be
-  // tailored. ConnectionError might retry; SchemaError should escalate to DBA;
-  // ConstraintError might indicate corrupt data that needs repair.
   enum class Kind {
     SchemaError,      // Table/column missing or wrong type
     ConstraintError,  // Unique/foreign key violation

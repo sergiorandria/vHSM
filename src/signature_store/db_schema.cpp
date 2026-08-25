@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS db_meta (
 
 std::string DbSchema::sql_create_signature_records() const {
   // Column ordering is canonical — do not reorder.
-  // No integrity_hmac column — the Fabric ledger provides tamper evidence.
+  // integrity_hmac: HMAC-SHA256 over all other columns (see RowIntegrity).
+  // NULL for legacy rows or when no HMAC key is available.
   return R"SQL(
 CREATE TABLE IF NOT EXISTS signature_records (
     id                TEXT    NOT NULL PRIMARY KEY,
@@ -64,7 +65,8 @@ CREATE TABLE IF NOT EXISTS signature_records (
     ledger_tx_proof   TEXT,
     ledger_tx_set_b64 TEXT,
     ledger_status     TEXT    NOT NULL DEFAULT 'PENDING'
-        CHECK(ledger_status IN ('PENDING','COMMITTED','FAILED'))
+        CHECK(ledger_status IN ('PENDING','COMMITTED','FAILED')),
+    integrity_hmac    TEXT
 );
 )SQL";
 }
@@ -212,7 +214,7 @@ std::string DbSchema::get_meta(const std::string &key) {
 int DbSchema::current_version() {
   if (!table_exists("db_meta"))
     return -1;
-  std::string v = get_meta(std::string(meta_key::kSchemaVersion));
+  std::string v = get_meta(std::string(meta_key::K_SCHEMA_VERSION));
   if (v.empty())
     return -1;
   try {
@@ -223,22 +225,22 @@ int DbSchema::current_version() {
 }
 
 std::string DbSchema::get_instance_id() {
-  return get_meta(std::string(meta_key::kInstanceId));
+  return get_meta(std::string(meta_key::K_INSTANCE_ID));
 }
 
 void DbSchema::bootstrap() {
   int version = current_version();
 
-  if (version == kCurrentSchemaVersion) {
+  if (version == K_CURRENT_SCHEMA_VERSION) {
     // Schema is already at the target version — nothing to do.
     return;
   }
 
-  if (version > kCurrentSchemaVersion) {
+  if (version > K_CURRENT_SCHEMA_VERSION) {
     throw DbError(DbError::Kind::SchemaError,
                   "DB schema version " + std::to_string(version) +
                       " is newer than compiled version " +
-                      std::to_string(kCurrentSchemaVersion) +
+                      std::to_string(K_CURRENT_SCHEMA_VERSION) +
                       ". Upgrade the vhsm binary.");
   }
 
@@ -281,21 +283,30 @@ void DbSchema::bootstrap() {
                         .count();
 
       tx.exec("INSERT INTO db_meta(key,value) VALUES(?,?);",
-              {std::string(meta_key::kSchemaVersion),
-               std::to_string(kCurrentSchemaVersion)});
+              {std::string(meta_key::K_SCHEMA_VERSION),
+               std::to_string(K_CURRENT_SCHEMA_VERSION)});
       tx.exec("INSERT INTO db_meta(key,value) VALUES(?,?);",
-              {std::string(meta_key::kInstanceId), vhsm::utils::uuid_v4()});
+              {std::string(meta_key::K_INSTANCE_ID), vhsm::utils::uuid_v4()});
       tx.exec("INSERT INTO db_meta(key,value) VALUES(?,?);",
-              {std::string(meta_key::kCreatedAt), std::to_string(now_ms)});
+              {std::string(meta_key::K_CREATED_AT), std::to_string(now_ms)});
       // hmac_key_wrapped is a legacy placeholder; no HMAC scheme is used.
       tx.exec("INSERT INTO db_meta(key,value) VALUES(?,?);",
-              {std::string(meta_key::kHmacKeyWrapped), "UNSET"});
+              {std::string(meta_key::K_HMAC_KEY_WRAPPED), "UNSET"});
     });
     return;
   }
 
   // Existing DB at an older version — run migrations.
   migrate();
+
+  // v7: idempotent column addition for DBs created before v7.
+  // For brand-new DBs the CREATE TABLE above already includes it; for
+  // existing DBs this ALTER adds the missing column.
+  if (!column_exists("signature_records", "integrity_hmac")) {
+    conn_.with_transaction([&](IDbTransaction &tx) {
+      tx.exec("ALTER TABLE signature_records ADD COLUMN integrity_hmac TEXT;");
+    });
+  }
 }
 
 int DbSchema::migrate() {
@@ -305,13 +316,13 @@ int DbSchema::migrate() {
         DbError::Kind::SchemaError,
         "Cannot migrate: db_meta does not exist. Call bootstrap() first.");
   }
-  if (from_version == kCurrentSchemaVersion)
+  if (from_version == K_CURRENT_SCHEMA_VERSION)
     return from_version;
-  if (from_version > kCurrentSchemaVersion) {
+  if (from_version > K_CURRENT_SCHEMA_VERSION) {
     throw DbError(DbError::Kind::SchemaError,
                   "Cannot migrate backwards (DB at v" +
                       std::to_string(from_version) + ", binary at v" +
-                      std::to_string(kCurrentSchemaVersion) + ").");
+                      std::to_string(K_CURRENT_SCHEMA_VERSION) + ").");
   }
 
   // Versions 1, 2 and 3 were the Rekor-era schemas.  The Fabric-ledger schema
@@ -600,12 +611,12 @@ void DbSchema::migrate_v5_to_v6() {
 // verify_schema
 bool DbSchema::verify_schema(std::string &out_error) {
   const std::string_view expected_tables[] = {
-      table::kDbMeta,
-      table::kSignatureRecords,
-      table::kSignatureVerifications,
-      table::kNotificationSubscribers,
-      table::kNotificationLog,
-      table::kEventOutbox,
+      table::K_DB_META,
+      table::K_SIGNATURE_RECORDS,
+      table::K_SIGNATURE_VERIFICATIONS,
+      table::K_NOTIFICATION_SUBSCRIBERS,
+      table::K_NOTIFICATION_LOG,
+      table::K_EVENT_OUTBOX,
   };
 
   for (const auto &tbl : expected_tables) {
@@ -618,9 +629,9 @@ bool DbSchema::verify_schema(std::string &out_error) {
 
   // Verify schema version in db_meta.
   int v = current_version();
-  if (v != kCurrentSchemaVersion) {
+  if (v != K_CURRENT_SCHEMA_VERSION) {
     out_error = "Schema version mismatch: DB has v" + std::to_string(v) +
-                ", expected v" + std::to_string(kCurrentSchemaVersion);
+                ", expected v" + std::to_string(K_CURRENT_SCHEMA_VERSION);
     return false;
   }
 

@@ -8,12 +8,6 @@
 
 #include "macros.h"
 
-// Forward declare the real DB connection in its actual namespace to avoid
-// pulling heavy headers into this core header.
-namespace vhsm::signature_store::db {
-class IDbConnection;
-}
-
 namespace vhsm::core {
 
 // ------------------------------------------------------------
@@ -38,6 +32,8 @@ private:
 
 // ------------------------------------------------------------
 // 2. Domain Service Interface — Port
+//    Implementations live in the infrastructure layer that owns the
+//    backing store (e.g., DatabaseHsmInstanceProvider in signature_store).
 // ------------------------------------------------------------
 class _VHSMXX_VISIBILITY(hidden) IHsmInstanceProvider {
 public:
@@ -46,35 +42,7 @@ public:
 };
 
 // ------------------------------------------------------------
-// 3. Infrastructure Implementation (Database-backed)
-// ------------------------------------------------------------
-class _VHSMXX_VISIBILITY(hidden) DatabaseHsmInstanceProvider
-    : public IHsmInstanceProvider {
-public:
-  explicit DatabaseHsmInstanceProvider(
-      vhsm::signature_store::db::IDbConnection &db);
-
-  _VHSMXX_NODISCARD HsmInstanceId getInstanceId() const override;
-
-  // Seeds the instance ID during bootstrap. Returns true on success.
-  // Invalidates the cache so the next getInstanceId() reads the new value.
-  bool seedInstanceId(const HsmInstanceId &id);
-
-private:
-  vhsm::signature_store::db::IDbConnection &db_;
-  mutable std::mutex mutex_;
-  mutable std::optional<HsmInstanceId> cached_id_;
-};
-
-// ------------------------------------------------------------
-// 4. Factory — used in the composition root
-// ------------------------------------------------------------
-_VHSMXX_VISIBILITY(hidden)
-std::unique_ptr<IHsmInstanceProvider>
-createDefaultInstanceProvider(vhsm::signature_store::db::IDbConnection &db);
-
-// ------------------------------------------------------------
-// 5. Process-wide accessors — legacy compat (used by ledger,
+// 3. Process-wide accessors — legacy compat (used by ledger,
 //    notification, pkcs11 layers). Thread-safe.
 //    Prefer IHsmInstanceProvider in new code.
 // ------------------------------------------------------------

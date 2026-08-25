@@ -3,7 +3,8 @@
 
 #include "../core/secure_buffer.h"
 #include "../core/system_hsm_clock.h"
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
+#include "../domain/pkcs11/pkcs11_types.h"
 #include "attribute_store.h"
 #include "hsm_object.h"
 #include "internal/token_core.h"
@@ -97,20 +98,20 @@ public:
   bool destroy_object(CK_OBJECT_HANDLE handle);
 
   // PIN management
-  CK_RV initialize_user_pin(const CK_CHAR *pin, CK_ULONG pinLen);
-  CK_RV initialize_so_pin(const CK_CHAR *pin, CK_ULONG pinLen);
-  CK_RV set_user_pin(const CK_CHAR *oldPin, CK_ULONG oldLen,
+  [[nodiscard]] CK_RV initialize_user_pin(const CK_CHAR *pin, CK_ULONG pinLen);
+  [[nodiscard]] CK_RV initialize_so_pin(const CK_CHAR *pin, CK_ULONG pinLen);
+  [[nodiscard]] CK_RV set_user_pin(const CK_CHAR *oldPin, CK_ULONG oldLen,
                      const CK_CHAR *newPin, CK_ULONG newLen);
-  CK_RV set_so_pin(const CK_CHAR *oldPin, CK_ULONG oldLen,
+  [[nodiscard]] CK_RV set_so_pin(const CK_CHAR *oldPin, CK_ULONG oldLen,
                    const CK_CHAR *newPin, CK_ULONG newLen);
-  CK_RV verify_user_pin(const CK_CHAR *pin, CK_ULONG pinLen);
-  CK_RV verify_so_pin(const CK_CHAR *pin, CK_ULONG pinLen);
-  CK_RV change_user_pin(const CK_CHAR *oldPin, CK_ULONG oldLen,
+  [[nodiscard]] CK_RV verify_user_pin(const CK_CHAR *pin, CK_ULONG pinLen);
+  [[nodiscard]] CK_RV verify_so_pin(const CK_CHAR *pin, CK_ULONG pinLen);
+  [[nodiscard]] CK_RV change_user_pin(const CK_CHAR *oldPin, CK_ULONG oldLen,
                         const CK_CHAR *newPin, CK_ULONG newLen);
-  CK_RV change_so_pin(const CK_CHAR *oldPin, CK_ULONG oldLen,
+  [[nodiscard]] CK_RV change_so_pin(const CK_CHAR *oldPin, CK_ULONG oldLen,
                       const CK_CHAR *newPin, CK_ULONG newLen);
-  CK_RV login(CK_USER_TYPE userType, const CK_CHAR *pin, CK_ULONG pinLen);
-  CK_RV logout(CK_USER_TYPE userType);
+  [[nodiscard]] CK_RV login(CK_USER_TYPE userType, const CK_CHAR *pin, CK_ULONG pinLen);
+  [[nodiscard]] CK_RV logout(CK_USER_TYPE userType);
 
   // PIN lockout state (brute-force protection).  A locked PIN rejects all
   // further attempts with CKR_PIN_LOCKED; successful verification or a

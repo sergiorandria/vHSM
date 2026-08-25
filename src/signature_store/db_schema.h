@@ -12,7 +12,7 @@ namespace db {
 // Schema version
 // Bumped whenever a migration adds or changes a table.
 // Migration N upgrades from version N-1 to version N.
-inline constexpr int kCurrentSchemaVersion = 6;
+inline constexpr int K_CURRENT_SCHEMA_VERSION = 6;
 
 // v1 — initial schema (signature_records, signature_verifications,
 //       notification_subscribers, notification_log, db_meta)
@@ -26,30 +26,30 @@ inline constexpr int kCurrentSchemaVersion = 6;
 
 // Table name constants
 namespace table {
-inline constexpr std::string_view kSignatureRecords = "signature_records";
-inline constexpr std::string_view kSignatureVerifications =
+inline constexpr std::string_view K_SIGNATURE_RECORDS = "signature_records";
+inline constexpr std::string_view K_SIGNATURE_VERIFICATIONS =
     "signature_verifications";
-inline constexpr std::string_view kNotificationSubscribers =
+inline constexpr std::string_view K_NOTIFICATION_SUBSCRIBERS =
     "notification_subscribers";
-inline constexpr std::string_view kNotificationLog = "notification_log";
-inline constexpr std::string_view kEventOutbox = "event_outbox";
-inline constexpr std::string_view kDbMeta = "db_meta";
+inline constexpr std::string_view K_NOTIFICATION_LOG = "notification_log";
+inline constexpr std::string_view K_EVENT_OUTBOX = "event_outbox";
+inline constexpr std::string_view K_DB_META = "db_meta";
 } // namespace table
 
 // db_meta key constants
 namespace meta_key {
-inline constexpr std::string_view kSchemaVersion = "schema_version";
-inline constexpr std::string_view kHmacKeyWrapped =
+inline constexpr std::string_view K_SCHEMA_VERSION = "schema_version";
+inline constexpr std::string_view K_HMAC_KEY_WRAPPED =
     "hmac_key_wrapped"; // legacy placeholder, unused
-inline constexpr std::string_view kCreatedAt = "created_at";   // epoch ms
-inline constexpr std::string_view kInstanceId = "instance_id"; // UUID v4
+inline constexpr std::string_view K_CREATED_AT = "created_at";   // epoch ms
+inline constexpr std::string_view K_INSTANCE_ID = "instance_id"; // UUID v4
 } // namespace meta_key
 
 // Ledger status values (mirror the SQL CHECK constraint)
 namespace ledger_status {
-inline constexpr std::string_view kPending = "PENDING";
-inline constexpr std::string_view kCommitted = "COMMITTED";
-inline constexpr std::string_view kFailed = "FAILED";
+inline constexpr std::string_view K_PENDING = "PENDING";
+inline constexpr std::string_view K_COMMITTED = "COMMITTED";
+inline constexpr std::string_view K_FAILED = "FAILED";
 } // namespace ledger_status
 
 // DbSchema — manages schema bootstrap and migrations
@@ -61,7 +61,7 @@ public:
   //
   // Called once on first startup (or after ":memory:" is opened in tests).
   // Creates all tables, indexes, and seeds db_meta with:
-  //   - schema_version = kCurrentSchemaVersion
+  //   - schema_version = K_CURRENT_SCHEMA_VERSION
   //   - instance_id    = freshly generated UUID v4
   //   - created_at     = current epoch ms
   //   - hmac_key_wrapped = legacy placeholder (kept for compatibility)
@@ -76,7 +76,7 @@ public:
   // migrate()
   //
   // Runs all pending migrations from the current DB schema_version up to
-  // kCurrentSchemaVersion.  Each migration step is wrapped in its own
+  // K_CURRENT_SCHEMA_VERSION.  Each migration step is wrapped in its own
   // transaction so a failure leaves the DB at the last successful version.
   //
   // Called automatically by bootstrap() when the DB already exists.

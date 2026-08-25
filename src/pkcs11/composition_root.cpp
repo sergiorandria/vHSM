@@ -29,6 +29,7 @@
 #include "../domain/signing/adapters/fabric_store_adapter.h"
 #endif
 
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
@@ -87,6 +88,24 @@ static AppContainer::StoreBackend resolve_backend() {
   return def;
 }
 
+// Enforce backend exclusivity: DB + ledger anchoring simultaneously is the
+// "stacked" configuration the ISignatureStore port was designed to prevent.
+// If VHSM_STORE_BACKEND=db and ledger env vars are set, that's a misconfig
+// (leftover staging env, shared .env) — fail fast rather than silently
+// activating both paths.
+static void check_backend_exclusivity(AppContainer::StoreBackend backend) {
+  if (backend == AppContainer::StoreBackend::Db) {
+    const char *ep = std::getenv("VHSM_LEDGER_ENDPOINT");
+    const char *cert = std::getenv("VHSM_LEDGER_CERT");
+    const char *key = std::getenv("VHSM_LEDGER_KEY");
+    if (ep && *ep && cert && *cert && key && *key)
+      throw std::runtime_error(
+          "VHSM_STORE_BACKEND=db but VHSM_LEDGER_ENDPOINT/CERT/KEY are set. "
+          "Backends are mutually exclusive: unset the LEDGER_* vars or "
+          "switch to VHSM_STORE_BACKEND=ledger.");
+  }
+}
+
 std::string resolve_db_path_for_container() {
   const char *explicit_path = std::getenv("VHSM_DB_PATH");
   if (explicit_path && *explicit_path)
@@ -137,8 +156,7 @@ std::string resolve_fabric_config_dir() {
   return "/etc/vhsmd";
 }
 
-static void ensure_default_token_for_container() {
-  auto &sm = vhsm::session::SlotManager::get_instance();
+static void ensure_default_token_for_container(vhsm::session::SlotManager &sm) {
   if (!sm.get_slot(0)) {
     auto slot = std::make_shared<vhsm::keystore::Slot>(0);
     auto tok = std::make_shared<vhsm::keystore::Token>("vHSM Software Token",
@@ -178,37 +196,30 @@ static std::unique_ptr<vhsm::persistence::Vault> open_or_create_vault() {
 }
 
 std::unique_ptr<AppContainer> create_app_container() {
-  ensure_default_token_for_container();
-
   auto c = std::make_unique<AppContainer>();
+
+  // Slot manager: owned by the container (not a singleton). Set as the
+  // process-wide global for legacy PKCS#11 call sites during DI migration.
+  c->slot_manager = std::make_unique<vhsm::session::SlotManager>();
+  vhsm::session::detail::set_global_slot_manager(c->slot_manager.get());
+  ensure_default_token_for_container(*c->slot_manager);
+
   c->backend = resolve_backend();
+  check_backend_exclusivity(c->backend);
 
   // Mutually exclusive backends: only one is wired.
   if (c->backend == AppContainer::StoreBackend::Ledger) {
 #ifdef VHSM_LEDGER
-    // Ledger backend: no DB, use Fabric as primary store.
-    // Instance ID is still derived from a local DB file for correlation,
-    // but signatures themselves go to the ledger. For true ledger-only,
-    // we keep a tiny local DB just for instance_id; alternatively, ledger
-    // could provide it. For now, create a minimal :memory: DB for meta.
-    c->db_path = ":memory:";
-    c->db = vhsm::signature_store::db::make_sqlite_connection(c->db_path);
-    if (c->db) {
-      try {
-        vhsm::signature_store::db::DbSchema schema(*c->db);
-        schema.bootstrap();
-        c->instance_id = schema.get_instance_id();
-        vhsm::core::set_hsm_instance_id(c->instance_id);
-      } catch (...) {
-      }
-    }
-#else
-    c->instance_id = "ledger-no-build";
-    vhsm::core::set_hsm_instance_id(c->instance_id);
-#endif
-  } else {
-    // DB backend (default): file DB is primary store.
+    // Ledger backend: Fabric is the tamper-evident source of truth, but
+    // signature_records MUST persist locally too (audit trail, C_Verify
+    // read-back, admin queries). Use the same file-based DB resolution as
+    // the DB backend but with a distinct filename so operators can see
+    // this is the local index/audit cache, not the primary integrity store.
     c->db_path = resolve_db_path_for_container();
+    // Swap filename: vhsm.sqlite -> vhsm_ledger.sqlite
+    auto pos = c->db_path.rfind("vhsm.sqlite");
+    if (pos != std::string::npos)
+      c->db_path = c->db_path.substr(0, pos) + "vhsm_ledger.sqlite";
     c->db = vhsm::signature_store::db::make_sqlite_connection(c->db_path);
     if (!c->db)
       return c;
@@ -219,6 +230,28 @@ std::unique_ptr<AppContainer> create_app_container() {
       vhsm::core::set_hsm_instance_id(c->instance_id);
     } catch (...) {
       return c;
+    }
+#else
+    c->instance_id = "ledger-no-build";
+    vhsm::core::set_hsm_instance_id(c->instance_id);
+#endif
+  } else {
+    // DB backend (default): file DB is primary store. Fail-closed — if
+    // the DB can't be opened or bootstrapped, C_Initialize must return
+    // CKR_GENERAL_ERROR rather than accepting signatures into nothing.
+    c->db_path = resolve_db_path_for_container();
+    c->db = vhsm::signature_store::db::make_sqlite_connection(c->db_path);
+    if (!c->db)
+      throw std::runtime_error("VHSM: cannot open SQLite DB at " +
+                               c->db_path);
+    try {
+      vhsm::signature_store::db::DbSchema schema(*c->db);
+      schema.bootstrap();
+      c->instance_id = schema.get_instance_id();
+      vhsm::core::set_hsm_instance_id(c->instance_id);
+    } catch (...) {
+      throw std::runtime_error("VHSM: SQLite schema bootstrap failed at " +
+                               c->db_path);
     }
   }
 
@@ -235,7 +268,13 @@ std::unique_ptr<AppContainer> create_app_container() {
   }
 
   // Notification pipeline only makes sense with DB backend (needs tables).
-  if (c->backend == AppContainer::StoreBackend::Db && c->db) {
+  // Notification pipeline + outbox poller — enabled for BOTH backends.
+  // Previously gated to Db only, which meant ledger-mode deployments never
+  // dispatched SIGN_CREATED or DB_WRITE_FAILED events: the outbox table
+  // accumulated rows forever and no email/webhook/gRPC alert fired.
+  // After fix #1 (file-backed DB for ledger mode), both backends have a
+  // persistent event_outbox table that the poller can drain.
+  if (c->db) {
     try {
       c->notif_repo =
           std::make_unique<vhsm::signature_store::db::NotificationRepository>(
@@ -243,15 +282,19 @@ std::unique_ptr<AppContainer> create_app_container() {
       auto disp =
           std::make_unique<vhsm::signature_store::db::NotificationDispatcher>(
               *c->bounded_bus, *c->notif_repo);
-      static vhsm::notification::EmailAdapter email_adapter;
-      static vhsm::notification::WebhookAdapter webhook_adapter;
-      static vhsm::notification::GrpcPushAdapter grpc_push_adapter;
+      // Per-container adapters (NOT static locals): static adapters are
+      // process-wide, so two AppContainer instances would share delivery
+      // state. Each container owns its own set.
+      vhsm::notification::EmailAdapter email_adapter;
+      vhsm::notification::WebhookAdapter webhook_adapter;
+      vhsm::notification::GrpcPushAdapter grpc_push_adapter;
       disp->add_adapter(email_adapter);
       disp->add_adapter(webhook_adapter);
       disp->add_adapter(grpc_push_adapter);
       disp->start();
       c->notif_dispatcher = std::move(disp);
-    } catch (...) {
+    } catch (const std::exception &e) {
+      std::fprintf(stderr, "VHSM: notification pipeline setup failed: %s\n", e.what());
     }
     // Outbox poller — replays PENDING event_outbox rows written
     // transactionally by the dispatcher. Started after the dispatcher so
@@ -261,12 +304,15 @@ std::unique_ptr<AppContainer> create_app_container() {
           std::make_unique<vhsm::signature_store::db::OutboxPoller>(*c->db,
                                                                     *c->bus);
       c->outbox_poller->start();
-    } catch (...) {
+    } catch (const std::exception &e) {
+      std::fprintf(stderr, "VHSM: outbox poller setup failed: %s\n", e.what());
     }
   }
 
 #ifdef VHSM_LEDGER
   // Ledger worker only for ledger backend and when endpoint is configured.
+  // DB backend never gets a ledger worker — check_backend_exclusivity()
+  // already rejected that combination at startup.
   if (c->backend == AppContainer::StoreBackend::Ledger) {
     const char *endpoint = std::getenv("VHSM_LEDGER_ENDPOINT");
     const char *cert = std::getenv("VHSM_LEDGER_CERT");
@@ -283,36 +329,10 @@ std::unique_ptr<AppContainer> create_app_container() {
                 ? std::getenv("VHSM_LEDGER_MSP_ID")
                 : "vHSMMSP");
         auto *bus = c->bus;
-        // For ledger backend, store directly via ledger; no DB retry queue.
-        c->ledger_worker = std::make_unique<vhsm::ledger::LedgerWorker>(
-            *c->ledger_client, *bus,
-            [](const SignatureRecord &, const vhsm::ledger::LedgerEntry &) {});
-        c->ledger_worker->start();
-      } catch (...) {
-        c->ledger_client.reset();
-        c->ledger_worker.reset();
-      }
-    }
-  } else {
-    // DB backend: keep previous complementary ledger anchoring as deprecated
-    // path, but only if caller explicitly set ledger env. Since backends are
-    // now exclusive, this path is deprecated and will be removed.
-    const char *endpoint = std::getenv("VHSM_LEDGER_ENDPOINT");
-    const char *cert = std::getenv("VHSM_LEDGER_CERT");
-    const char *key = std::getenv("VHSM_LEDGER_KEY");
-    if (endpoint && cert && key && *endpoint && *cert && *key) {
-      try {
-        c->ledger_client = std::make_unique<vhsm::ledger::LedgerClient>(
-            endpoint, cert, key,
-            std::getenv("VHSM_LEDGER_CA") ? std::getenv("VHSM_LEDGER_CA") : "",
-            std::getenv("VHSM_LEDGER_SERVER_NAME")
-                ? std::getenv("VHSM_LEDGER_SERVER_NAME")
-                : "",
-            std::getenv("VHSM_LEDGER_MSP_ID")
-                ? std::getenv("VHSM_LEDGER_MSP_ID")
-                : "vHSMMSP");
+        // Ledger backend: dispatch writes to local SQLite (audit trail),
+        // LedgerWorker anchors to Fabric asynchronously. The callback
+        // updates ledger_tx_id/block/status in the local DB after anchor.
         auto *db = c->db.get();
-        auto *bus = c->bus;
         c->ledger_worker = std::make_unique<vhsm::ledger::LedgerWorker>(
             *c->ledger_client, *bus,
             [db](const SignatureRecord &rec,
@@ -322,6 +342,7 @@ std::unique_ptr<AppContainer> create_app_container() {
               repo.update_ledger_fields(rec.record_id, e);
             });
         c->ledger_worker->start();
+        // Replay any PENDING records from previous runs.
         vhsm::signature_store::db::LedgerRetryQueue retry(*db);
         for (auto &rec : retry.load_pending_records())
           c->ledger_worker->submit_record(rec);
@@ -400,6 +421,8 @@ void destroy_app_container(std::unique_ptr<AppContainer> &container) noexcept {
   container->bounded_bus.reset();
   container->bus = nullptr;
   container->db.reset();
+  vhsm::session::detail::set_global_slot_manager(nullptr);
+  container->slot_manager.reset();
   container.reset();
 }
 

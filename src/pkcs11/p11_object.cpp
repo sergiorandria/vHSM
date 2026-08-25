@@ -122,6 +122,7 @@ bool match_object(const HsmObject &obj, CK_ATTRIBUTE_PTR t, CK_ULONG n) {
 
 CK_RV C_CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
                      CK_ULONG ulCount, CK_OBJECT_HANDLE_PTR phObject) {
+  VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   if (!phObject)
@@ -146,11 +147,13 @@ CK_RV C_CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
   p11_register_object(hSession, handle);
   *phObject = handle;
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_CopyObject(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
                    CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount,
                    CK_OBJECT_HANDLE_PTR phNewObject) {
+  VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   if (!phNewObject)
@@ -179,9 +182,11 @@ CK_RV C_CopyObject(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
   p11_register_object(hSession, handle);
   *phNewObject = handle;
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_DestroyObject(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject) {
+  VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   auto s = p11_get_session(hSession);
@@ -206,10 +211,12 @@ CK_RV C_DestroyObject(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject) {
       "C_DestroyObject completed for handle " + std::to_string(hObject),
       detail_ss.str(), std::nullopt, "C_DestroyObject");
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_GetObjectSize(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
                       CK_ULONG_PTR pulSize) {
+  VHSM_C_TRY
   if (!pulSize)
     return CKR_ARGUMENTS_BAD;
   auto o = p11_get_object(hSession, hObject);
@@ -231,10 +238,12 @@ CK_RV C_GetObjectSize(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
   }
   *pulSize = sz;
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
                           CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount) {
+  VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   auto o = p11_get_object(hSession, hObject);
@@ -247,10 +256,12 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
       rv = r;
   }
   return rv;
+VHSM_C_CATCH
 }
 
 CK_RV C_SetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
                           CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount) {
+  VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   auto o = p11_get_object(hSession, hObject);
@@ -271,10 +282,12 @@ CK_RV C_SetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
     }
   }
   return rv;
+VHSM_C_CATCH
 }
 
 CK_RV C_FindObjectsInit(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
                         CK_ULONG ulCount) {
+  VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   auto s = p11_get_session(hSession);
@@ -316,10 +329,12 @@ CK_RV C_FindObjectsInit(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
   }
   s->setFindResults(std::move(results));
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_FindObjects(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE_PTR phObject,
                     CK_ULONG ulMaxObjectCount, CK_ULONG_PTR pulObjectCount) {
+  VHSM_C_TRY
   if (!pulObjectCount)
     return CKR_ARGUMENTS_BAD;
   auto s = p11_get_session(hSession);
@@ -331,14 +346,17 @@ CK_RV C_FindObjects(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE_PTR phObject,
   *pulObjectCount = static_cast<CK_ULONG>(
       s->findNextBatch(phObject, static_cast<size_t>(ulMaxObjectCount)));
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 CK_RV C_FindObjectsFinal(CK_SESSION_HANDLE hSession) {
+  VHSM_C_TRY
   auto s = p11_get_session(hSession);
   if (!s)
     return CKR_SESSION_HANDLE_INVALID;
   s->clearFindResults();
   return CKR_OK;
+VHSM_C_CATCH
 }
 
 } // namespace vhsm::pkcs11

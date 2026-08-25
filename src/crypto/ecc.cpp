@@ -34,13 +34,13 @@ ECCKeyPair ECC::generate_key(Curve curve) {
 
 std::vector<uint8_t> ECC::sign(const ECCKeyPair &key,
                                const std::vector<uint8_t> &data) {
-  VHSM_CHECK_MSG(key.key != nullptr, "ECC::sign: key is null");
+  VHSM_CHECK_ARG(key.key != nullptr, "ECC::sign: key is null");
   return vhsm::scrypto::ec_sign({key.key, to_scrypto(key.curve)}, data);
 }
 
 bool ECC::verify(const ECCKeyPair &key, const std::vector<uint8_t> &data,
                  const std::vector<uint8_t> &signature) {
-  VHSM_CHECK_MSG(key.key != nullptr, "ECC::verify: key is null");
+  VHSM_CHECK_ARG(key.key != nullptr, "ECC::verify: key is null");
   try {
     return vhsm::scrypto::ec_verify({key.key, to_scrypto(key.curve)}, data,
                                     signature);
@@ -51,8 +51,8 @@ bool ECC::verify(const ECCKeyPair &key, const std::vector<uint8_t> &data,
 
 std::vector<uint8_t>
 ECC::derive_shared_secret(const ECCKeyPair &priv, const ECCKeyPair &peer) {
-  VHSM_CHECK_MSG(priv.key != nullptr, "ECC::derive: private key is null");
-  VHSM_CHECK_MSG(peer.key != nullptr, "ECC::derive: peer key is null");
+  VHSM_CHECK_ARG(priv.key != nullptr, "ECC::derive: private key is null");
+  VHSM_CHECK_ARG(peer.key != nullptr, "ECC::derive: peer key is null");
   return vhsm::scrypto::ecdh_derive({priv.key, to_scrypto(priv.curve)},
                                     {peer.key, to_scrypto(peer.curve)});
 }

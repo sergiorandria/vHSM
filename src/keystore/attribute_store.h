@@ -2,8 +2,7 @@
 #define VHSM_KEYSTORE_ATTRIBUTE_STORE_H
 
 #include "../core/secure_buffer.h"
-#include "pkcs11/pkcs11_types.h"  // resolved via -I src
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
 #include "hsm_object.h"
 
 #include <cstring>
@@ -53,7 +52,7 @@ public:
    * WHY CK_RV return: Matches PKCS#11 C API convention. Callers expect
    * error codes like CKR_ATTRIBUTE_TYPE_INVALID, CKR_BUFFER_TOO_SMALL.
    */
-  CK_RV v_get_attribute(CK_ATTRIBUTE_TYPE type, CK_VOID_PTR pValue,
+  [[nodiscard]] CK_RV v_get_attribute(CK_ATTRIBUTE_TYPE type, CK_VOID_PTR pValue,
                         CK_ULONG_PTR pulValueLen);
 
   /**
@@ -64,7 +63,7 @@ public:
    * WHY take CK_ATTRIBUTE_PTR: This is the C API form. v_AttributeStore_M1
    * is a bridge; using the PKCS#11 struct directly makes it clear.
    */
-  CK_RV v_set_attribute(CK_ATTRIBUTE_PTR pAttr);
+  [[nodiscard]] CK_RV v_set_attribute(CK_ATTRIBUTE_PTR pAttr);
 
   /**
    * @brief Initialize default attributes for a newly-created object.
@@ -103,7 +102,7 @@ private:
    * Validation ensures only sensible values are stored. Prevents type
    * mismatches and injection attacks.
    */
-  CK_RV v_validate_attribute(CK_ATTRIBUTE_TYPE type, CK_VOID_PTR pValue,
+  [[nodiscard]] CK_RV v_validate_attribute(CK_ATTRIBUTE_TYPE type, CK_VOID_PTR pValue,
                              CK_ULONG ulValueLen) const;
 };
 

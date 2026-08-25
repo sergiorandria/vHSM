@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "../core/types.h"
+#include "../domain/core/kernel_types.h"
 #include "vault_format.h"
 
 // WHY a Vault: PLAN.md Phase 7 requires encrypted-at-rest storage of sensitive
@@ -47,7 +47,7 @@ public:
   // Decrypts and returns the payload stored in the vault file.
   std::vector<u8> load() const;
 
-  // The on-disk format version (currently kVaultFormatVersion).
+  // The on-disk format version (currently K_VAULT_FORMAT_VERSION).
   std::uint32_t version() const noexcept;
 
   // True if the file was successfully opened and authenticated.
@@ -66,7 +66,7 @@ private:
 
   std::filesystem::path path_;
   std::string password_;
-  std::uint32_t version_ = kVaultFormatVersion;
+  std::uint32_t version_ = K_VAULT_FORMAT_VERSION;
   bool valid_ = false;
 };
 
