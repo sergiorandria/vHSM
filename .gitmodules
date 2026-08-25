@@ -3,5 +3,5 @@
 	url = https://github.com/sergiorandria/fabric-gateway-cpp.git
 [submodule "third_party/vhsm-secure-crypto"]
 	path = third_party/vhsm-secure-crypto
-	url = https://github.com/vHSM/vhsm-secure-crypto.git
+	url = https://github.com/sergiorandria/vhsm-secure-crypto.git
 	branch = main
