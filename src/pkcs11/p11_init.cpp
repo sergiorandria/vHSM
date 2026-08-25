@@ -116,7 +116,7 @@ CK_RV C_Finalize(CK_VOID_PTR pReserved) {
   g_boundedBus.reset();
   g_dbConnection.reset();
   g_appContainer.reset();
-  vhsm::session::SlotManager::get_instance().reset();
+  vhsm::session::detail::global_slot_manager().reset();
   return CKR_OK;
 }
 

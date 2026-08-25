@@ -162,13 +162,13 @@ void p11_publish_event(vhsm::notification::NotificationEvent::EventType type,
 // ---------------------------------------------------------------------------
 keystore::Slot *p11_get_slot(CK_SLOT_ID id) {
   auto sp =
-      vhsm::session::SlotManager::get_instance().get_slot(static_cast<u64>(id));
+      vhsm::session::detail::global_slot_manager().get_slot(static_cast<u64>(id));
   return sp.get();
 }
 
 keystore::Token *p11_get_token(CK_SLOT_ID id) {
   auto sp =
-      vhsm::session::SlotManager::get_instance().get_slot(static_cast<u64>(id));
+      vhsm::session::detail::global_slot_manager().get_slot(static_cast<u64>(id));
   if (!sp)
     return nullptr;
   auto tp = sp->get_token();

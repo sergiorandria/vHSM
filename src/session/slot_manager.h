@@ -2,7 +2,7 @@
 #define VHSM_SESSION_SLOT_MANAGER_H
 
 #include "../core/system_hsm_clock.h"
-#include "../keystore/slot.h" // Inclusion de ton composant Slot documenté
+#include "../keystore/slot.h"
 #include "internal/slot_manager_core.h"
 #include <cstdint>
 #include <memory>
@@ -14,45 +14,42 @@ namespace vhsm::session {
 
 /**
  * @class SlotManager
- * @brief Singleton facade that manages the lifecycle and access registry of
- *        all virtual Slots.
+ * @brief Manages the lifecycle and access registry of all virtual Slots.
  *
- * This class is the thin, GLIBC-style public surface: it forwards every call
- * to the internal business-logic core
- * (vhsm::session::internal::v_SlotManagerCore_M1), which owns the slot
- * registry. See v_SlotManagerCore_M1 for the actual logic.
+ * Injectable dependency — NOT a singleton. Owned by AppContainer (or tests).
+ * Multiple instances are safe: each owns an independent slot registry.
+ *
+ * A backward-compat process-wide accessor (`global_slot_manager()`) is
+ * provided for legacy PKCS#11 call sites during the migration to full DI.
  */
 class SlotManager {
 public:
-  /**
-   * @brief Retrieves the global unique instance of the SlotManager.
-   * @return SlotManager& Reference to the singleton instance.
-   */
-  static SlotManager &get_instance();
-
-  // Delete copy and move operations to enforce strict singleton pattern
-  // properties.
-  SlotManager(const SlotManager &) = delete;
-  SlotManager &operator=(const SlotManager &) = delete;
-  SlotManager(SlotManager &&) = delete;
-  SlotManager &operator=(SlotManager &&) = delete;
-
-  bool register_slot(u64 slot_id);
-
-  std::shared_ptr<keystore::Slot> get_slot(u64 slot_id) const;
-
-  std::vector<u64> get_slot_id_list() const;
-
-  void reset();
-
-private:
-  // Private constructor for singleton pattern enforcement.
+  // Public constructor — injectable, not a singleton.
   SlotManager();
   ~SlotManager() = default;
 
+  // Non-copyable, non-movable: owns mutex + slot registry. Store as
+  // unique_ptr<SlotManager> in containers.
+  SlotManager(const SlotManager &) = delete;
+  SlotManager &operator=(const SlotManager &) = delete;
+
+  bool register_slot(u64 slot_id);
+  std::shared_ptr<keystore::Slot> get_slot(u64 slot_id) const;
+  std::vector<u64> get_slot_id_list() const;
+  void reset();
+
+private:
   vhsm::SystemHsmClock v_clock_;
   vhsm::session::internal::v_SlotManagerCore_M1 v_core_;
 };
+
+// Backward-compat: returns the process-wide SlotManager set by C_Initialize.
+// New code should receive SlotManager via injection instead. Marked
+// deprecated so new uses are flagged at compile time.
+namespace detail {
+SlotManager &global_slot_manager();
+void set_global_slot_manager(SlotManager *mgr);
+} // namespace detail
 
 } // namespace vhsm::session
 

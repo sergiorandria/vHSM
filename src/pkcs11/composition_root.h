@@ -6,6 +6,7 @@
 
 #include "../core/hsm_instance.h"
 #include "../domain/signing/isignature_store.h"
+#include "../session/slot_manager.h"
 #include "../signature_store/db_connection.h"
 
 // Forward declares for impl to keep header light
@@ -98,6 +99,11 @@ struct AppContainer {
 
   // Vault (optional)
   std::unique_ptr<vhsm::persistence::Vault> vault;
+
+  // Slot manager — owns the virtual slot registry. Injected (not a
+  // singleton) so tests can create isolated containers with independent
+  // slot sets.
+  std::unique_ptr<vhsm::session::SlotManager> slot_manager;
 
   AppContainer() = default;
   ~AppContainer();
