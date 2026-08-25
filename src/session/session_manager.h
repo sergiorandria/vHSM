@@ -42,25 +42,25 @@ public:
   // management, and handle allocation. This separation keeps the facade thin
   // and the core focused. Open a new session. Validates raw CK_* inputs, then
   // delegates to the internal core that owns the session registry.
-  CK_RV openSession(CK_SLOT_ID slotID, CK_FLAGS flags, CK_VOID_PTR pApplication,
+  [[nodiscard]] CK_RV openSession(CK_SLOT_ID slotID, CK_FLAGS flags, CK_VOID_PTR pApplication,
                     CK_NOTIFY notify, CK_SESSION_HANDLE_PTR phSession);
 
   // WHY closeSession takes a handle (not a Session*): Callers don't have
   // Session pointers; they have handles. The manager looks up the handle in its
   // registry and deletes the session. If the handle is invalid, closeSession
   // returns an error (CKR_SESSION_HANDLE_INVALID).
-  CK_RV closeSession(CK_SESSION_HANDLE hSession);
+  [[nodiscard]] CK_RV closeSession(CK_SESSION_HANDLE hSession);
 
   // WHY closeAllSessions per-slot: A slot may have multiple open sessions
   // (read-only and read-write). Closing all at once is useful for cleanup when
   // a token is removed or the library is finalized. The manager iterates over
   // sessions for this slotID and closes each.
-  CK_RV closeAllSessions(CK_SLOT_ID slotID);
+  [[nodiscard]] CK_RV closeAllSessions(CK_SLOT_ID slotID);
 
   // WHY getSessionInfo populates a CK_SESSION_INFO_PTR: PKCS#11 API pattern.
   // The caller allocates a struct; we fill it with all session attributes.
   // Avoids returning a complex struct (which doesn't port well to C).
-  CK_RV getSessionInfo(CK_SESSION_HANDLE hSession, CK_SESSION_INFO_PTR pInfo);
+  [[nodiscard]] CK_RV getSessionInfo(CK_SESSION_HANDLE hSession, CK_SESSION_INFO_PTR pInfo);
 
   // WHY getSession returns shared_ptr<Session>: Internal callers (C_Sign,
   // C_GetAttributeValue) need to work with the session. Returning shared_ptr

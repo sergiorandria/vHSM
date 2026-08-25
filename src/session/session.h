@@ -65,24 +65,24 @@ public:
   // WHY login/logout take userType and PIN: Login state depends on who is
   // logged in (CKU_USER vs CKU_SO) and whether the PIN is correct. The PIN is
   // sensitive, so it's wrapped in SecureBuffer (zeroed after use).
-  CK_RV login(CK_USER_TYPE userType, const SecureBuffer &pin);
-  CK_RV logout();
+  [[nodiscard]] CK_RV login(CK_USER_TYPE userType, const SecureBuffer &pin);
+  [[nodiscard]] CK_RV logout();
 
   // WHY initializeOperation / finalizeOperation: PKCS#11 requires initializing
   // an operation (select mechanism, pass parameters) before performing
   // sign/encrypt/verify/decrypt. Finalizing closes the operation and clears
   // state. This prevents accidental reuse of operation state across multiple
   // operations.
-  CK_RV initializeOperation(CK_MECHANISM_TYPE mechanism,
+  [[nodiscard]] CK_RV initializeOperation(CK_MECHANISM_TYPE mechanism,
                             CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount);
-  CK_RV finalizeOperation();
+  [[nodiscard]] CK_RV finalizeOperation();
 
   // Per-operation state (migrated from global g_stateMutex maps)
   // These replace g_activeMech, g_opBuf, g_signKey, g_gcmIv, etc.
   // Each Session now owns its own operation state, so cross-session
   // contention is zero (per spec, same session not used concurrently).
-  CK_RV opBegin(CK_MECHANISM_TYPE mech, CK_OBJECT_HANDLE key);
-  CK_RV opCheck() const;
+  [[nodiscard]] CK_RV opBegin(CK_MECHANISM_TYPE mech, CK_OBJECT_HANDLE key);
+  [[nodiscard]] CK_RV opCheck() const;
   void opEnd();
 
   // Operation buffer: zero-copy access for multi-part ops

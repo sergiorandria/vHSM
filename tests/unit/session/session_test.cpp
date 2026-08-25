@@ -88,23 +88,23 @@ TEST_F(SessionTest, LoginSOSucceedsFromPublicState) {
 }
 
 TEST_F(SessionTest, LoginUserSetsRWUserFunctionsState) {
-  rwSession.login(CKU_USER, validPin);
+  (void)rwSession.login(CKU_USER, validPin);
   EXPECT_EQ(rwSession.getState(), CKS_RW_USER_FUNCTIONS);
 }
 
 TEST_F(SessionTest, LoginSOSetsSORWFunctionsState) {
-  rwSession.login(CKU_SO, validPin);
+  (void)rwSession.login(CKU_SO, validPin);
   EXPECT_EQ(rwSession.getState(), CKS_RW_SO_FUNCTIONS);
 }
 
 TEST_F(SessionTest, LoginUserOnROSessionYieldsROUserFunctions) {
-  roSession.login(CKU_USER, validPin);
+  (void)roSession.login(CKU_USER, validPin);
   // After fix: read-only session + CKU_USER login = CKS_RO_USER_FUNCTIONS
   EXPECT_EQ(roSession.getState(), CKS_RO_USER_FUNCTIONS);
 }
 
 TEST_F(SessionTest, LoginSetsUserType) {
-  rwSession.login(CKU_USER, validPin);
+  (void)rwSession.login(CKU_USER, validPin);
   EXPECT_EQ(rwSession.getUserType(), CKU_USER);
 }
 
@@ -114,7 +114,7 @@ TEST_F(SessionTest, LoginInvalidUserTypeReturnsError) {
 }
 
 TEST_F(SessionTest, LoginWhenAlreadyLoggedInReturnsUserAlreadyLoggedIn) {
-  rwSession.login(CKU_USER, validPin);
+  (void)rwSession.login(CKU_USER, validPin);
   CK_RV rv = rwSession.login(CKU_USER, validPin);
   // After fix: second login should return CKR_USER_ALREADY_LOGGED_IN
   EXPECT_EQ(rv, CKR_USER_ALREADY_LOGGED_IN);
@@ -125,25 +125,25 @@ TEST_F(SessionTest, LoginWhenAlreadyLoggedInReturnsUserAlreadyLoggedIn) {
 // ============================================================
 
 TEST_F(SessionTest, LogoutAfterLoginReturnsOK) {
-  rwSession.login(CKU_USER, validPin);
+  (void)rwSession.login(CKU_USER, validPin);
   EXPECT_EQ(rwSession.logout(), CKR_OK);
 }
 
 TEST_F(SessionTest, LogoutResetsUserType) {
-  rwSession.login(CKU_USER, validPin);
-  rwSession.logout();
+  (void)rwSession.login(CKU_USER, validPin);
+  (void)rwSession.logout();
   EXPECT_EQ(rwSession.getUserType(), static_cast<CK_USER_TYPE>(CKU_INVALID));
 }
 
 TEST_F(SessionTest, LogoutOnRWSessionRestoresRWPublicState) {
-  rwSession.login(CKU_USER, validPin);
-  rwSession.logout();
+  (void)rwSession.login(CKU_USER, validPin);
+  (void)rwSession.logout();
   EXPECT_EQ(rwSession.getState(), CKS_RW_PUBLIC_SESSION);
 }
 
 TEST_F(SessionTest, LogoutOnROSessionRestoresROPublicState) {
-  roSession.login(CKU_USER, validPin);
-  roSession.logout();
+  (void)roSession.login(CKU_USER, validPin);
+  (void)roSession.logout();
   EXPECT_EQ(roSession.getState(), CKS_RO_PUBLIC_SESSION);
 }
 
@@ -152,8 +152,8 @@ TEST_F(SessionTest, LogoutWhenNotLoggedInReturnsUserNotLoggedIn) {
 }
 
 TEST_F(SessionTest, DoubleLogoutReturnsUserNotLoggedIn) {
-  rwSession.login(CKU_USER, validPin);
-  rwSession.logout();
+  (void)rwSession.login(CKU_USER, validPin);
+  (void)rwSession.logout();
   EXPECT_EQ(rwSession.logout(), CKR_USER_NOT_LOGGED_IN);
 }
 
@@ -168,21 +168,21 @@ TEST_F(SessionTest, InitOperationRequiresLogin) {
 }
 
 TEST_F(SessionTest, InitOperationSucceedsWhenLoggedIn) {
-  rwSession.login(CKU_USER, validPin);
+  (void)rwSession.login(CKU_USER, validPin);
   EXPECT_EQ(rwSession.initializeOperation(CKM_AES_CBC, nullptr, 0), CKR_OK);
 }
 
 TEST_F(SessionTest, InitOperationTwiceReturnsOperationActive) {
-  rwSession.login(CKU_USER, validPin);
-  rwSession.initializeOperation(CKM_AES_CBC, nullptr, 0);
+  (void)rwSession.login(CKU_USER, validPin);
+  (void)rwSession.initializeOperation(CKM_AES_CBC, nullptr, 0);
   EXPECT_EQ(rwSession.initializeOperation(CKM_AES_CBC, nullptr, 0),
             CKR_OPERATION_ACTIVE);
 }
 
 TEST_F(SessionTest, InitOperationAfterFinalizeSucceeds) {
-  rwSession.login(CKU_USER, validPin);
-  rwSession.initializeOperation(CKM_AES_CBC, nullptr, 0);
-  rwSession.finalizeOperation();
+  (void)rwSession.login(CKU_USER, validPin);
+  (void)rwSession.initializeOperation(CKM_AES_CBC, nullptr, 0);
+  (void)rwSession.finalizeOperation();
   EXPECT_EQ(rwSession.initializeOperation(CKM_AES_CBC, nullptr, 0), CKR_OK);
 }
 
@@ -191,20 +191,20 @@ TEST_F(SessionTest, InitOperationAfterFinalizeSucceeds) {
 // ============================================================
 
 TEST_F(SessionTest, FinalizeWithNoOperationReturnsNotInitialized) {
-  rwSession.login(CKU_USER, validPin);
+  (void)rwSession.login(CKU_USER, validPin);
   EXPECT_EQ(rwSession.finalizeOperation(), CKR_OPERATION_NOT_INITIALIZED);
 }
 
 TEST_F(SessionTest, FinalizeAfterInitReturnsOK) {
-  rwSession.login(CKU_USER, validPin);
-  rwSession.initializeOperation(CKM_AES_CBC, nullptr, 0);
+  (void)rwSession.login(CKU_USER, validPin);
+  (void)rwSession.initializeOperation(CKM_AES_CBC, nullptr, 0);
   EXPECT_EQ(rwSession.finalizeOperation(), CKR_OK);
 }
 
 TEST_F(SessionTest, DoubleFinalizeFails) {
-  rwSession.login(CKU_USER, validPin);
-  rwSession.initializeOperation(CKM_AES_CBC, nullptr, 0);
-  rwSession.finalizeOperation();
+  (void)rwSession.login(CKU_USER, validPin);
+  (void)rwSession.initializeOperation(CKM_AES_CBC, nullptr, 0);
+  (void)rwSession.finalizeOperation();
   EXPECT_EQ(rwSession.finalizeOperation(), CKR_OPERATION_NOT_INITIALIZED);
 }
 
@@ -238,7 +238,7 @@ TEST_F(SessionTest, GetSessionInfoNullPtrDoesNotCrash) {
 }
 
 TEST_F(SessionTest, GetSessionInfoReflectsStateAfterLogin) {
-  rwSession.login(CKU_USER, validPin);
+  (void)rwSession.login(CKU_USER, validPin);
   CK_SESSION_INFO info{};
   rwSession.getSessionInfo(&info);
   EXPECT_EQ(info.state, CKS_RW_USER_FUNCTIONS);
@@ -266,8 +266,8 @@ TEST_F(SessionTest, ConcurrentLoginLogoutDoesNotDeadlock) {
     while (!go.load()) { /* spin */
     }
     for (int i = 0; i < 200; ++i) {
-      rwSession.login(CKU_USER, validPin);
-      rwSession.logout();
+      (void)rwSession.login(CKU_USER, validPin);
+      (void)rwSession.logout();
     }
   };
 
