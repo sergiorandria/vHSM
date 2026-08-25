@@ -47,19 +47,19 @@ CK_RV v_SessionManagerCore_M1::v_close_session(CK_SESSION_HANDLE hSession) {
 CK_RV v_SessionManagerCore_M1::v_close_all_sessions(CK_SLOT_ID slotID) {
   std::lock_guard<std::mutex> lock(v_mutex_);
 
-  bool found = false;
   auto it = v_sessions_.begin();
   while (it != v_sessions_.end()) {
     if ((*it)->getSlotID() == slotID) {
       it = v_sessions_.erase(it);
-      found = true;
     } else {
       ++it;
     }
   }
 
   v_touch_op();
-  return found ? CKR_OK : CKR_OK; // Return OK even if no sessions were found
+  // PKCS#11: C_CloseAllSessions on a slot with no open sessions is not an
+  // error — CKR_OK either way (the slot itself was validated by the facade).
+  return CKR_OK;
 }
 
 CK_RV v_SessionManagerCore_M1::v_get_session_info(CK_SESSION_HANDLE hSession,

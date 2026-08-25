@@ -3,10 +3,9 @@
 #include "db_connection.h"
 #include "db_hmac_key.h"
 #include "vhsm/scrypto/constant_time.h"
+#include "vhsm/scrypto/hmac.h"
 
 #include <iomanip>
-#include <openssl/hmac.h>
-#include <openssl/sha.h>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -45,18 +44,15 @@ std::string RowIntegrity::compute_hmac(
     if (opt) concatenated.append(*opt);
   }
 
-  // Compute HMAC-SHA256
-  unsigned int hmac_len = 0;
-  unsigned char hmac_result[SHA256_DIGEST_LENGTH];
-  HMAC(EVP_sha256(), key.data(), key.size(),
-       reinterpret_cast<const unsigned char *>(concatenated.data()),
-       concatenated.size(), hmac_result, &hmac_len);
+  // Compute HMAC-SHA256 via vhsm::scrypto
+  auto mac = vhsm::scrypto::hmac_sha256(
+      key, std::vector<uint8_t>(concatenated.begin(), concatenated.end()));
 
   // Convert to hex string
   std::stringstream ss;
   ss << std::hex << std::setfill('0');
-  for (unsigned int i = 0; i < hmac_len; ++i) {
-    ss << std::setw(2) << static_cast<int>(hmac_result[i]);
+  for (unsigned char b : mac) {
+    ss << std::setw(2) << static_cast<int>(b);
   }
   return ss.str();
 }

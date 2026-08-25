@@ -1,52 +1,28 @@
 /*
  * crypto_engine.cpp
  *
- * CryptoEngine dispatches a signing request to the correct primitive based on
- * the key type, with graceful fallback between RSA and ECDSA.
- *
- * vHSM must never fail open: if the caller requests a mechanism that is
- * incompatible with the loaded key (e.g. CKM_SHA256_RSA_PKCS on an EC key),
- * the engine signs with the key's native algorithm instead of rejecting the
- * operation outright. The chosen algorithm is recorded in SignResult so the
- * ledger anchor and audit trail stay truthful.
+ * CryptoEngine dispatches a signing request to the primitive matching the
+ * key's algorithm family. All primitives come from vhsm::scrypto (hardened
+ * clone). A requested mechanism that conflicts with the key family is
+ * rejected with CKR_KEY_TYPE_INCONSISTENT unless the caller explicitly opts
+ * into native fallback (MechanismPolicy::AllowNativeFallback) — silent
+ * algorithm substitution produced signatures verifiers would reject.
  */
 
 #include "crypto_engine.h"
 
 #include "../core/error.h"
 #include "../core/types.h"
-#include "ecc.h"
-#include "rsa.h"
-
-#include <openssl/evp.h>
+#include "vhsm/scrypto/hash.h"
 
 namespace vhsm::crypto {
 
 namespace {
 
-bool keyIsRsa(EVP_PKEY *key) { return EVP_PKEY_id(key) == EVP_PKEY_RSA; }
-
 // SHA-256 of `data` returned as a lowercase hex string (matches the hex
 // digest format persisted in SignatureRecord.payload_digest).
 std::string sha256_hex(const std::vector<u8> &data) {
-  EVP_MD_CTX *ctx = EVP_MD_CTX_new();
-  if (!ctx) {
-    throw std::runtime_error("CryptoEngine::sign: EVP_MD_CTX_new failed");
-  }
-  const auto guard = [](EVP_MD_CTX *c) { EVP_MD_CTX_free(c); };
-  (void)guard;
-  std::unique_ptr<EVP_MD_CTX, decltype(guard)> ctx_guard(ctx, guard);
-
-  if (EVP_DigestInit_ex(ctx, EVP_sha256(), nullptr) != 1 ||
-      EVP_DigestUpdate(ctx, data.data(), data.size()) != 1) {
-    throw std::runtime_error("CryptoEngine::sign: SHA-256 digest failed");
-  }
-  std::vector<u8> raw(32);
-  unsigned int len = 0;
-  if (EVP_DigestFinal_ex(ctx, raw.data(), &len) != 1) {
-    throw std::runtime_error("CryptoEngine::sign: SHA-256 finalize failed");
-  }
-  raw.resize(len);
+  auto raw = vhsm::scrypto::sha256(data.data(), data.size());
   static const char *kHex = "0123456789abcdef";
   std::string hex;
   hex.reserve(raw.size() * 2);
@@ -57,42 +33,63 @@ std::string sha256_hex(const std::vector<u8> &data) {
   return hex;
 }
 
-} // namespace
-
-SignResult CryptoEngine::sign(EVP_PKEY *key, const std::vector<u8> &data,
-                              const std::string &requested_mechanism) {
-  VHSM_CHECK_MSG(key != nullptr, "CryptoEngine::sign: key is null");
-
-  // `requested_mechanism` documents the caller's intent and is retained for
-  // audit logging; the engine always signs with the key's native algorithm
-  // (see below), so an incompatible request triggers a fallback rather than
-  // an error.
-  (void)requested_mechanism;
-
-  const bool native_is_rsa = keyIsRsa(key);
-
-  // A key can only sign with its own algorithm. If the caller requested a
-  // family that conflicts with the key type we fall back to the key's
-  // native algorithm rather than failing the operation (fail-closed on
-  // *transport/security*, but never silently produce a signature with the
-  // wrong primitive). The actually-applied mechanism is recorded below so
-  // the ledger anchor and audit trail stay truthful.
-  const bool use_rsa = native_is_rsa;
-
+SignResult make_result(const std::vector<uint8_t> &signature,
+                       const std::vector<u8> &data,
+                       const char *mechanism) {
   SignResult result;
   result.payload_digest = sha256_hex(data);
   result.digest_alg = "SHA-256";
   result.payload_size = static_cast<int>(data.size());
-
-  if (use_rsa) {
-    result.signature = RSAUtil::sign(key, data);
-    result.mechanism_str = "CKM_SHA256_RSA_PKCS";
-  } else {
-    result.signature = ECC::sign(key, data);
-    result.mechanism_str = "CKM_ECDSA_SHA256";
-  }
-
+  result.signature = signature;
+  result.mechanism_str = mechanism;
   return result;
 }
 
+} // namespace
+
+namespace {
+
+// True when `requested_mechanism` names an RSA family mechanism.
+bool is_rsa_request(const std::string &mech) {
+  return mech.find("RSA") != std::string::npos;
+}
+// True when it names an EC family mechanism.
+bool is_ec_request(const std::string &mech) {
+  return mech.find("ECDSA") != std::string::npos;
+}
+// Enforce policy; throws on RejectMismatch conflict.
+void check_family(const std::string &requested_mechanism, bool rsa_key,
+                  MechanismPolicy policy) {
+  if (requested_mechanism.empty() ||
+      policy == MechanismPolicy::AllowNativeFallback)
+    return;
+  const bool conflict =
+      rsa_key ? is_ec_request(requested_mechanism)
+              : is_rsa_request(requested_mechanism);
+  if (conflict) {
+    throw std::runtime_error(
+        "CKR_KEY_TYPE_INCONSISTENT: mechanism " + requested_mechanism +
+        " does not match " + (rsa_key ? "RSA" : "EC") + " key");
+  }
+}
+
+} // namespace
+
+SignResult CryptoEngine::sign(const RSAKeyPair &key,
+                              const std::vector<u8> &data,
+                              const std::string &requested_mechanism,
+                              MechanismPolicy policy) {
+  VHSM_CHECK_MSG(key.key != nullptr, "CryptoEngine::sign: key is null");
+  check_family(requested_mechanism, /*rsa_key=*/true, policy);
+  return make_result(RSAUtil::sign(key, data), data, "CKM_SHA256_RSA_PKCS");
+}
+
+SignResult CryptoEngine::sign(const ECCKeyPair &key,
+                              const std::vector<u8> &data,
+                              const std::string &requested_mechanism,
+                              MechanismPolicy policy) {
+  VHSM_CHECK_MSG(key.key != nullptr, "CryptoEngine::sign: key is null");
+  check_family(requested_mechanism, /*rsa_key=*/false, policy);
+  return make_result(ECC::sign(key, data), data, "CKM_ECDSA_SHA256");
+}
 } // namespace vhsm::crypto

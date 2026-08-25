@@ -246,6 +246,17 @@ CK_RV do_sign(CK_SESSION_HANDLE h, const std::vector<u8> &data,
   EVP_PKEY *pk = load_asym_key(h, k);
   if (!pk)
     return CKR_KEY_HANDLE_INVALID;
+  // PKCS#11: mechanism family must match key family — silent substitution
+  // (signing RSA-mech with an EC key) is CKR_KEY_TYPE_INCONSISTENT, not a
+  // best-effort native fallback.
+  {
+    const int base = EVP_PKEY_get_base_id(pk);
+    if ((is_rsa_mech(mech) && base != EVP_PKEY_RSA) ||
+        (is_ec_mech(mech) && base != EVP_PKEY_EC)) {
+      EVP_PKEY_free(pk);
+      return CKR_KEY_TYPE_INCONSISTENT;
+    }
+  }
 
   CK_RV rv = CKR_MECHANISM_INVALID;
   if (is_rsa_mech(mech)) {
@@ -305,6 +316,17 @@ CK_RV do_verify(CK_SESSION_HANDLE h, const std::vector<u8> &data,
   EVP_PKEY *pk = load_asym_key(h, k);
   if (!pk)
     return CKR_KEY_HANDLE_INVALID;
+  // PKCS#11: mechanism family must match key family — silent substitution
+  // (signing RSA-mech with an EC key) is CKR_KEY_TYPE_INCONSISTENT, not a
+  // best-effort native fallback.
+  {
+    const int base = EVP_PKEY_get_base_id(pk);
+    if ((is_rsa_mech(mech) && base != EVP_PKEY_RSA) ||
+        (is_ec_mech(mech) && base != EVP_PKEY_EC)) {
+      EVP_PKEY_free(pk);
+      return CKR_KEY_TYPE_INCONSISTENT;
+    }
+  }
 
   CK_RV rv = CKR_MECHANISM_INVALID;
   if (is_rsa_mech(mech)) {

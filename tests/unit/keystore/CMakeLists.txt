@@ -44,4 +44,8 @@ target_link_libraries(vhsm_fingerprint_test
     GTest::gtest_main
 )
 
+# This TU uses the shim's EC/RSA keygen (via vhsm::crypto wrappers), so the
+# shim typedefs must stay enabled — consistent with the rest of the build.
+target_compile_definitions(vhsm_fingerprint_test PRIVATE VHSM_OPENSSL_SHIM=1)
+
 add_test(NAME vhsm_fingerprint_test COMMAND vhsm_fingerprint_test)
