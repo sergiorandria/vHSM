@@ -4,7 +4,7 @@
 #include "export.h"
 #include <system_error>
 
-// Typed errors that map 1:1 to PKCS#11 CKR_* but are transportable as
+// Typed errors that map semantically (not numerically) to PKCS#11 CKR_* and are transportable as
 // std::error_code across the ABI (no exceptions cross the boundary).
 
 VHSM_ABI_NAMESPACE_BEGIN
