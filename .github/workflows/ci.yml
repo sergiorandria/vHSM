@@ -31,17 +31,21 @@ jobs:
           submodules: recursive
       - uses: actions/setup-go@v5
         with: { go-version: '1.22' }
-      - name: Setup MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-      - name: Setup Ninja
-        uses: seanmiddleditch/gha-setup-ninja@master
       - name: Setup vcpkg
         run: |
-          if (-not (Test-Path $env:VCPKG_ROOT)) {
-            git clone https://github.com/microsoft/vcpkg $env:VCPKG_ROOT
+          $vcpkgRoot = "${{ github.workspace }}/vcpkg"
+          if (-not (Test-Path $vcpkgRoot)) {
+            git clone https://github.com/microsoft/vcpkg $vcpkgRoot
           }
-          & "$env:VCPKG_ROOT/bootstrap-vcpkg.bat"
+          & (Join-Path $vcpkgRoot "bootstrap-vcpkg.bat")
         shell: pwsh
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Restore VCPKG_ROOT
+        run: echo "VCPKG_ROOT=${{ github.workspace }}/vcpkg" >> $env:GITHUB_ENV
+        shell: pwsh
+      - name: Setup Ninja
+        uses: seanmiddleditch/gha-setup-ninja@master
       - name: Configure (db backend, MSVC)
         run: cmake --preset windows-msvc -DVHSM_STORE_BACKEND=db
         shell: pwsh
