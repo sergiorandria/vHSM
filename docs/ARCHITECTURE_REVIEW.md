@@ -1,6 +1,7 @@
 # vHSM — Architecture Review Document
-**Version 1.0.0 — `dev` branch — 2026-08-23**
+**Version 1.2.0 — `dev` branch — 2026-08-26**
 *For code review: one place to see the whole system, why it is shaped this way, and where the seams are.*
+*Changelog: `CHANGELOG.md` §1.2.0 — Deliver checkpoint/full-block, hash-chained audit, login throttle, CkStatus, TSan/bench harnesses, PKCS#11 examples, shim persistence fix.*
 
 ---
 
@@ -13,8 +14,10 @@
 **Build & test (what to run in review):**
 ```bash
 cmake --preset linux-ninja -DVHSM_STORE_BACKEND=db   # or ledger
-cmake --build build -j4 && ctest --test-dir build -j1  # 271/271 (flaky ConcurrentSlotRegistration passes -j1)
-./build/tests/unit/pkcs11/vhsm_composition_root_test  # 4 AppContainer tests
+cmake --build build -j4 && ctest --test-dir build -j4  # 280/280
+cmake -S . -B build -DVHSM_BUILD_EXAMPLES=ON && cmake --build build -j4  # 01..06 examples
+cmake -S . -B build-bench -G Ninja -DVHSM_ENABLE_BENCH=ON && ./build-bench/tests/bench/vhsm_bench  # bench
+cmake -S . -B build-tsan -G Ninja -DVHSM_ENABLE_TSAN=ON && ./build-tsan/tests/stress/stress_tsan  # TSan
 ```
 
 ---
