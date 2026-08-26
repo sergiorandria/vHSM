@@ -17,6 +17,7 @@
 #include "../persistence/kdf.h"
 #include "../persistence/token_serializer.h"
 #include "../persistence/vault.h"
+#include "../session/login_throttle.h"
 #include "../signature_store/db_connection.h"
 #include "../signature_store/db_schema.h"
 #include "../signature_store/notification_dispatcher.h"
@@ -271,6 +272,7 @@ std::unique_ptr<AppContainer> create_app_container() {
   c->bounded_bus =
       std::make_unique<vhsm::notification::BoundedNotificationBus>(1024);
   c->bus = c->bounded_bus.get();
+  c->login_throttle = std::make_unique<vhsm::session::LoginThrottle>();
 
   // Audit log: hash-chained when a token KEK is available (tamper-evident);
   // falls back to stderr stub pre-initialization so early events still land.
