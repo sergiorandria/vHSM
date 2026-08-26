@@ -89,10 +89,13 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
     add_compile_definitions(_VHSMXX_HAVE_ATTRIBUTE_VISIBILITY)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    # NOTE: /dynamicbase /nxcompat /highentropyva are LINKER options —
+    # passing them to cl.exe only produces D9002 "ignoring unknown option".
     add_compile_options(
         /W4 /WX /GS /GL /sdl
-        /guard:cf /dynamicbase /nxcompat /highentropyva
+        /guard:cf
     )
+    add_link_options(/dynamicbase /nxcompat /highentropyva)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -191,6 +194,16 @@ if(VHSM_USE_SECURE_CRYPTO)
         $<$<CONFIG:Release>:-O3>
         $<$<CONFIG:RelWithDebInfo>:-O2>
     )
+    if(MSVC)
+        # Vendored code has benign narrowing conversions (C4244/C4267) that
+        # MSVC promotes to errors via the superproject's global /W4 /WX.
+        # GCC/Clang never flagged them (no -Wconversion globally). Relax
+        # W-error + the two warnings for THIS target only — first-party code
+        # stays strict.
+        target_compile_options(vhsm_secure_crypto PRIVATE
+            /WX- /wd4244 /wd4267
+        )
+    endif()
     add_library(vhsm_crypto_provider INTERFACE)
     target_link_libraries(vhsm_crypto_provider INTERFACE vhsm_secure_crypto)
     target_include_directories(vhsm_crypto_provider INTERFACE
