@@ -359,6 +359,11 @@ endif()
 add_subdirectory(src)
 add_subdirectory(tests)
 
+option(VHSM_BUILD_EXAMPLES "Build PKCS#11 usage examples" OFF)
+if(VHSM_BUILD_EXAMPLES)
+  add_subdirectory(examples/pkcs11)
+endif()
+
 # Throughput benchmark: -DVHSM_ENABLE_BENCH=ON builds tests/bench/vhsm_bench,
 # which drives the real C entry points and reports median ops/sec.
 option(VHSM_ENABLE_BENCH "Build PKCS#11 throughput benchmark" OFF)
