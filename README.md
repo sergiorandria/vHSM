@@ -63,11 +63,46 @@ The vHSM consists of several components:
 
 ### Building
 
+The repository ships CMake presets (see `CMakePresets.json`) — prefer them over
+hand-rolled `cmake` invocations:
+
 ```bash
-mkdir build && cd build
-cmake .. -G "Ninja"  # or your preferred generator
-cmake --build .
+cmake --preset linux-ninja     # RelWithDebInfo, Ninja, sqlite, no gRPC/ledger
+cmake --build build -j         # parallel build
+ctest --test-dir build -j      # run all 271 unit tests
 ```
+
+Available presets:
+
+| Preset        | Build dir      | Purpose                                        |
+| ------------- | -------------- | ---------------------------------------------- |
+| `linux-ninja` | `build/`       | Default Linux development build (RelWithDebInfo) |
+| `release`     | `build-release/` | Optimized `-O3` + LTO production build       |
+| `windows-msvc`| `build/`       | Windows MSVC via vcpkg manifest                |
+| `asan`        | `build-asan/`  | ASan + UBSan instrumented build                |
+
+Manual configuration (without presets) works as well:
+
+```bash
+cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build
+```
+
+If no `CMAKE_BUILD_TYPE` is given, the project defaults to `RelWithDebInfo`.
+When `ccache` is installed it is picked up automatically as compiler launcher.
+
+#### Build Performance Options
+
+- `VHSM_ENABLE_IPO`: Interprocedural optimization / LTO for Release,
+  RelWithDebInfo and MinSizeRel (default: auto-detected; ON when the
+  toolchain supports it). Debug builds stay LTO-free so debuggers and
+  sanitizers behave predictably.
+- `VHSM_UNITY_BUILD`: Unity build — concatenates sources per target for much
+  faster clean builds at the cost of slower incremental rebuilds
+  (default: `OFF`; can collide with file-local symbols).
+- `VHSM_LINKER`: Linker override (`default`, `bfd`, `lld`, `mold`;
+  default: `default`). Only change this after verifying your compiler +
+  linker combination supports LTO (e.g. lld is known-broken with GCC 16 LTO).
 
 #### CMake Options
 
@@ -78,6 +113,9 @@ cmake --build .
 - `VHSM_NOTIFY_EMAIL`: Build email notification adapter (default: `ON`)
 - `VHSM_NOTIFY_WEBHOOK`: Build webhook notification adapter (default: `ON`)
 - `VHSM_NOTIFY_BUS_SIZE`: Notification ring buffer capacity (default: `1024`)
+- `VHSM_STORE_BACKEND`: Signature store backend (`db`, `ledger`) (default: `db`; `ledger` forces `VHSM_LEDGER=ON`)
+- `VHSM_LEDGER`: Build the Fabric ledger signature anchor integration (default: `ON`)
+- `VHSM_USE_SECURE_CRYPTO`: Use hardened `vhsm-secure-crypto` clone instead of system OpenSSL for symmetric primitives (default: `ON`)
 
 Example:
 ```bash
@@ -113,8 +151,7 @@ The REST API is located in the `rest_api` directory.
 #### Unit Tests
 
 ```bash
-cd build
-ctest  # or run the individual test executables
+ctest --test-dir build -j   # parallel run of all unit tests
 ```
 
 #### REST API Tests

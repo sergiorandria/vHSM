@@ -7,6 +7,8 @@
 #include "../crypto/aes_gcm.h"
 #include "../crypto/ecc.h"
 #include "../crypto/rsa.h"
+#include <vhsm/scrypto/ec.h>
+#include <vhsm/scrypto/rsa.h>
 
 #include "../keystore/attribute_store.h"
 #include "../keystore/hsm_object.h"
@@ -322,15 +324,70 @@ CK_RV p11_store_secret(HsmObject &obj, const std::vector<u8> &raw) {
 
 CK_RV p11_store_key_ec(HsmObject &obj, vhsm::crypto::ECCKeyPair kp,
                        bool isPrivate) {
-  // Serialize via the EVP shim path (scrypto handles are EVP-compatible in
-  // shim builds); reuse p11_store_key for attribute layout.
-  return p11_store_key(obj, static_cast<EVP_PKEY *>(kp.key), isPrivate, CKK_EC);
+  // WHY not the generic EVP path: under VHSM_OPENSSL_SHIM the pkcs11 layer's
+  // EVP_PKEY is a fake struct while scrypto holds a REAL OpenSSL EVP_PKEY in
+  // kp.key — casting between them and calling accessors reads garbage. All
+  // EC export therefore goes through vhsm::scrypto, which owns the real
+  // handle, producing exactly the stored attribute formats:
+  //   CKA_VHSM_EC_PRIV = DER SEC1 ECPrivateKey
+  //   CKA_EC_PARAMS    = DER ECPKParameters (named curve)
+  //   CKA_EC_POINT     = uncompressed point octets
+  if (!kp.key)
+    return CKR_GENERAL_ERROR;
+  try {
+    vhsm::scrypto::Curve sc = vhsm::scrypto::Curve::P256;
+    if (kp.curve == vhsm::crypto::Curve::EccCurveType_P384)
+      sc = vhsm::scrypto::Curve::P384;
+    else if (kp.curve == vhsm::crypto::Curve::EccCurveType_P521)
+      sc = vhsm::scrypto::Curve::P521;
+    const vhsm::scrypto::EcKeyPair skp{kp.key, sc};
+    if (isPrivate) {
+      auto priv_der = vhsm::scrypto::ec_export_private_der(skp);
+      obj.setAttribute(CKA_VHSM_EC_PRIV, priv_der.data(), priv_der.size());
+    }
+    auto params = vhsm::scrypto::ec_export_params_der(skp);
+    obj.setAttribute(CKA_EC_PARAMS, params.data(), params.size());
+    auto point = vhsm::scrypto::ec_export_public_point(skp);
+    obj.setAttribute(CKA_EC_POINT, point.data(), point.size());
+  } catch (const std::exception &) {
+    return CKR_GENERAL_ERROR;
+  }
+  obj.setAttribute(
+      CKA_CLASS,
+      reinterpret_cast<const u8 *>(isPrivate ? &g_cka_private_key
+                                             : &g_cka_public_key),
+      sizeof(CK_OBJECT_CLASS));
+  return CKR_OK;
 }
 
 CK_RV p11_store_key(HsmObject &obj, vhsm::crypto::RSAKeyPair kp,
                     bool isPrivate, int keyType) {
-  return p11_store_key(obj, static_cast<EVP_PKEY *>(kp.key), isPrivate,
-                       keyType);
+  // WHY not the generic EVP path: under VHSM_OPENSSL_SHIM the layer's
+  // EVP_PKEY is a fake struct while scrypto holds a REAL OpenSSL key in
+  // kp.key — cast+accessor reads garbage. Export through scrypto directly;
+  // formats: CKA_VHSM_RSA_PRIV = DER PKCS#1 RSAPrivateKey,
+  //          CKA_VHSM_RSA_PUB  = DER PKCS#1 RSAPublicKey.
+  if (!kp.key)
+    return CKR_GENERAL_ERROR;
+  try {
+    const vhsm::scrypto::RsaKeyPair skp{kp.key, kp.bits};
+    if (isPrivate) {
+      auto priv_der = vhsm::scrypto::rsa_export_private_der(skp);
+      obj.setAttribute(CKA_VHSM_RSA_PRIV, priv_der.data(), priv_der.size());
+    } else {
+      auto pub_der = vhsm::scrypto::rsa_export_public_der(skp);
+      obj.setAttribute(CKA_VHSM_RSA_PUB, pub_der.data(), pub_der.size());
+    }
+  } catch (const std::exception &) {
+    return CKR_GENERAL_ERROR;
+  }
+  obj.setAttribute(
+      CKA_CLASS,
+      reinterpret_cast<const u8 *>(isPrivate ? &g_cka_private_key
+                                             : &g_cka_public_key),
+      sizeof(CK_OBJECT_CLASS));
+  (void)keyType;
+  return CKR_OK;
 }
 
 // ---------------------------------------------------------------------------
@@ -624,14 +681,21 @@ CK_RV p11_ecdsa_sign(EVP_PKEY *key, const std::vector<u8> &digest,
   if (EVP_PKEY_sign_init(ctx) <= 0) {
     return CKR_GENERAL_ERROR;
   }
-  size_t siglen = 0;
-  if (EVP_PKEY_sign(ctx, nullptr, &siglen, digest.data(), digest.size()) <= 0) {
-    return CKR_GENERAL_ERROR;
-  }
-  sig.resize(siglen);
-  if (EVP_PKEY_sign(ctx, sig.data(), &siglen, digest.data(), digest.size()) <=
-      0) {
-    return CKR_GENERAL_ERROR;
+  // WHY fixed 256-byte buffer: ECDSA DER size varies with the nonce
+  // (70-72 bytes for P-256). The shim's size query returns the exact size
+  // for one nonce, so the second signing with a fresh nonce may be larger
+  // and spuriously fail. Using a generously sized buffer avoids the two-
+  // call race entirely; retry on buffer-too-small for robustness.
+  sig.resize(256);
+  size_t siglen = sig.size();
+  int rc = EVP_PKEY_sign(ctx, sig.data(), &siglen, digest.data(), digest.size());
+  if (rc <= 0) {
+    if (siglen > sig.size()) {
+      sig.resize(siglen);
+      rc = EVP_PKEY_sign(ctx, sig.data(), &siglen, digest.data(), digest.size());
+    }
+    if (rc <= 0)
+      return CKR_GENERAL_ERROR;
   }
   sig.resize(siglen);
   return CKR_OK;
@@ -786,16 +850,86 @@ CK_RV p11_random_bytes(u8 *out, size_t len) {
 // ---------------------------------------------------------------------------
 // EVP_PKEY construction from HsmObject attributes (RSA / EC)
 // ---------------------------------------------------------------------------
+#ifdef VHSM_OPENSSL_SHIM
+namespace {
+// Wrap a real scrypto EC handle into the shim EVP_PKEY so shim EVP_*
+// sign/verify entry points can use it (they read ->handle + ->ec_curve).
+EVP_PKEY *shim_evp_from_ec(const vhsm::scrypto::EcKeyPair &kp) {
+  auto *pk = new EVP_PKEY();
+  pk->type = EVP_PKEY_EC;
+  pk->handle = kp.handle;
+  pk->ec_curve = kp.curve == vhsm::scrypto::Curve::P384  ? NID_secp384r1
+                 : kp.curve == vhsm::scrypto::Curve::P521 ? NID_secp521r1
+                                                          : NID_X9_62_prime256v1;
+  return pk;
+}
+
+EVP_PKEY *shim_evp_from_rsa(const vhsm::scrypto::RsaKeyPair &kp) {
+  auto *pk = new EVP_PKEY();
+  pk->type = EVP_PKEY_RSA;
+  pk->handle = kp.handle;
+  pk->bits = kp.bits;
+  return pk;
+}
+} // namespace
+#endif
+
 EVP_PKEY *p11_build_key_from_attrs(HsmObject *obj, bool /*isPrivate*/,
                                    int /*keyType*/) {
   if (!obj)
     return nullptr;
-  bool isPriv = obj->isPrivate();
   const std::vector<u8> *rsaPriv = obj->findAttribute(CKA_VHSM_RSA_PRIV);
   const std::vector<u8> *rsaPub = obj->findAttribute(CKA_VHSM_RSA_PUB);
   const std::vector<u8> *ecPriv = obj->findAttribute(CKA_VHSM_EC_PRIV);
   const std::vector<u8> *ecPub = obj->findAttribute(CKA_VHSM_EC_PUB);
 
+#ifdef VHSM_OPENSSL_SHIM
+  // WHY: under the OpenSSL shim the d2i/i2d family are no-op stubs — key
+  // material must be rehydrated through vhsm::scrypto, which owns real
+  // OpenSSL and returns handles the shim EVP layer understands.
+  try {
+    if (rsaPriv && !rsaPriv->empty()) {
+      auto kp = vhsm::scrypto::rsa_import_private_der(*rsaPriv);
+      return shim_evp_from_rsa(kp);
+    }
+    if (ecPriv && !ecPriv->empty()) {
+      auto kp = vhsm::scrypto::ec_import_private_der(*ecPriv);
+      return shim_evp_from_ec(kp);
+    }
+    if (rsaPub && !rsaPub->empty()) {
+      auto kp = vhsm::scrypto::rsa_import_public_der(*rsaPub);
+      return shim_evp_from_rsa(kp);
+    }
+    if (ecPub && !ecPub->empty()) {
+      const auto *params = obj->findAttribute(CKA_EC_PARAMS);
+      const auto *point = obj->findAttribute(CKA_EC_POINT);
+      if (params && point && !params->empty() && !point->empty()) {
+        try {
+          auto kp = vhsm::scrypto::ec_import_public_params_point(*params,
+                                                                 *point);
+          return shim_evp_from_ec(kp);
+        } catch (const std::exception &e) {
+        }
+      } else {
+      }
+    } else {
+      // EC pub stored as params+point, not as EC_PUB blob — try that
+      const auto *params = obj->findAttribute(CKA_EC_PARAMS);
+      const auto *point = obj->findAttribute(CKA_EC_POINT);
+      if (params && point && !params->empty() && !point->empty()) {
+        try {
+          auto kp = vhsm::scrypto::ec_import_public_params_point(*params, *point);
+          return shim_evp_from_ec(kp);
+        } catch (const std::exception &e) {
+        }
+      }
+    }
+    return nullptr;
+  } catch (const std::exception &e) {
+    return nullptr;
+  }
+#else
+  // Real-OpenSSL build: legacy d2i path works as before.
   if ((rsaPriv && !rsaPriv->empty())) {
     const u8 *p = rsaPriv->data();
     RSA *rsa =
@@ -859,8 +993,8 @@ EVP_PKEY *p11_build_key_from_attrs(HsmObject *obj, bool /*isPrivate*/,
     }
     return nullptr;
   }
-  (void)isPriv;
   return nullptr;
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -874,6 +1008,43 @@ std::string p11_key_fingerprint(EVP_PKEY *pkey) {
   std::vector<u8> der;
   std::string fingerprint;
 
+#ifdef VHSM_OPENSSL_SHIM
+  // WHY scrypto: under the shim the i2d/i2o family are no-op stubs and
+  // get1 returns the handle without refcount — freeing would double-free
+  // the real key. Export through scrypto which owns the real handle.
+  try {
+    if (base == EVP_PKEY_RSA && pkey->handle) {
+      vhsm::scrypto::RsaKeyPair kp{pkey->handle, pkey->bits};
+      der = vhsm::scrypto::rsa_export_public_der(kp);
+    } else if (base == EVP_PKEY_EC && pkey->handle) {
+      auto cv = vhsm::scrypto::Curve::P256;
+      if (pkey->ec_curve == NID_secp384r1)
+        cv = vhsm::scrypto::Curve::P384;
+      else if (pkey->ec_curve == NID_secp521r1)
+        cv = vhsm::scrypto::Curve::P521;
+      vhsm::scrypto::EcKeyPair kp{pkey->handle, cv};
+      der = vhsm::scrypto::ec_export_public_point(kp);
+    }
+  } catch (...) {
+    return "";
+  }
+  if (!der.empty()) {
+    const EVP_MD *md = EVP_sha256();
+    std::vector<u8> hash(EVP_MD_size(md));
+    unsigned int hash_len = 0;
+    vhsm::crypto::MdCtxGuard mdGuard(EVP_MD_CTX_new());
+    auto *ctx = mdGuard.getCtx();
+    EVP_DigestInit_ex(ctx, md, nullptr);
+    EVP_DigestUpdate(ctx, der.data(), der.size());
+    EVP_DigestFinal_ex(ctx, hash.data(), &hash_len);
+    std::ostringstream oss;
+    for (unsigned int i = 0; i < hash_len; ++i)
+      oss << std::hex << std::setw(2) << std::setfill('0')
+          << static_cast<int>(hash[i]);
+    fingerprint = oss.str();
+  }
+  return fingerprint;
+#else
   if (base == EVP_PKEY_RSA) {
     RSA *rsa = EVP_PKEY_get1_RSA(pkey);
     if (rsa) {
@@ -932,6 +1103,7 @@ std::string p11_key_fingerprint(EVP_PKEY *pkey) {
     }
   }
   return fingerprint;
+#endif
 }
 
 std::string p11_key_id(const HsmObject *obj) {

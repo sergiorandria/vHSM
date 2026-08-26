@@ -18,6 +18,8 @@ test_*
 build/
 build2/
 build3/
+build-asan/
+build-release/
 _build_corrupt/
 docker-compose.yml
 .vscode
@@ -405,3 +407,5 @@ network/fabric_configuration/fabric-network/channel-artifacts/
 network/fabric_configuration/fabric-network/configtx.yaml
 network/fabric_configuration/fabric-network/fabric-ca/
 network/fabric_configuration/fabric-network/organizations/
+build-bench/
+build-tsan/

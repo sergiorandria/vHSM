@@ -560,6 +560,7 @@ static CK_RV dispatch_sign_result(
   if (!dispatcher)
     return CKR_OK; // no dispatcher configured (tests) — skip silently
 
+
   auto session_sp = p11_get_session(h);
   session::Session *sess = session_sp.get();
   CK_OBJECT_HANDLE k = sess ? sess->opKey() : CK_INVALID_HANDLE;
