@@ -1,3 +1,4 @@
+#include <cstdio>
 #include "pkcs11.h"
 #include "pkcs11_internal.h"
 #include "pkcs11_types.h"

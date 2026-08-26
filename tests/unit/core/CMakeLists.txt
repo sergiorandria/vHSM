@@ -17,6 +17,7 @@ target_link_libraries(vhsm_core_test
     PRIVATE
         vhsm_core
         vhsm_threadpool
+        vhsm_log
         GTest::gtest
         GTest::gtest_main
 )
@@ -42,7 +43,7 @@ target_link_libraries(vhsm_hsm_instance_test
         vhsm_signature_store
         GTest::gtest
         GTest::gtest_main
-        SQLite::SQLite3
+        SQLite3::SQLite3
 )
 
 target_compile_options(vhsm_hsm_instance_test PRIVATE -O1 -g -Wno-error=attributes -Wno-attributes)

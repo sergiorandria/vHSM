@@ -1,6 +1,26 @@
 cmake_minimum_required(VERSION 3.21)
-project(VirtualHSM VERSION 1.0.0 LANGUAGES C CXX)
+project(VirtualHSM VERSION 1.2.0 LANGUAGES C CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# ---------------------------------------------------------------------------
+# Build performance
+#
+# - Default build type: an empty CMAKE_BUILD_TYPE silently drops ALL
+#   optimization flags, so fall back to RelWithDebInfo (-O2 -g).
+# - ccache: enabled automatically when installed on the host.
+# ---------------------------------------------------------------------------
+get_property(_vhsm_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(NOT CMAKE_BUILD_TYPE AND NOT _vhsm_multi_config)
+    set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo MinSizeRel)
+endif()
+
+find_program(VHSM_CCACHE_PROGRAM ccache)
+if(VHSM_CCACHE_PROGRAM)
+    set(CMAKE_C_COMPILER_LAUNCHER   "${VHSM_CCACHE_PROGRAM}")
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${VHSM_CCACHE_PROGRAM}")
+    message(STATUS "VHSM: compiler cache enabled (${VHSM_CCACHE_PROGRAM})")
+endif()
 
 # ---------------------------------------------------------------------------
 # Options
@@ -47,10 +67,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Compiler hardening flags
 # NOTE: -fPIE / -pie and -Wl,... are linker flags, not compile flags.
 #       Pass them through the correct CMake variables.
+# NOTE: Optimization level (-O*) is intentionally NOT set here — it is owned
+#       by CMAKE_BUILD_TYPE so Debug builds stay debuggable and Release/LTO
+#       settings apply consistently.
 # ---------------------------------------------------------------------------
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(
-        -O2
         -Wall
         -Wextra
         -Werror
@@ -67,10 +89,71 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
     add_compile_definitions(_VHSMXX_HAVE_ATTRIBUTE_VISIBILITY)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    # NOTE: /dynamicbase /nxcompat /highentropyva are LINKER options —
+    # passing them to cl.exe only produces D9002 "ignoring unknown option".
     add_compile_options(
         /W4 /WX /GS /GL /sdl
-        /guard:cf /dynamicbase /nxcompat /highentropyva
+        /guard:cf
     )
+    add_link_options(/dynamicbase /nxcompat /highentropyva)
+endif()
+
+# ---------------------------------------------------------------------------
+# Interprocedural optimization (LTO)
+#
+# Applied through CMake's IPO support (per-config properties) instead of
+# hand-rolled -flto flags so that every target — including the shared
+# PKCS#11 module — links with matching LTO objects automatically.
+# ---------------------------------------------------------------------------
+include(CheckIPOSupported)
+check_ipo_supported(RESULT _vhsm_ipo_ok OUTPUT _vhsm_ipo_reason)
+option(VHSM_ENABLE_IPO "Enable interprocedural optimization / LTO" ${_vhsm_ipo_ok})
+if(VHSM_ENABLE_IPO)
+    if(NOT _vhsm_ipo_ok)
+        message(WARNING "VHSM_ENABLE_IPO=ON but LTO is not supported by this toolchain: ${_vhsm_ipo_reason}")
+    else()
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE          TRUE)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO   TRUE)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL       TRUE)
+        # Debug keeps -O0 so sanitizers/debuggers behave predictably.
+    endif()
+endif()
+
+# Unity build: concatenates sources per target to cut full-build times.
+# OFF by default because merged TUs can collide on file-local symbols.
+# GCC additionally warns (-Werror=subobject-linkage) when gtest fixtures in
+# anonymous namespaces are merged — suppressed only in unity mode.
+# ThreadSanitizer stress suite: -DVHSM_ENABLE_TSAN=ON builds the stress
+# target with TSan instrumentation. Requires debug info; IPO must stay off.
+option(VHSM_ENABLE_TSAN "Build TSan stress suite (tests/stress/tsan)" OFF)
+if(VHSM_ENABLE_TSAN)
+    # -O2 (not -O0/-O1): _FORTIFY_SOURCE requires optimization, and TSan
+    # needs frames intact — -O2 -g satisfies both. Fortify is harmless here.
+    add_compile_options(-fsanitize=thread -g -O2)
+    add_compile_options(-Wno-cpp)   # tolerate glibc fortify warnings from system headers
+    add_link_options(-fsanitize=thread)
+endif()
+
+option(VHSM_UNITY_BUILD "Unity build (faster clean builds, slower incremental)" OFF)
+set(CMAKE_UNITY_BUILD ${VHSM_UNITY_BUILD})
+if(VHSM_UNITY_BUILD AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-Wno-subobject-linkage)
+endif()
+
+# Optional linker override ("default" keeps the toolchain driver choice).
+# NOTE: lld is known-broken with GCC 16 LTO IR in some distros; keep "default"
+# unless you have verified your combination.
+set(VHSM_LINKER "default" CACHE STRING "Linker to use: default|bfd|lld|mold")
+set_property(CACHE VHSM_LINKER PROPERTY STRINGS default bfd lld mold)
+if(NOT VHSM_LINKER STREQUAL "default")
+    include(CheckLinkerFlag)
+    check_linker_flag(CXX "-fuse-ld=${VHSM_LINKER}" _vhsm_have_ld_${VHSM_LINKER})
+    if(_vhsm_have_ld_${VHSM_LINKER})
+        add_link_options(-fuse-ld=${VHSM_LINKER})
+        message(STATUS "VHSM: using ${VHSM_LINKER} linker")
+    else()
+        message(WARNING "VHSM_LINKER=${VHSM_LINKER} not supported by this toolchain — keeping default")
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------
@@ -102,6 +185,25 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 # (VHSM_SCRYPTO_PURE=OFF) and for fabric-gateway-cpp.
 if(VHSM_USE_SECURE_CRYPTO)
     add_subdirectory(third_party/vhsm-secure-crypto)
+    # The vendored library hardcodes -O2 via directory scope, which would
+    # override the config-owned optimization level (e.g. downgrade -O3 in
+    # Release). Re-append the correct level as a target option — target
+    # options come after directory options, so they win.
+    target_compile_options(vhsm_secure_crypto PRIVATE
+        $<$<CONFIG:Debug>:-O0>
+        $<$<CONFIG:Release>:-O3>
+        $<$<CONFIG:RelWithDebInfo>:-O2>
+    )
+    if(MSVC)
+        # Vendored code has benign narrowing conversions (C4244/C4267) that
+        # MSVC promotes to errors via the superproject's global /W4 /WX.
+        # GCC/Clang never flagged them (no -Wconversion globally). Relax
+        # W-error + the two warnings for THIS target only — first-party code
+        # stays strict.
+        target_compile_options(vhsm_secure_crypto PRIVATE
+            /WX- /wd4244 /wd4267
+        )
+    endif()
     add_library(vhsm_crypto_provider INTERFACE)
     target_link_libraries(vhsm_crypto_provider INTERFACE vhsm_secure_crypto)
     target_include_directories(vhsm_crypto_provider INTERFACE
@@ -139,6 +241,38 @@ endif()
 
 # --- Database backends ------------------------------------------------------
 find_package(SQLite3    QUIET)
+# Compatibility shim: system FindSQLite3 before CMake 4.3 provides only
+# SQLite::SQLite3, 4.3+ provides SQLite3::SQLite3 (+ deprecated alias).
+# Provide the missing alias so both spellings work on any runner
+# (Linux apt CMake 3.28 vs Windows vcpkg CMake 4.x) and handle vcpkg's
+# unofficial package name.
+if(TARGET SQLite::SQLite3 AND NOT TARGET SQLite3::SQLite3)
+  add_library(SQLite3::SQLite3 ALIAS SQLite::SQLite3)
+endif()
+if(TARGET SQLite3::SQLite3 AND NOT TARGET SQLite::SQLite3)
+  add_library(SQLite::SQLite3 ALIAS SQLite3::SQLite3)
+endif()
+if(NOT TARGET SQLite::SQLite3 AND NOT TARGET SQLite3::SQLite3)
+  if(TARGET unofficial::SQLite3::SQLite3)
+    add_library(SQLite::SQLite3 ALIAS unofficial::SQLite3::SQLite3)
+    add_library(SQLite3::SQLite3 ALIAS unofficial::SQLite3::SQLite3)
+  elseif(TARGET unofficial::sqlite3::sqlite3)
+    add_library(SQLite::SQLite3 ALIAS unofficial::sqlite3::sqlite3)
+    add_library(SQLite3::SQLite3 ALIAS unofficial::sqlite3::sqlite3)
+  elseif(SQLite3_FOUND)
+    # Fallback: variables only (some Find modules / vcpkg older ports)
+    add_library(SQLite::SQLite3 INTERFACE IMPORTED)
+    if(SQLite3_INCLUDE_DIRS)
+      set_target_properties(SQLite::SQLite3 PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${SQLite3_INCLUDE_DIRS}")
+    endif()
+    if(SQLite3_LIBRARIES)
+      set_target_properties(SQLite::SQLite3 PROPERTIES INTERFACE_LINK_LIBRARIES "${SQLite3_LIBRARIES}")
+    elseif(SQLITE3_LIBRARY)
+      set_target_properties(SQLite::SQLite3 PROPERTIES INTERFACE_LINK_LIBRARIES "${SQLITE3_LIBRARY}")
+    endif()
+    add_library(SQLite3::SQLite3 ALIAS SQLite::SQLite3)
+  endif()
+endif()
 find_package(PostgreSQL QUIET)
 # MySQL has no standard CMake module; try a config file, then pkg-config.
 find_package(MySQL      QUIET)
@@ -155,7 +289,7 @@ if(VHSM_DB_BACKEND STREQUAL "sqlite")
     if(NOT SQLite3_FOUND)
         message(FATAL_ERROR "SQLite3 not found but selected as DB backend")
     endif()
-    set(DB_LIBRARIES    SQLite::SQLite3)          # modern imported target
+    set(DB_LIBRARIES    SQLite3::SQLite3)         # shim above ensures it exists on CMake <4.3
     set(DB_INCLUDE_DIRS ${SQLite3_INCLUDE_DIRS})
 
 elseif(VHSM_DB_BACKEND STREQUAL "postgres")
@@ -224,6 +358,18 @@ endif()
 
 add_subdirectory(src)
 add_subdirectory(tests)
+
+option(VHSM_BUILD_EXAMPLES "Build PKCS#11 usage examples" OFF)
+if(VHSM_BUILD_EXAMPLES)
+  add_subdirectory(examples/pkcs11)
+endif()
+
+# Throughput benchmark: -DVHSM_ENABLE_BENCH=ON builds tests/bench/vhsm_bench,
+# which drives the real C entry points and reports median ops/sec.
+option(VHSM_ENABLE_BENCH "Build PKCS#11 throughput benchmark" OFF)
+if(VHSM_ENABLE_BENCH)
+    add_subdirectory(tests/bench)
+endif()
 # add_subdirectory(tools)
 
 # ---------------------------------------------------------------------------

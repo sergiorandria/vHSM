@@ -1,5 +1,6 @@
 # Add subdirectories for each component
 add_subdirectory(core)
+add_subdirectory(log)
 add_subdirectory(threadpool)
 add_subdirectory(crypto)
 add_subdirectory(persistence)

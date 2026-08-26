@@ -347,64 +347,47 @@ CK_RV do_verify(CK_SESSION_HANDLE h, const std::vector<u8> &data,
   return rv;
 }
 
-// Mechanism constant -> human-readable string (shared by sign/verify/encrypt
-// audit events).
+// Mechanism constant -> human-readable string. Static map: O(1) lookup,
+// single source of truth, adding a new mechanism = one line.
 std::string mech_to_str(CK_MECHANISM_TYPE mech) {
-  switch (mech) {
-  case CKM_RSA_PKCS:
-    return "CKM_RSA_PKCS";
-  case CKM_RSA_X_509:
-    return "CKM_RSA_X_509";
-  case CKM_RSA_PKCS_PSS:
-    return "CKM_RSA_PKCS_PSS";
-  case CKM_RSA_PKCS_OAEP:
-    return "CKM_RSA_PKCS_OAEP";
-  case CKM_SHA256_RSA_PKCS:
-    return "CKM_SHA256_RSA_PKCS";
-  case CKM_SHA384_RSA_PKCS:
-    return "CKM_SHA384_RSA_PKCS";
-  case CKM_SHA512_RSA_PKCS:
-    return "CKM_SHA512_RSA_PKCS";
-  case CKM_SHA256_RSA_PKCS_PSS:
-    return "CKM_SHA256_RSA_PKCS_PSS";
-  case CKM_SHA384_RSA_PKCS_PSS:
-    return "CKM_SHA384_RSA_PKCS_PSS";
-  case CKM_SHA512_RSA_PKCS_PSS:
-    return "CKM_SHA512_RSA_PKCS_PSS";
-  case CKM_ECDSA:
-    return "CKM_ECDSA";
-  case CKM_ECDSA_SHA256:
-    return "CKM_ECDSA_SHA256";
-  case CKM_ECDSA_SHA384:
-    return "CKM_ECDSA_SHA384";
-  case CKM_ECDSA_SHA512:
-    return "CKM_ECDSA_SHA512";
-  case CKM_AES_GCM:
-    return "CKM_AES_GCM";
-  case CKM_AES_ECB:
-    return "CKM_AES_ECB";
-  default:
-    return "CKM_VENDOR_DEFINED";
-  }
+  static const std::unordered_map<CK_MECHANISM_TYPE, std::string> kMechNames = {
+      {CKM_RSA_PKCS, "CKM_RSA_PKCS"},
+      {CKM_RSA_X_509, "CKM_RSA_X_509"},
+      {CKM_RSA_PKCS_PSS, "CKM_RSA_PKCS_PSS"},
+      {CKM_RSA_PKCS_OAEP, "CKM_RSA_PKCS_OAEP"},
+      {CKM_SHA256_RSA_PKCS, "CKM_SHA256_RSA_PKCS"},
+      {CKM_SHA384_RSA_PKCS, "CKM_SHA384_RSA_PKCS"},
+      {CKM_SHA512_RSA_PKCS, "CKM_SHA512_RSA_PKCS"},
+      {CKM_SHA256_RSA_PKCS_PSS, "CKM_SHA256_RSA_PKCS_PSS"},
+      {CKM_SHA384_RSA_PKCS_PSS, "CKM_SHA384_RSA_PKCS_PSS"},
+      {CKM_SHA512_RSA_PKCS_PSS, "CKM_SHA512_RSA_PKCS_PSS"},
+      {CKM_ECDSA, "CKM_ECDSA"},
+      {CKM_ECDSA_SHA256, "CKM_ECDSA_SHA256"},
+      {CKM_ECDSA_SHA384, "CKM_ECDSA_SHA384"},
+      {CKM_ECDSA_SHA512, "CKM_ECDSA_SHA512"},
+      {CKM_AES_GCM, "CKM_AES_GCM"},
+      {CKM_AES_ECB, "CKM_AES_ECB"},
+  };
+  auto it = kMechNames.find(mech);
+  return it != kMechNames.end() ? it->second : "CKM_VENDOR_DEFINED";
 }
 
 std::string digest_to_str(CK_MECHANISM_TYPE mech) {
-  switch (mech) {
-  case CKM_SHA384:
-  case CKM_SHA384_RSA_PKCS:
-  case CKM_ECDSA_SHA384:
-  case CKM_SHA384_HMAC:
-  case CKM_SHA384_RSA_PKCS_PSS:
-    return "SHA-384";
-  case CKM_SHA512:
-  case CKM_SHA512_RSA_PKCS:
-  case CKM_ECDSA_SHA512:
-  case CKM_SHA512_HMAC:
-  case CKM_SHA512_RSA_PKCS_PSS:
-    return "SHA-512";
-  default:
-    return "SHA-256";
-  }
+  // Maps mechanism → digest algorithm name for audit metadata.
+  static const std::unordered_map<CK_MECHANISM_TYPE, std::string> kDigestNames = {
+      {CKM_SHA384, "SHA-384"},
+      {CKM_SHA384_RSA_PKCS, "SHA-384"},
+      {CKM_ECDSA_SHA384, "SHA-384"},
+      {CKM_SHA384_HMAC, "SHA-384"},
+      {CKM_SHA384_RSA_PKCS_PSS, "SHA-384"},
+      {CKM_SHA512, "SHA-512"},
+      {CKM_SHA512_RSA_PKCS, "SHA-512"},
+      {CKM_ECDSA_SHA512, "SHA-512"},
+      {CKM_SHA512_HMAC, "SHA-512"},
+      {CKM_SHA512_RSA_PKCS_PSS, "SHA-512"},
+  };
+  auto it = kDigestNames.find(mech);
+  return it != kDigestNames.end() ? it->second : "SHA-256";
 }
 
 // Build a structured NotificationEvent with the standard session/key context.
@@ -480,10 +463,10 @@ void publish_verify_event(CK_SESSION_HANDLE h, CK_RV rv,
 
   try {
     notification_bus->publish(event);
-    audit_log->append("verify-" + std::to_string(created_at),
-                      rv == CKR_OK ? "C_VERIFY_OK" : "C_VERIFY_FAILED");
+    (void)audit_log->append("verify-" + std::to_string(created_at),
+                            rv == CKR_OK ? "C_VERIFY_OK" : "C_VERIFY_FAILED");
   } catch (const std::exception &) {
-    // Notification/audit must never raise across the C API boundary.
+    // Notification must never raise across the C API boundary.
   }
 }
 
@@ -553,9 +536,9 @@ void publish_crypto_op_event(
 
   try {
     notification_bus->publish(event);
-    audit_log->append(op_name + "-" + std::to_string(created_at), op_name);
+    (void)audit_log->append(op_name + "-" + std::to_string(created_at), op_name);
   } catch (const std::exception &) {
-    // Notification/audit must never raise across the C API boundary.
+    // Notification must never raise across the C API boundary.
   }
 }
 
@@ -576,6 +559,7 @@ static CK_RV dispatch_sign_result(
   auto *dispatcher = p11_signature_dispatcher();
   if (!dispatcher)
     return CKR_OK; // no dispatcher configured (tests) — skip silently
+
 
   auto session_sp = p11_get_session(h);
   session::Session *sess = session_sp.get();

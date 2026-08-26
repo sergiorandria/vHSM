@@ -1,4 +1,5 @@
-add_library(vhsm_session)
+add_library(vhsm_session    login_throttle.cpp
+)
 
 target_sources(vhsm_session
     PRIVATE

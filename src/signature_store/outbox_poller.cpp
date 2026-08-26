@@ -1,3 +1,4 @@
+#include "../log/logger.h"
 #include "outbox_poller.h"
 
 #include "../core/hsm_instance.h"
@@ -33,7 +34,8 @@ void OutboxPoller::loop() {
     try {
       poll_once();
     } catch (const std::exception &e) {
-      std::fprintf(stderr, "VHSM: outbox poll error: %s\n", e.what());
+      vhsm::log::global_logger().error("outbox",
+                                       "poll error: " + std::string(e.what()));
     }
     std::this_thread::sleep_for(interval_);
   }

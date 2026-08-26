@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../log/logger.h"
 #include <atomic>
 #include <cstdio>
 #include <chrono>
@@ -208,9 +209,11 @@ inline auto ThreadPool::enqueue(const CapabilityToken &token,
     try {
       t();
     } catch (const std::exception &e) {
-      std::fprintf(stderr, "VHSM: task threw: %s\n", e.what());
+      vhsm::log::global_logger().error("threadpool",
+                                       "task threw: " + std::string(e.what()));
     } catch (...) {
-      std::fprintf(stderr, "VHSM: task threw unknown exception\n");
+      vhsm::log::global_logger().error("threadpool",
+                                       "task threw unknown exception");
     }
   });
   bool accepted = enqueue_locked(token.tier(), std::move(worker));

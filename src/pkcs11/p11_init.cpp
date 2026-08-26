@@ -115,8 +115,13 @@ CK_RV C_Finalize(CK_VOID_PTR pReserved) {
   g_notificationBus = nullptr;
   g_boundedBus.reset();
   g_dbConnection.reset();
-  g_appContainer.reset();
+  // WHY order: global_slot_manager() is a view into g_appContainer's
+  // SlotManager. Reset it while the container is still alive, then
+  // null the global before destroying the container to avoid
+  // use-after-free (ASAN heap-use-after-free in v_reset).
   vhsm::session::detail::global_slot_manager().reset();
+  vhsm::session::detail::set_global_slot_manager(nullptr);
+  g_appContainer.reset();
   return CKR_OK;
 }
 

@@ -34,6 +34,11 @@ std::vector<u8> hkdf_sha256(const std::vector<u8> &ikm,
 // scattering HKDF options around the codebase.
 std::vector<u8> derive_db_hmac_key(const std::vector<u8> &vault_kek);
 
+// Convenience: 32-byte HMAC key for the audit hash chain
+// (see audit/audit_log.h). Distinct HKDF info from the DB key so a
+// compromise of one domain key does not cross into the other.
+std::vector<u8> derive_audit_chain_key(const std::vector<u8> &vault_kek);
+
 } // namespace vhsm::persistence
 
 #endif // VHSM_PERSISTENCE_KDF_H
