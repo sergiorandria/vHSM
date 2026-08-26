@@ -11,20 +11,32 @@ All notable changes to Virtual HSM follow Keep a Changelog and SemVer 2.0.
 ### Fixed
 - `ledger_worker` malloc/BufferType, `max` macro clash, `sleep_interruptible` drain semantics, `hsm_instance` visibility/namespace/DB API, `secure_buffer` mman guard.
 
-## [Unreleased]
+## [1.2.0] - 2026-08-26
 ### Added
-- Build performance: `VHSM_ENABLE_IPO` (CMake-managed LTO for Release/RelWithDebInfo/MinSizeRel via `CheckIPOSupported`, replacing hand-rolled `-flto` that was never applied), `VHSM_UNITY_BUILD` option (default `OFF`), `VHSM_LINKER` override (`bfd|lld|mold`, default keeps toolchain choice), automatic `ccache` compiler-launcher detection, `release` CMake preset (`build-release/`, `-O3` + LTO).
-- Default build type: empty `CMAKE_BUILD_TYPE` now falls back to `RelWithDebInfo` instead of silently disabling all optimization.
+- **Fabric DeliverClient production hardening** (`third_party/fabric-gateway-cpp` 1.1.0→1.2.0): `CheckpointStore`/`FileCheckpointStore` (atomic temp+fsync+rename), `FullBlock` decoder (header hashes, TxValidationCode, ChaincodeEvent from `ChaincodeAction` bytes), `DeliverClient` reconnect with `RetryPolicy` (1s→30s capped backoff) + `Logger` integration (`set_retry_policy`/`set_logger`), `common/result.h` (`Result<T>`), `common/logger.h` (Stderr/Syslog sinks), `common/retry_policy.h`.
+- **Audit hash chain** (`src/audit`): `HashChainedAuditLog` — HMAC-SHA256 chain (`SEQ|TS|ID|TYPE|PREV` → `HMAC(chain_key)`), `derive_audit_chain_key` HKDF domain `vHSM-audit-chain`, fsync per record, `verify_chain()` + tail recovery, fallback to `P11AuditLog` pre-KEK; 4 unit tests.
+- **Login throttling** (`src/session`): `LoginThrottle` — progressive 250ms·2ⁿ (cap 8s, soft threshold 3) per slot:user, `AppContainer::login_throttle`, applied outside token mutex in `C_Login`; 5 unit tests.
+- **C ABI Result** (`src/abi`): `CkStatus = expected<void, CK_RV>` (`ok_ck`/`err_ck`, `[[nodiscard]]`) — `AuditLog::append` now `CkStatus noexcept`, second adopter after `try_uuid_v4`.
+- **TSan stress suite** (`tests/stress`): `VHSM_ENABLE_TSAN` (`-fsanitize=thread -O2 -Wno-cpp`), `stress_tsan` — 8×200 concurrent audit appends (chain must verify) + throttle hammer; 0 races.
+- **Throughput bench** (`tests/bench`): `VHSM_ENABLE_BENCH`, `vhsm_bench` drives real C API (`C_GenerateKeyPair` → `C_Sign`/`C_Verify`/`C_Digest`/session churn) and reports median ops/sec (~4.6k ECDSA signs/s on P-256).
+- **PKCS#11 examples** (`examples/pkcs11`): `01_init_and_login` … `06_wrap_unwrap` + `examples/README.md`, `VHSM_BUILD_EXAMPLES` option (links `vhsm_pkcs11` + `vhsm_signature_store`).
+- **Logging** (`src/log`): `Logger`/`Sink`/`StderrSink`/`SyslogSink` (journald), `AppContainer::logger` + `global_logger()` fallback for `ThreadPool`/`LedgerWorker`/`OutboxPoller`.
+- **CI** (`.github/workflows/ci.yml`): `linux-ledger` (ledger+bench+TSan smoke, `libgrpc++`/`protobuf` deps) and `integration-fabric` scaffolding (`if: false`, fabric-samples + Docker).
+- Build performance: `VHSM_ENABLE_IPO` (CMake-managed LTO), `VHSM_UNITY_BUILD`, `VHSM_LINKER`, `ccache` detection, `release` preset.
 
 ### Changed
-- Optimization level is owned by `CMAKE_BUILD_TYPE` only — removed the hardcoded global `-O2`; counteracted the vendored vhsm-secure-crypto's directory-scope `-O2` so Release builds actually get `-O3`.
-- `cmake/CompilerFlags.cmake`: rewrote unused `add_hardening_flags` helper as `vhsm_target_hardening` (visibility hardening only); warnings/hardening/LTO now live exclusively in the top-level file.
-- Modernized deprecated `SQLite::SQLite3` target name to `SQLite3::SQLite3`.
+- Optimization level owned by `CMAKE_BUILD_TYPE` only — removed hardcoded global `-O2`; counteracted `vhsm-secure-crypto` directory-scope `-O2` so Release gets `-O3`.
+- `cmake/CompilerFlags.cmake`: rewrote `add_hardening_flags` as `vhsm_target_hardening` (visibility only); warnings/hardening/LTO live in top-level.
+- Modernized `SQLite::SQLite3` → `SQLite3::SQLite3`.
+- `examples/pkcs11` AES-GCM decrypt noted as best-effort (tag handling varies), RSA-PKCS primary.
 
 ### Fixed
-- `.gitignore`: `[Ll]og/` rule swallowed the new `src/log/` module — added negation patterns; ignore preset build dirs `build-asan/` and `build-release/`.
-- `src/log/logger.cpp`: global fallback logger constructed in place via `std::call_once` (Logger is non-copyable); missing `<atomic>`.
-- `src/threadpool`: link `vhsm_log` PUBLICly — `thread_pool.h` logs through `vhsm::log::global_logger()`.
+- `.gitignore` swallowed `src/log` — added negation; ignore `build-asan`/`build-release`/`build-bench`/`build-tsan`.
+- `src/log/logger.cpp` non-copyable fallback via `new` + `<atomic>`; `src/threadpool` PUBLIC `vhsm_log` link.
+- `src/pkcs11/composition_root` orphan-slot bug (`ensure_default_token` inserted into local `Slot` then discarded — `C_GetSlotList` always empty) and `C_Finalize` UAF (`global_slot_manager().reset()` after `g_appContainer` destroyed).
+- `src/pkcs11/p11_internal` shim persistence: `p11_store_key`/`p11_build_key_from_attrs`/`fingerprint` now via `vhsm::scrypto` DER import/export (shim `d2i`/`i2d` are no-op stubs) + `p11_ecdsa_sign` fixed-size 256B buffer with retry for variable DER (70-72B P-256).
+- `third_party/fabric-gateway-cpp` namespace collision (`::common` vs `fabric::common`), `ChaincodeAction.events` bytes field, header `bytes` fields, `_VHSMXX_NODISCARD` → `[[nodiscard]]`.
+- `third_party/vhsm-secure-crypto` `constant_time.h` volatile + barrier, `selftest` HKDF RFC 5869 A.1 + PBKDF2 KATs.
 
-### Planned
-- PAL for remaining POSIX (`SecureRNG` entropy already via `BCryptGenRandom` on Windows), full `types.h` split (`PKCS11Types`/`SignatureRecord` aggregate), `composition_root` extraction, `services/` bounded contexts.
+### Security
+- `vhsm-secure-crypto` EC/RSA DER import/export via `ec_import_private_der` etc. (real OpenSSL inside `NO_SHIM` region) instead of stub `d2i` — persisted-key sign/verify was broken in default shim build.
