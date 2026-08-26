@@ -120,6 +120,17 @@ endif()
 # OFF by default because merged TUs can collide on file-local symbols.
 # GCC additionally warns (-Werror=subobject-linkage) when gtest fixtures in
 # anonymous namespaces are merged — suppressed only in unity mode.
+# ThreadSanitizer stress suite: -DVHSM_ENABLE_TSAN=ON builds the stress
+# target with TSan instrumentation. Requires debug info; IPO must stay off.
+option(VHSM_ENABLE_TSAN "Build TSan stress suite (tests/stress/tsan)" OFF)
+if(VHSM_ENABLE_TSAN)
+    # -O2 (not -O0/-O1): _FORTIFY_SOURCE requires optimization, and TSan
+    # needs frames intact — -O2 -g satisfies both. Fortify is harmless here.
+    add_compile_options(-fsanitize=thread -g -O2)
+    add_compile_options(-Wno-cpp)   # tolerate glibc fortify warnings from system headers
+    add_link_options(-fsanitize=thread)
+endif()
+
 option(VHSM_UNITY_BUILD "Unity build (faster clean builds, slower incremental)" OFF)
 set(CMAKE_UNITY_BUILD ${VHSM_UNITY_BUILD})
 if(VHSM_UNITY_BUILD AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")

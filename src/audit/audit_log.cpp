@@ -32,7 +32,7 @@ std::string iso8601_now() {
   const std::time_t t = system_clock::to_time_t(now);
   std::tm tm{};
   gmtime_r(&t, &tm);
-  char buf[32];
+  char buf[48]; // 25 chars + slack so -Wformat-truncation stays quiet
   std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
                 tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour,
                 tm.tm_min, tm.tm_sec, static_cast<int>(ms.count()));
