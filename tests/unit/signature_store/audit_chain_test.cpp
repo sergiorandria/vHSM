@@ -17,9 +17,9 @@ TEST(AuditHashChain, AppendAndVerifyIntact) {
   std::remove(path.c_str());
 
   HashChainedAuditLog log(path, {1, 2, 3, 4});
-  log.append("evt-1", "C_LOGIN");
-  log.append("evt-2", "C_SIGN");
-  log.append("evt-3", "C_LOGOUT");
+  (void)log.append("evt-1", "C_LOGIN");
+  (void)log.append("evt-2", "C_SIGN");
+  (void)log.append("evt-3", "C_LOGOUT");
 
   EXPECT_EQ(log.verify_chain(), std::nullopt);
   EXPECT_NE(log.tail_hash(), std::string(64, '0'));
@@ -30,8 +30,8 @@ TEST(AuditHashChain, TamperedRecordDetected) {
   std::remove(path.c_str());
 
   HashChainedAuditLog log(path, {9, 9, 9, 9});
-  log.append("evt-1", "C_LOGIN");
-  log.append("evt-2", "C_SIGN");
+  (void)log.append("evt-1", "C_LOGIN");
+  (void)log.append("evt-2", "C_SIGN");
 
   // Rewrite line 1's event type in place (same length).
   {
@@ -53,9 +53,9 @@ TEST(AuditHashChain, DeletedRecordBreaksChain) {
   std::remove(path.c_str());
 
   HashChainedAuditLog log(path, {7, 7, 7});
-  log.append("evt-1", "A");
-  log.append("evt-2", "B");
-  log.append("evt-3", "C");
+  (void)log.append("evt-1", "A");
+  (void)log.append("evt-2", "B");
+  (void)log.append("evt-3", "C");
 
   // Delete the middle record.
   {
@@ -81,13 +81,13 @@ TEST(AuditHashChain, TailRecoveryAcrossRestart) {
   std::string tail1;
   {
     HashChainedAuditLog log(path, {5, 5});
-    log.append("e1", "T1");
+    (void)log.append("e1", "T1");
     tail1 = log.tail_hash();
   }
   {
     // Fresh instance recovers seq/tail from the file and continues the chain.
     HashChainedAuditLog log2(path, {5, 5});
-    log2.append("e2", "T2");
+    (void)log2.append("e2", "T2");
     EXPECT_EQ(log2.verify_chain(), std::nullopt);
     EXPECT_NE(tail1, log2.tail_hash());
   }

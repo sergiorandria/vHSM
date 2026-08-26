@@ -154,8 +154,9 @@ void p11_publish_event(vhsm::notification::NotificationEvent::EventType type,
     event.hsm_instance = vhsm::core::hsm_instance_id();
     notification_bus->publish(event);
 
-    audit_log->append(audit_event_type + "-" + std::to_string(created_at),
-                      audit_event_type);
+    (void)audit_log->append(audit_event_type + "-" +
+                                std::to_string(created_at),
+                            audit_event_type);
   } catch (const std::exception &) {
     // Notification/audit must never raise across the C API boundary.
   }
