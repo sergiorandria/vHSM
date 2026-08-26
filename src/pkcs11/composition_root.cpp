@@ -161,11 +161,18 @@ std::string resolve_fabric_config_dir() {
 
 static void ensure_default_token_for_container(vhsm::session::SlotManager &sm) {
   if (!sm.get_slot(0)) {
-    auto slot = std::make_shared<vhsm::keystore::Slot>(0);
+    // WHY register-then-fetch: register_slot creates the manager-owned Slot;
+    // inserting into a locally created Slot would be discarded (the manager
+    // keeps only slots from its own registry).
+    sm.register_slot(0);
+  }
+  auto slot = sm.get_slot(0);
+  if (!slot)
+    return; // registration failed — leave slot absent rather than crash
+  if (!slot->is_token_present()) {
     auto tok = std::make_shared<vhsm::keystore::Token>("vHSM Software Token",
                                                        "vhsm-token-0");
-    slot->insert_token(tok);
-    sm.register_slot(0);
+    slot->insert_token(std::move(tok));
   }
 }
 

@@ -358,6 +358,13 @@ endif()
 
 add_subdirectory(src)
 add_subdirectory(tests)
+
+# Throughput benchmark: -DVHSM_ENABLE_BENCH=ON builds tests/bench/vhsm_bench,
+# which drives the real C entry points and reports median ops/sec.
+option(VHSM_ENABLE_BENCH "Build PKCS#11 throughput benchmark" OFF)
+if(VHSM_ENABLE_BENCH)
+    add_subdirectory(tests/bench)
+endif()
 # add_subdirectory(tools)
 
 # ---------------------------------------------------------------------------

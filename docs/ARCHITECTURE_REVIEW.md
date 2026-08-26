@@ -134,8 +134,9 @@ flowchart TB
     ABI[src/abi/export.h:6\nVHSM_API/HIDDEN, VHSM_NODISCARD\nVHSM_NOINLINE_HIDDEN,\ninline namespace v1] --> Result[src/abi/result.h:1\nResult<T>=expected<T,error_code>]
     Result --> Error[src/abi/error.h:1\nErrc DeviceError]
     ABI --> Span[src/abi/span.h:1\nByteSpan]
-    ABI --> Flags[cmake/CompilerFlags.cmake:1\n-O3 -flto -fvisibility=hidden/inlines-hidden\n-Wpedantic -Wconversion, -Werror]
-    Flags --> LTO[LTO devirtualizes hidden symbols]
+    ABI --> Flags[Top-level CMakeLists.txt\n-Wall -Wextra -Werror -fstack-protector-strong\n-D_FORTIFY_SOURCE=2 -fPIC, relro/now + PIE]
+    ABI --> Vis[cmake/CompilerFlags.cmake\nvhsm_target_hardening: per-target\n-fvisibility=hidden/inlines-hidden]
+    Flags --> LTO[VHSM_ENABLE_IPO: CMake-managed LTO\n(CMAKE_INTERPROCEDURAL_OPTIMIZATION_<CONFIG>)\ndevirtualizes hidden symbols; Debug stays -O0]
     Result --> Nodiscard[[nodiscard]] --> Compiler[Compiler enforces handling]
 ```
 
@@ -160,7 +161,7 @@ flowchart TB
 ## 8. Versioning
 
 *   `CMakeLists.txt:2` `project(VirtualHSM VERSION 1.0.0)` → `generated/vhsm/version.h` (`VHSM_VERSION_MAJOR/MINOR`) — `C_GetInfo` (`p11_init.cpp:270`) returns it.
-*   `vcpkg.json:1` + `CMakePresets.json:1` (`linux-ninja`, `windows-msvc`, `asan`) + `CHANGELOG.md:1` (Keep a Changelog).
+*   `vcpkg.json:1` + `CMakePresets.json:1` (`linux-ninja`, `release`, `windows-msvc`, `asan`) + `CHANGELOG.md:1` (Keep a Changelog).
 *   `git tag v1.0.0` not yet pushed — do after review.
 
 ---

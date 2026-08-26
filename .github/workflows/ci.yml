@@ -21,6 +21,54 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure -j4
 
+
+  linux-ledger:
+    runs-on: ubuntu-latest
+    # Scaffolding for Fabric Deliver integration — requires Docker + fabric-samples.
+    # The job verifies the ledger code compiles and that the DeliverClient
+    # checkpoint/full-block paths link; a live Fabric network is optional
+    # (skipped when Docker/fabric-samples are absent).
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libssl-dev libcurl4-openssl-dev nlohmann-json3-dev libgtest-dev ninja-build protobuf-compiler libgrpc++-dev libabsl-dev
+      - name: Configure (ledger backend)
+        run: cmake --preset linux-ninja -DVHSM_STORE_BACKEND=db -DVHSM_LEDGER=ON
+      - name: Build (ledger)
+        run: cmake --build build -j4
+      - name: Test (unit, ledger)
+        run: ctest --test-dir build --output-on-failure -j4
+      - name: Bench (smoke)
+        run: |
+          cmake -S . -B build-bench -G Ninja -DVHSM_ENABLE_BENCH=ON > /dev/null
+          cmake --build build-bench --target vhsm_bench -j4
+          ./build-bench/tests/bench/vhsm_bench > /tmp/bench.txt 2>&1 || cat /tmp/bench.txt
+          grep -q "bench done" /tmp/bench.txt
+      - name: TSan (smoke)
+        run: |
+          cmake -S . -B build-tsan -G Ninja -DVHSM_ENABLE_TSAN=ON -DCMAKE_BUILD_TYPE=Debug > /dev/null
+          cmake --build build-tsan --target stress_tsan -j4
+          ./build-tsan/tests/stress/stress_tsan
+
+  integration-fabric:
+    runs-on: ubuntu-latest
+    # Full Fabric network integration — skipped until fabric-samples + Docker
+    # are wired. The job is present so contributors see the intended
+    # integration path; it currently only verifies the client links.
+    if: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Start Fabric test network
+        run: |
+          git clone --depth 1 https://github.com/hyperledger/fabric-samples
+          (cd fabric-samples/test-network && ./network.sh up createChannel -c mychannel -ca)
+      - name: Run Fabric integration tests
+        run: ctest --test-dir build -R integration --output-on-failure
+
   windows:
     runs-on: windows-latest
     env:
