@@ -13,6 +13,8 @@
 #include "../notification/email_adapter.h"
 #include "../notification/grpc_push_adapter.h"
 #include "../notification/webhook_adapter.h"
+#include "../audit/audit_log.h"
+#include "../persistence/kdf.h"
 #include "../persistence/token_serializer.h"
 #include "../persistence/vault.h"
 #include "../signature_store/db_connection.h"
@@ -269,7 +271,29 @@ std::unique_ptr<AppContainer> create_app_container() {
   c->bounded_bus =
       std::make_unique<vhsm::notification::BoundedNotificationBus>(1024);
   c->bus = c->bounded_bus.get();
-  c->audit_log = std::make_unique<P11AuditLog>();
+
+  // Audit log: hash-chained when a token KEK is available (tamper-evident);
+  // falls back to stderr stub pre-initialization so early events still land.
+  {
+    auto *early_token = p11_get_token(0);
+    const std::vector<std::uint8_t> kek =
+        early_token ? early_token->get_kek() : std::vector<std::uint8_t>();
+    if (!kek.empty()) {
+      auto audit_path = c->db_path + ".audit";
+      try {
+        c->audit_log = std::make_unique<vhsm::audit::HashChainedAuditLog>(
+            audit_path, vhsm::persistence::derive_audit_chain_key(kek));
+      } catch (const std::exception &e) {
+        VHSM_LOG_ERROR(*c->logger, "audit",
+                       "hash-chained audit unavailable: " << e.what());
+        c->audit_log = std::make_unique<P11AuditLog>();
+      }
+    } else {
+      VHSM_LOG_WARNING(*c->logger, "audit",
+                       "no KEK — audit records are NOT hash-chained");
+      c->audit_log = std::make_unique<P11AuditLog>();
+    }
+  }
 
   auto *token = p11_get_token(0);
   if (!token) {
