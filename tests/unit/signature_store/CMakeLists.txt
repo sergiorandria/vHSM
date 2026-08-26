@@ -8,6 +8,7 @@ add_executable(vhsm_signature_store_test
     sqlite_transaction_tests.cpp
     signature_repository_test.cpp
     notification_dispatcher_test.cpp
+    audit_chain_test.cpp
 )
 if(VHSM_LEDGER)
     target_sources(vhsm_signature_store_test PRIVATE signature_store_core_test.cpp signature_store_integration_test.cpp)
