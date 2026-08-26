@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <optional>
+#include "../abi/result.h"
 #include <string>
 #include <vector>
 
@@ -16,8 +17,8 @@ public:
   // Log an audit event with the given details.
   // The details can include fields like: event type, timestamp, source, actor,
   // summary, and any relevant metadata.
-  virtual void append(const std::string &event_id,
-                      const std::string &event_type);
+  virtual CkStatus append(const std::string &event_id,
+                          const std::string &event_type) noexcept;
 };
 
 /**
@@ -51,8 +52,8 @@ public:
 
   ~HashChainedAuditLog() override;
 
-  void append(const std::string &event_id,
-              const std::string &event_type) override;
+  CkStatus append(const std::string &event_id,
+                  const std::string &event_type) noexcept override;
 
   /// Recompute every HMAC and link. Returns nullopt when the chain is
   /// intact; otherwise the 1-based line number of the first bad record.

@@ -2,6 +2,7 @@
 #define VHSM_ABI_RESULT_H
 
 #include "export.h"
+#include "../pkcs11/pkcs11_types.h"
 #include <expected>
 #include <string>
 #include <system_error>
@@ -35,6 +36,20 @@ public:
   const char *name() const noexcept override { return "vhsm"; }
   std::string message(int ev) const override;
 };
+
+// ─── CK_RV-native status (C ABI boundary type) ─────────────────────────────
+// CkStatus is the exception-free return for fallible operations whose only
+// failure channel is a PKCS#11 CK_RV. Unlike the error_code-based Result,
+// no category indirection: the payload IS the CK_RV the C caller receives.
+//
+//   [[nodiscard]] CkStatus do_work() noexcept;
+//   if (auto st = do_work(); !st) return st.error();  // inside extern "C"
+//
+// `ok_ck()` / `err_ck()` keep call sites terse.
+using CkStatus = std::expected<void, CK_RV>;
+
+inline CkStatus ok_ck() { return CkStatus{}; }
+inline CkStatus err_ck(CK_RV rv) { return std::unexpected(rv); }
 
 VHSM_ABI_NAMESPACE_END
 

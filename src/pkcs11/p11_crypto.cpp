@@ -463,10 +463,10 @@ void publish_verify_event(CK_SESSION_HANDLE h, CK_RV rv,
 
   try {
     notification_bus->publish(event);
-    audit_log->append("verify-" + std::to_string(created_at),
-                      rv == CKR_OK ? "C_VERIFY_OK" : "C_VERIFY_FAILED");
+    (void)audit_log->append("verify-" + std::to_string(created_at),
+                            rv == CKR_OK ? "C_VERIFY_OK" : "C_VERIFY_FAILED");
   } catch (const std::exception &) {
-    // Notification/audit must never raise across the C API boundary.
+    // Notification must never raise across the C API boundary.
   }
 }
 
@@ -536,9 +536,9 @@ void publish_crypto_op_event(
 
   try {
     notification_bus->publish(event);
-    audit_log->append(op_name + "-" + std::to_string(created_at), op_name);
+    (void)audit_log->append(op_name + "-" + std::to_string(created_at), op_name);
   } catch (const std::exception &) {
-    // Notification/audit must never raise across the C API boundary.
+    // Notification must never raise across the C API boundary.
   }
 }
 

@@ -1,5 +1,6 @@
 #include "audit_log.h"
 
+
 #include <unistd.h>
 
 #include <chrono>
@@ -78,8 +79,8 @@ void HashChainedAuditLog::recover_tail() {
   std::fclose(f);
 }
 
-void HashChainedAuditLog::append(const std::string &event_id,
-                                 const std::string &event_type) {
+CkStatus HashChainedAuditLog::append(const std::string &event_id,
+                                     const std::string &event_type) noexcept {
   static std::mutex m; // single process-wide audit sink — serialize appends
   std::lock_guard<std::mutex> lk(m);
 
@@ -97,15 +98,16 @@ void HashChainedAuditLog::append(const std::string &event_id,
 
   FILE *f = std::fopen(path_.c_str(), "ab");
   if (!f)
-    throw std::runtime_error("audit: cannot open " + path_);
+    return err_ck(CKR_FUNCTION_FAILED);
   const bool ok =
       std::fwrite(line.data(), 1, line.size(), f) == line.size() &&
       std::fflush(f) == 0 && ::fsync(::fileno(f)) == 0;
   std::fclose(f);
   if (!ok)
-    throw std::runtime_error("audit: append failed for " + path_);
+    return err_ck(CKR_FUNCTION_FAILED);
 
   tail_hex_.assign(hex, kHexDigestLen);
+  return ok_ck();
 }
 
 std::optional<std::size_t> HashChainedAuditLog::verify_chain() const {
@@ -154,6 +156,8 @@ std::optional<std::size_t> HashChainedAuditLog::verify_chain() const {
 }
 
 // Base-class no-op retained for other sinks.
-void AuditLog::append(const std::string &, const std::string &) {}
+CkStatus AuditLog::append(const std::string &, const std::string &) noexcept {
+  return ok_ck();
+}
 
 } // namespace vhsm::audit
