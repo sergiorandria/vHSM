@@ -24,7 +24,7 @@ using vhsm::notification::WebhookAdapter;
 
 namespace {
 
-NotificationEvent make_event(const char *summary = "test event") {
+NotificationEvent make_adapter_event(const char *summary = "test event") {
   NotificationEvent e;
   e.type = NotificationEvent::EventType::SIGN_CREATED;
   e.severity = NotificationEvent::Severity::INFO;
@@ -70,7 +70,7 @@ TEST(EmailAdapterTest, DeliversViaInjectedSender) {
 
   EmailAdapter adapter(spy);
   const auto sub = make_subscriber("email", "alice@example.com");
-  EXPECT_TRUE(adapter.deliver(sub, make_event()));
+  EXPECT_TRUE(adapter.deliver(sub, make_adapter_event()));
   EXPECT_EQ(delivered_to, "alice@example.com");
   EXPECT_NE(delivered_msg.find("hsm-1"), std::string::npos);
 }
@@ -80,12 +80,12 @@ TEST(EmailAdapterTest, PropagatesSenderFailure) {
                                         const std::string &) { return false; };
   EmailAdapter adapter(always_fail);
   const auto sub = make_subscriber("email", "bad@example.com");
-  EXPECT_FALSE(adapter.deliver(sub, make_event()));
+  EXPECT_FALSE(adapter.deliver(sub, make_adapter_event()));
 }
 
 TEST(EmailAdapterTest, RenderMessageIncludesEventFields) {
   const std::string msg =
-      EmailAdapter::render_message(make_event(), "noreply@vhsm.local");
+      EmailAdapter::render_message(make_adapter_event(), "noreply@vhsm.local");
   EXPECT_NE(msg.find("test event"), std::string::npos);
   EXPECT_NE(msg.find("noreply@vhsm.local"), std::string::npos);
   EXPECT_NE(msg.find("source=signature_store"), std::string::npos);
@@ -114,7 +114,7 @@ TEST(WebhookAdapterTest, DeliversJsonPayloadWithEventFields) {
 
   WebhookAdapter adapter(spy);
   const auto sub = make_subscriber("webhook", "https://hooks.example.com/vhsm");
-  EXPECT_TRUE(adapter.deliver(sub, make_event()));
+  EXPECT_TRUE(adapter.deliver(sub, make_adapter_event()));
   EXPECT_EQ(delivered_url, "https://hooks.example.com/vhsm");
 
   const auto json = nlohmann::json::parse(delivered_body);
@@ -132,7 +132,7 @@ TEST(WebhookAdapterTest, Non2xxStatusIsFailure) {
   };
   WebhookAdapter adapter(reject);
   const auto sub = make_subscriber("webhook", "https://hooks.example.com/bad");
-  EXPECT_FALSE(adapter.deliver(sub, make_event()));
+  EXPECT_FALSE(adapter.deliver(sub, make_adapter_event()));
 }
 
 TEST(WebhookAdapterTest, MalformedDetailDegradesNotThrows) {
@@ -143,7 +143,7 @@ TEST(WebhookAdapterTest, MalformedDetailDegradesNotThrows) {
   };
   WebhookAdapter adapter(spy);
 
-  auto ev = make_event();
+  auto ev = make_adapter_event();
   ev.detail_json = "not-json{";
   const auto sub = make_subscriber("webhook", "https://hooks.example.com/x");
   // Must deliver successfully even though detail_json is malformed.
@@ -171,13 +171,13 @@ TEST(GrpcPushAdapterTest, DeliversToAddressViaInjectedSender) {
 
   GrpcPushAdapter adapter(spy);
   const auto sub = make_subscriber("grpc_push", "push://siem:50051");
-  EXPECT_TRUE(adapter.deliver(sub, make_event()));
+  EXPECT_TRUE(adapter.deliver(sub, make_adapter_event()));
   EXPECT_EQ(delivered_address, "push://siem:50051");
   EXPECT_NE(delivered_payload.find("test event"), std::string::npos);
 }
 
 TEST(GrpcPushAdapterTest, RenderPayloadIsValidJson) {
-  const std::string payload = GrpcPushAdapter::render_payload(make_event());
+  const std::string payload = GrpcPushAdapter::render_payload(make_adapter_event());
   const auto json = nlohmann::json::parse(payload);
   EXPECT_EQ(json["source"], "signature_store");
 }

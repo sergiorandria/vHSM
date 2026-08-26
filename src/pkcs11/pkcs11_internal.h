@@ -26,6 +26,7 @@
 #include "../crypto/ecc.h"
 #include "../crypto/rsa.h"
 
+#include "../abi/result.h"
 #include "../audit/audit_log.h"
 #ifdef VHSM_LEDGER
 #include "../ledger/ledger_client.h"
@@ -56,12 +57,12 @@
 // persist to DB via the notification pipeline). Owned by AppContainer.
 class P11AuditLog : public vhsm::audit::AuditLog {
 public:
-  void append(const std::string &event_id,
-              const std::string &event_type) override {
-    // In production, this would write to an audit database/file
-    // For now, log to stderr for debugging
-    std::cerr << "[AUDIT] event_id=" << event_id << " event_type=" << event_type
-              << std::endl;
+  vhsm::v1::CkStatus append(const std::string &event_id,
+                  const std::string &event_type) noexcept override {
+    // Fallback sink (pre-KEK only). Production uses HashChainedAuditLog.
+    std::cerr << "[AUDIT] event_id=" << event_id
+              << " event_type=" << event_type << std::endl;
+    return vhsm::v1::ok_ck();
   }
 };
 

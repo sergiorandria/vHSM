@@ -3,9 +3,9 @@
 #include <optional>
 #include <stdexcept>
 
+#include "../domain/core/kernel_types.h"
 #include "hsm_clock.h"
 #include "macros.h"
-#include "../domain/core/kernel_types.h"
 
 namespace vhsm {
 

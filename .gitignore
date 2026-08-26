@@ -18,6 +18,8 @@ test_*
 build/
 build2/
 build3/
+build-asan/
+build-release/
 _build_corrupt/
 docker-compose.yml
 .vscode
@@ -68,6 +70,8 @@ bld/
 [Oo]bj/
 [Oo]ut/
 [Ll]og/
+!src/log/
+!src/log/**
 [Ll]ogs/
 
 # Visual Studio 2015/2017 cache/options directory
@@ -403,3 +407,5 @@ network/fabric_configuration/fabric-network/channel-artifacts/
 network/fabric_configuration/fabric-network/configtx.yaml
 network/fabric_configuration/fabric-network/fabric-ca/
 network/fabric_configuration/fabric-network/organizations/
+build-bench/
+build-tsan/

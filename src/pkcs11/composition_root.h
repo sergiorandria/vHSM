@@ -6,6 +6,7 @@
 
 #include "../core/hsm_instance.h"
 #include "../domain/signing/isignature_store.h"
+#include "../log/logger.h"
 #include "../session/slot_manager.h"
 #include "../signature_store/db_connection.h"
 
@@ -22,6 +23,9 @@ class NotificationBus;
 } // namespace vhsm::notification
 namespace vhsm::audit {
 class AuditLog;
+}
+namespace vhsm::session {
+class LoginThrottle;
 }
 namespace vhsm::signature_store::db {
 class NotificationDispatcher;
@@ -104,6 +108,15 @@ struct AppContainer {
   // singleton) so tests can create isolated containers with independent
   // slot sets.
   std::unique_ptr<vhsm::session::SlotManager> slot_manager;
+
+  // Login throttle: progressive delay on consecutive PIN failures,
+  // complementing the hard lockout in keystore::Token.
+  std::unique_ptr<vhsm::session::LoginThrottle> login_throttle;
+
+  // Logger — central logging facility. Owned by the container; all modules
+  // log through this instance. Sinks are configurable per deployment
+  // (stderr for containers, syslog for systemd, etc.).
+  std::shared_ptr<vhsm::log::Logger> logger;
 
   AppContainer() = default;
   ~AppContainer();

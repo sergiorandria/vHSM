@@ -1,6 +1,12 @@
 #include "pkcs11.h"
+#include <chrono>
+#include <thread>
+
+#include "composition_root.h"
 #include "pkcs11_internal.h"
 #include "pkcs11_types.h"
+
+#include "../session/login_throttle.h"
 
 #include <cstring>
 #include <sstream>
@@ -81,8 +87,30 @@ CK_RV C_Login(CK_SESSION_HANDLE hSession, CK_USER_TYPE userType,
   bool was_locked = (userType == CKU_USER)
                         ? tok->is_user_pin_locked() == CK_TRUE
                         : tok->is_so_pin_locked() == CK_TRUE;
+
+  // Progressive throttling before verification: sleep proportional to the
+  // failure history for this slot+user, then attempt. The sleep happens
+  // OUTSIDE any token mutex — Token::login takes its own locks later.
+  const std::string throttle_key = std::to_string(s->getSlotID()) + ":" +
+                                   std::to_string(userType);
+  vhsm::session::LoginThrottle *throttle =
+      g_appContainer ? g_appContainer->login_throttle.get() : nullptr;
+  if (throttle) {
+    const unsigned delay_ms = throttle->delay_before_attempt(throttle_key);
+    if (delay_ms > 0)
+      std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+  }
+
   CK_RV rv =
       tok->login(userType, reinterpret_cast<const CK_CHAR *>(pPin), ulPinLen);
+  if (throttle) {
+    if (rv == CKR_OK || rv == CKR_PIN_LOCKED)
+      throttle->record_success(throttle_key); // reset on success OR hard lock
+    else if (rv != CKR_PIN_INCORRECT && rv != CKR_PIN_INVALID)
+      ; // non-PIN errors don't count as failures
+    else
+      throttle->record_failure(throttle_key);
+  }
   if (rv == CKR_OK) {
     // Record login on the Session itself (replaces g_loginState map).
     // Token::login already verified the PIN; Session::login just records the

@@ -41,4 +41,14 @@ vhsm::persistence::derive_db_hmac_key(const std::vector<u8> &vault_kek) {
   return vhsm::scrypto::derive_db_hmac_key(vault_kek);
 }
 
+std::vector<u8>
+vhsm::persistence::derive_audit_chain_key(const std::vector<u8> &vault_kek) {
+  // Distinct HKDF info domain from the DB HMAC key: audit-chain compromise
+  // must not enable DB forgery and vice versa.
+  static const std::vector<u8> info = {'v', 'H', 'S', 'M', '-', 'a', 'u',
+                                       'd', 'i', 't', '-', 'c', 'h', 'a',
+                                       'i', 'n'};
+  return hkdf_sha256(vault_kek, {}, info, 32);
+}
+
 // End of translation unit.

@@ -13,8 +13,11 @@
 #include "../notification/email_adapter.h"
 #include "../notification/grpc_push_adapter.h"
 #include "../notification/webhook_adapter.h"
+#include "../audit/audit_log.h"
+#include "../persistence/kdf.h"
 #include "../persistence/token_serializer.h"
 #include "../persistence/vault.h"
+#include "../session/login_throttle.h"
 #include "../signature_store/db_connection.h"
 #include "../signature_store/db_schema.h"
 #include "../signature_store/notification_dispatcher.h"
@@ -158,11 +161,18 @@ std::string resolve_fabric_config_dir() {
 
 static void ensure_default_token_for_container(vhsm::session::SlotManager &sm) {
   if (!sm.get_slot(0)) {
-    auto slot = std::make_shared<vhsm::keystore::Slot>(0);
+    // WHY register-then-fetch: register_slot creates the manager-owned Slot;
+    // inserting into a locally created Slot would be discarded (the manager
+    // keeps only slots from its own registry).
+    sm.register_slot(0);
+  }
+  auto slot = sm.get_slot(0);
+  if (!slot)
+    return; // registration failed — leave slot absent rather than crash
+  if (!slot->is_token_present()) {
     auto tok = std::make_shared<vhsm::keystore::Token>("vHSM Software Token",
                                                        "vhsm-token-0");
-    slot->insert_token(tok);
-    sm.register_slot(0);
+    slot->insert_token(std::move(tok));
   }
 }
 
@@ -197,6 +207,17 @@ static std::unique_ptr<vhsm::persistence::Vault> open_or_create_vault() {
 
 std::unique_ptr<AppContainer> create_app_container() {
   auto c = std::make_unique<AppContainer>();
+
+  // Logger: stderr sink always (Docker/container compat), syslog sink on
+  // Linux for journald/syslog integration. Both are thread-safe.
+  c->logger = std::make_shared<vhsm::log::Logger>();
+  c->logger->add_sink(std::make_shared<vhsm::log::StderrSink>());
+#ifdef __linux__
+  c->logger->add_sink(std::make_shared<vhsm::log::SyslogSink>("vhsmd"));
+#endif
+  // Install as process-wide fallback so header-only modules (ThreadPool)
+  // and legacy call sites route through the same sinks.
+  vhsm::log::set_global_logger(c->logger.get());
 
   // Slot manager: owned by the container (not a singleton). Set as the
   // process-wide global for legacy PKCS#11 call sites during DI migration.
@@ -258,7 +279,30 @@ std::unique_ptr<AppContainer> create_app_container() {
   c->bounded_bus =
       std::make_unique<vhsm::notification::BoundedNotificationBus>(1024);
   c->bus = c->bounded_bus.get();
-  c->audit_log = std::make_unique<P11AuditLog>();
+  c->login_throttle = std::make_unique<vhsm::session::LoginThrottle>();
+
+  // Audit log: hash-chained when a token KEK is available (tamper-evident);
+  // falls back to stderr stub pre-initialization so early events still land.
+  {
+    auto *early_token = p11_get_token(0);
+    const std::vector<std::uint8_t> kek =
+        early_token ? early_token->get_kek() : std::vector<std::uint8_t>();
+    if (!kek.empty()) {
+      auto audit_path = c->db_path + ".audit";
+      try {
+        c->audit_log = std::make_unique<vhsm::audit::HashChainedAuditLog>(
+            audit_path, vhsm::persistence::derive_audit_chain_key(kek));
+      } catch (const std::exception &e) {
+        VHSM_LOG_ERROR(*c->logger, "audit",
+                       "hash-chained audit unavailable: " << e.what());
+        c->audit_log = std::make_unique<P11AuditLog>();
+      }
+    } else {
+      VHSM_LOG_WARNING(*c->logger, "audit",
+                       "no KEK — audit records are NOT hash-chained");
+      c->audit_log = std::make_unique<P11AuditLog>();
+    }
+  }
 
   auto *token = p11_get_token(0);
   if (!token) {
@@ -294,7 +338,8 @@ std::unique_ptr<AppContainer> create_app_container() {
       disp->start();
       c->notif_dispatcher = std::move(disp);
     } catch (const std::exception &e) {
-      std::fprintf(stderr, "VHSM: notification pipeline setup failed: %s\n", e.what());
+      VHSM_LOG_WARNING(*c->logger, "pkcs11",
+                       "notification pipeline setup failed: " << e.what());
     }
     // Outbox poller — replays PENDING event_outbox rows written
     // transactionally by the dispatcher. Started after the dispatcher so
@@ -305,7 +350,8 @@ std::unique_ptr<AppContainer> create_app_container() {
                                                                     *c->bus);
       c->outbox_poller->start();
     } catch (const std::exception &e) {
-      std::fprintf(stderr, "VHSM: outbox poller setup failed: %s\n", e.what());
+      VHSM_LOG_WARNING(*c->logger, "pkcs11",
+                       "outbox poller setup failed: " << e.what());
     }
   }
 
