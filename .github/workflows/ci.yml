@@ -31,6 +31,10 @@ jobs:
           submodules: recursive
       - uses: actions/setup-go@v5
         with: { go-version: '1.22' }
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Setup Ninja
+        uses: seanmiddleditch/gha-setup-ninja@master
       - name: Setup vcpkg
         run: |
           if (-not (Test-Path $env:VCPKG_ROOT)) {
