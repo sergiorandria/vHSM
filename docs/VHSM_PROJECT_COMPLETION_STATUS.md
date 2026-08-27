@@ -142,7 +142,7 @@ ARCHIVED
 
 ---
 
-### 3. ⚠️ Chaincode - Signature Ledger (network/chaincode/signature_ledger/signature_ledger.go)
+### 3. ⚠️ Chaincode - Signature Ledger (network/fabric_configuration/signature_ledger/chaincode.go)
 
 **Status**: INCOMPLETE - Unclear purpose, not integrated
 
@@ -439,7 +439,7 @@ auto result = txn->submit(args);                        // ✅
 - [ ] **MEDIUM**: Use IAM for MinIO (1-2 hours)
 - [ ] Verify LDAP schema matches deployment
 - [ ] Verify Fabric CA paths (/etc/vhsmd/crypto/)
-- [ ] Verify chaincode deployment name (jurychaincode)
+- [ ] Verify chaincode deployment name (signature_ledger)
 - [ ] Load test thesis lifecycle (create → grade → sign → notarize)
 - [ ] Test HSM failure recovery
 - [ ] Test network partition recovery
