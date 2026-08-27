@@ -413,3 +413,4 @@ network/fabric_configuration/fabric-network/fabric-ca/
 network/fabric_configuration/fabric-network/organizations/
 build-bench/
 build-tsan/
+network/fabric_configuration/signature_ledger/signature_ledger

@@ -29,6 +29,7 @@
 #include "../../../src/signature_store/signature_query.h"
 #include "../../../src/signature_store/signature_repository.h"
 #include "../../../src/signature_store/sqlite_connection.h"
+#include "../../../src/signature_store/ledger_retry_queue.h"
 
 #include "../../../src/audit/audit_log.h"
 #include "../../../src/core/types.h"
@@ -64,8 +65,9 @@ public:
 
 class CapturingAuditLog : public vhsm::audit::AuditLog {
 public:
-  void append(const std::string &id, const std::string &type) override {
+  vhsm::v1::CkStatus append(const std::string &id, const std::string &type) noexcept override {
     calls.push_back({id, type});
+    return vhsm::v1::CkStatus{};
   }
   struct Call {
     std::string id;
@@ -284,6 +286,15 @@ TEST_F(SignatureStoreIntegrationTest,
   auto ids = query.get_signature_ids_by_key_fingerprint("fpAAA");
   ASSERT_EQ(ids.size(), 1u);
   const std::string &record_id = ids[0];
+
+  // The dispatcher writes a PENDING ledger row atomically with the signature
+  // record; the LedgerRetryQueue is the (crash-recovery) seam that actually
+  // submits pending rows to the worker — the dispatcher never calls the worker
+  // directly under the outbox model.
+  vhsm::signature_store::db::LedgerRetryQueue retry_queue(*conn_);
+  for (const auto &rec : retry_queue.load_pending_records()) {
+    worker->submit_record(rec);
+  }
 
   // Wait (up to 5s) for the ledger worker thread to commit + invoke callback.
   {

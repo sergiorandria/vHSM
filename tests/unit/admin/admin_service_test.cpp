@@ -40,9 +40,10 @@ public:
 
 class CapturingAuditLog final : public AuditLog {
 public:
-  void append(const std::string &id, const std::string &type) override {
+  vhsm::v1::CkStatus append(const std::string &id, const std::string &type) noexcept override {
     std::lock_guard<std::mutex> lock(m);
     calls.push_back({id, type});
+    return vhsm::v1::CkStatus{};
   }
   struct Call {
     std::string id;
