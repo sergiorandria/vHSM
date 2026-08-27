@@ -5,7 +5,7 @@
 #include "../core/hsm_instance.h"
 #include "../core/system_hsm_clock.h"
 #include "../crypto/crypto_engine.h"
-#include "../crypto/EvpPkeyGuard.h"
+#include "../crypto/evp_pkey_guard.h"
 #include "../signature_store/signature_dispatcher.h"
 
 #include <openssl/evp.h>
@@ -239,6 +239,14 @@ CK_RV do_decrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
   auto *pk = pk_guard.get();
   if (!pk)
     return CKR_KEY_HANDLE_INVALID;
+  {
+    auto o = p11_get_object(h, prm.key);
+    if (!o)
+      return CKR_KEY_HANDLE_INVALID;
+    CK_RV st_rv = p11_key_state_error(o->getKeyState(), /*forSigning=*/false);
+    if (st_rv != CKR_OK)
+      return st_rv;
+  }
   auto rsa = resolve_rsa_encdec(prm.mech, *prm.oaep_mgf1, *prm.oaep_label);
   return p11_rsa_decrypt(pk, in, out, rsa.padding, rsa.label_ptr, rsa.md);
 }
@@ -290,6 +298,14 @@ CK_RV do_sign(CK_SESSION_HANDLE h, const std::vector<u8> &data,
     return CKR_SESSION_HANDLE_INVALID;
   const CK_MECHANISM_TYPE mech = sess->opMech();
   const CK_OBJECT_HANDLE k = sess->opKey();
+  {
+    auto o = p11_get_object(h, k);
+    if (!o)
+      return CKR_KEY_HANDLE_INVALID;
+    CK_RV st_rv = p11_key_state_error(o->getKeyState(), /*forSigning=*/true);
+    if (st_rv != CKR_OK)
+      return st_rv;
+  }
   vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, k));
   auto *pk = pk_guard.get();
   if (!pk)
@@ -322,6 +338,14 @@ CK_RV do_verify(CK_SESSION_HANDLE h, const std::vector<u8> &data,
     return CKR_SESSION_HANDLE_INVALID;
   const CK_MECHANISM_TYPE mech = sess->opMech();
   const CK_OBJECT_HANDLE k = sess->opKey();
+  {
+    auto o = p11_get_object(h, k);
+    if (!o)
+      return CKR_KEY_HANDLE_INVALID;
+    CK_RV st_rv = p11_key_state_error(o->getKeyState(), /*forSigning=*/false);
+    if (st_rv != CKR_OK)
+      return st_rv;
+  }
   vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, k));
   auto *pk = pk_guard.get();
   if (!pk)
@@ -418,7 +442,8 @@ void publish_verify_event(CK_SESSION_HANDLE h, CK_RV rv,
   auto obj = p11_get_object(h, k);
   std::string key_id = obj ? p11_key_id(obj.get()) : "unknown";
 
-  EVP_PKEY *pk = load_asym_key(h, k);
+  vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, k));
+  EVP_PKEY *pk = pk_guard.get();
   std::string key_fp = pk ? p11_key_fingerprint(pk) : "unknown";
 
   std::string mechanism_str = mech_to_str(active_mech);
@@ -500,7 +525,8 @@ void publish_crypto_op_event(
   auto obj = p11_get_object(h, k);
   std::string key_id = obj ? p11_key_id(obj.get()) : "unknown";
 
-  EVP_PKEY *pk = load_asym_key(h, k);
+  vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, k));
+  EVP_PKEY *pk = pk_guard.get();
   std::string key_fp = pk ? p11_key_fingerprint(pk) : "unknown";
 
   std::string mechanism_str = mech_to_str(active_mech);
@@ -565,7 +591,8 @@ static CK_RV dispatch_sign_result(
   session::Session *sess = session_sp.get();
   CK_OBJECT_HANDLE k = sess ? sess->opKey() : CK_INVALID_HANDLE;
 
-  EVP_PKEY *pk = load_asym_key(h, k);
+  vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, k));
+  EVP_PKEY *pk = pk_guard.get();
   if (!pk)
     return CKR_OK; // can't fingerprint without key — don't block signing
 

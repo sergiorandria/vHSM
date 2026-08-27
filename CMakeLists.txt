@@ -354,6 +354,17 @@ enable_testing()  # Enable CTest for the tests/ subdirectory
 option(VHSM_LEDGER "Build the Fabric ledger signature anchor integration" ON)
 if(VHSM_LEDGER)
     add_subdirectory(third_party/fabric-gateway-cpp)
+    # Third-party Fabric SDK is not held to vHSM's -Werror policy.
+    get_property(_fg_targets DIRECTORY third_party/fabric-gateway-cpp
+                 PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(_t ${_fg_targets})
+        get_target_property(_type ${_t} TYPE)
+        if(NOT _type STREQUAL "INTERFACE_LIBRARY" AND
+           NOT _type STREQUAL "UTILITY" AND
+           NOT _type STREQUAL "ALIAS")
+            target_compile_options(${_t} PRIVATE -Wno-error)
+        endif()
+    endforeach()
 endif()
 
 add_subdirectory(src)

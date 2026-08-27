@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "../../../src/core/ClockUtils.h"
+#include "../../../src/core/clock_utils.h"
 #include "../../../src/core/frozen_hsm_clock.h"
 #include "../../../src/session/internal/session_manager_core.h"
 #include "../../../src/session/internal/slot_manager_core.h"

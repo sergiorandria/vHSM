@@ -155,8 +155,8 @@ flowchart TB
 | `src/persistence/vault.cpp:3` `open/fsync/rename/getpid` | `MoveFileExW` + `_commit` + `_getpid` (`vault.cpp:155`) |
 | `src/keystore/key_wrap.cpp:7` `mlock` | `VirtualLock` branch |
 | `wallet.cpp:21` `flock` | `LockFileEx` (`wallet.cpp:21` `CreateFileW` + `LockFileEx`) |
-| `src/crypto/SecureRNG.cpp:5` `mlock` + `ctr_drbg_aes256.cpp:103` `/dev/random` | `VirtualLock` + `BCryptGenRandom` (`ctr_drbg_aes256.cpp:103`) |
-| `src/core/ClockUtils.h:55` `gmtime_r` only | `gmtime_s` on `_WIN32` |
+| `src/crypto/secure_rng.cpp:5` `mlock` + `ctr_drbg_aes256.cpp:103` `/dev/random` | `VirtualLock` + `BCryptGenRandom` (`ctr_drbg_aes256.cpp:103`) |
+| `src/core/clock_utils.h:55` `gmtime_r` only | `gmtime_s` on `_WIN32` |
 | `src/pkcs11/p11_init.cpp:89` `HOME/.vhs` | `%LOCALAPPDATA%\vHSM` fallback |
 
 ---

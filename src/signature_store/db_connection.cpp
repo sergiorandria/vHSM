@@ -11,7 +11,7 @@
 
 #include "db_connection.h"
 #include "../core/error.h"
-#include "StmtGuard.h"
+#include "stmt_guard.h"
 #include "sqlite_connection.h"
 
 #include <sqlite3.h>

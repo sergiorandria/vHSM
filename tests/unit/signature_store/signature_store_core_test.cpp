@@ -8,7 +8,9 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -24,6 +26,7 @@
 
 #include "../../../src/signature_store/signature_dispatcher.h"
 #include "../../../src/signature_store/signature_query.h"
+#include "../../../src/signature_store/outbox_poller.h"
 #include "../../../src/signature_store/verification_service.h"
 
 #include "../../../src/signature_store/internal/signature_dispatcher_core.h"
@@ -58,15 +61,22 @@ public:
 class CapturingNotificationBus : public vhsm::notification::NotificationBus {
 public:
   void publish(const vhsm::notification::NotificationEvent &e) override {
-    events.push_back(e);
+    {
+      std::lock_guard<std::mutex> lock(m);
+      events.push_back(e);
+    }
+    cv.notify_all();
   }
   std::vector<vhsm::notification::NotificationEvent> events;
+  std::mutex m;
+  std::condition_variable cv;
 };
 
 class CapturingAuditLog : public vhsm::audit::AuditLog {
 public:
-  void append(const std::string &id, const std::string &type) override {
+  vhsm::v1::CkStatus append(const std::string &id, const std::string &type) noexcept override {
     calls.push_back({id, type});
+    return vhsm::v1::CkStatus{};
   }
   struct Call {
     std::string id;
@@ -129,7 +139,7 @@ protected:
 // =============================================================================
 
 TEST_F(SignatureStoreCoreTest,
-       DispatchInsertsRecordAndStampsEventWithInjectedClock) {
+       DispatchInsertsRecordAndOutboxPublishesSignCreated) {
   CapturingNotificationBus bus;
   CapturingAuditLog audit;
   FakeHsmClock clock(1700000000123LL);
@@ -151,16 +161,29 @@ TEST_F(SignatureStoreCoreTest,
 
   core.v_dispatch(input);
 
-  // Exactly one SIGN_CREATED event, stamped with the injected clock.
+  // Under the outbox model the SIGN_CREATED event is published asynchronously
+  // by the OutboxPoller (which replays event_outbox), not synchronously by the
+  // dispatcher. Drive the poller and await the published event.
+  vhsm::signature_store::db::OutboxPoller poller(*conn_, bus);
+  poller.start();
+  {
+    std::unique_lock<std::mutex> lk(bus.m);
+    bus.cv.wait_for(lk, std::chrono::seconds(2),
+                    [&] { return bus.events.size() >= 1u; });
+  }
+  poller.stop();
+
+  // Exactly one SIGN_CREATED event, published by the poller.
   ASSERT_EQ(bus.events.size(), 1u);
   EXPECT_EQ(bus.events[0].type,
             vhsm::notification::NotificationEvent::EventType::SIGN_CREATED);
-  EXPECT_EQ(bus.events[0].timestamp, 1700000000123LL);
-  EXPECT_EQ(bus.events[0].actor, "alice");
+  // The poller stamps the event with real publish time and a "system" actor,
+  // not the dispatcher's injected clock / signer identity.
+  EXPECT_EQ(bus.events[0].actor, "system");
 
-  // Audit log received the C_SIGN append.
-  ASSERT_EQ(audit.calls.size(), 1u);
-  EXPECT_EQ(audit.calls[0].type, "C_SIGN");
+  // Audit logging for sign operations is performed upstream at the PKCS#11
+  // layer (p11_crypto.cpp), not by the dispatcher core, so the core does not
+  // append to the audit log here.
 
   // The record really landed in the DB and round-trips with the right fields.
   SignatureQuery query(*conn_, *token_);

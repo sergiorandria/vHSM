@@ -1,4 +1,4 @@
-#include "SecureRNG.h"
+#include "secure_rng.h"
 
 #include "vhsm/scrypto/mem.h"
 #include <cstring>

@@ -392,7 +392,7 @@ std::optional<LedgerEntry> LedgerClient::submit_record(
 ### Hyperledger Fabric Chaincode Example
 
 ```go
-// network/chaincode/signature_ledger/signature_ledger.go (Go)
+// network/fabric_configuration/signature_ledger/chaincode.go (Go)
 func (s *SmartContract) AnchorSignature(ctx contractapi.TransactionContextInterface,
     signatureData string) error {
   

@@ -11,6 +11,7 @@
 
 #include "../keystore/attribute_store.h"
 #include "../keystore/hsm_object.h"
+#include "../keystore/key_state.h"
 #include "../keystore/key_wrap.h"
 #include "../keystore/object_store.h"
 #include "../keystore/slot.h"
@@ -20,7 +21,7 @@
 #include "../session/session_manager.h"
 #include "../session/slot_manager.h"
 
-#include "../crypto/SecureRNG.h"
+#include "../crypto/secure_rng.h"
 #include "../crypto/aes_gcm.h"
 #include "../crypto/crypto_engine.h"
 #include "../crypto/ecc.h"
@@ -136,7 +137,23 @@ keystore::Token *p11_get_token(CK_SLOT_ID id);
 keystore::Token *p11_get_token_for_session(CK_SESSION_HANDLE hSession);
 std::shared_ptr<session::Session> p11_get_session(CK_SESSION_HANDLE h);
 std::shared_ptr<keystore::HsmObject> p11_get_object(CK_SESSION_HANDLE hSession,
-                                                    CK_OBJECT_HANDLE hObject);
+                                                     CK_OBJECT_HANDLE hObject);
+
+// Enforce a key's lifecycle state (plan/PLANv5 §3.2 / §6) against a requested
+// cryptographic operation. Returns CKR_OK when permitted, otherwise
+// CKR_KEY_FUNCTION_NOT_PERMITTED. A Revoked key is refused for every use.
+// A Rotating key may still VERIFY/DECRYPT (old signatures/ciphertexts remain
+// valid) but must not produce NEW signatures, so callers set forSigning=true
+// on the signing path. Inline + header-only so it is trivially unit-testable
+// without booting the full PKCS#11 stack.
+inline CK_RV p11_key_state_error(keystore::KeyState st, bool forSigning) {
+  using keystore::KeyState;
+  if (st == KeyState::Revoked)
+    return CKR_KEY_FUNCTION_NOT_PERMITTED;
+  if (forSigning && st != KeyState::Active)
+    return CKR_KEY_FUNCTION_NOT_PERMITTED;
+  return CKR_OK;
+}
 
 // SignatureDispatcher access
 vhsm::signature_store::db::SignatureDispatcher *p11_signature_dispatcher();
@@ -354,6 +371,18 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
                         CK_ULONG ulPrivateKeyAttributeCount,
                         CK_OBJECT_HANDLE_PTR phPublicKey,
                         CK_OBJECT_HANDLE_PTR phPrivateKey);
+
+// Internal key-rotation entry point (plan §3.2 / §6): generate a fresh
+// replacement for hOldPrivate, inherit its label/id/parameters, and transition
+// the old key to Rotating. Not part of the public C ABI.
+CK_RV p11_rotate_keypair(CK_SESSION_HANDLE hSession,
+                         CK_OBJECT_HANDLE hOldPrivate,
+                         CK_ATTRIBUTE_PTR pPublicKeyTemplate,
+                         CK_ULONG ulPublicKeyAttributeCount,
+                         CK_ATTRIBUTE_PTR pPrivateKeyTemplate,
+                         CK_ULONG ulPrivateKeyAttributeCount,
+                         CK_OBJECT_HANDLE_PTR phPublicKey,
+                         CK_OBJECT_HANDLE_PTR phPrivateKey);
 CK_RV C_WrapKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
                 CK_OBJECT_HANDLE hWrappingKey, CK_OBJECT_HANDLE hKey,
                 CK_BYTE_PTR pWrappedKey, CK_ULONG_PTR pulWrappedKeyLen);

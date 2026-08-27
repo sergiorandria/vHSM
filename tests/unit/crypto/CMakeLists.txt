@@ -18,6 +18,8 @@ add_executable(vhsm_crypto_test
     mdctxguard_test.cpp
     cipherctxguard_test.cpp
     pkeyctxguard_test.cpp
+    rng_test.cpp
+    incremental_hash_test.cpp
 )
 
 # Include the project root so tests can include headers as <crypto/...>

@@ -5,8 +5,8 @@ target_sources(vhsm_session
     PRIVATE
     session_manager.cpp
     session.cpp
-    FindContext.cpp
-    SignContext.cpp
+    find_context.cpp
+    sign_context.cpp
     slot_manager.cpp
     internal/session_manager_core.cpp
     internal/slot_manager_core.cpp

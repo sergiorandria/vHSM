@@ -147,16 +147,16 @@ CK_RV C_GenerateKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
 VHSM_C_CATCH
 }
 
-CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
-                        CK_ATTRIBUTE_PTR pPublicKeyTemplate,
-                        CK_ULONG ulPublicKeyAttributeCount,
-                        CK_ATTRIBUTE_PTR pPrivateKeyTemplate,
-                        CK_ULONG ulPrivateKeyAttributeCount,
-                        CK_OBJECT_HANDLE_PTR phPublicKey,
-                        CK_OBJECT_HANDLE_PTR phPrivateKey) {
-  VHSM_C_TRY
-  if (!p11_is_initialized())
-    return CKR_CRYPTOKI_NOT_INITIALIZED;
+// Core keypair generation + storage, shared by C_GenerateKeyPair and
+// p11_rotate_keypair. When `hOldPrivate` names an existing private key, the new
+// key is generated Active (the default) and the old key is transitioned to
+// Rotating (it can still VERIFY/DECRYPT but can no longer SIGN — plan §3.2).
+CK_RV p11_generate_and_store_keypair(
+    CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
+    CK_ATTRIBUTE_PTR pPublicKeyTemplate, CK_ULONG ulPublicKeyAttributeCount,
+    CK_ATTRIBUTE_PTR pPrivateKeyTemplate, CK_ULONG ulPrivateKeyAttributeCount,
+    CK_OBJECT_HANDLE_PTR phPublicKey, CK_OBJECT_HANDLE_PTR phPrivateKey,
+    CK_OBJECT_HANDLE hOldPrivate) {
   if (!pMechanism || !phPublicKey || !phPrivateKey)
     return CKR_ARGUMENTS_BAD;
 
@@ -236,6 +236,15 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
   *phPublicKey = hPub;
   *phPrivateKey = hPriv;
 
+  // Lifecycle transition: a rotated key is superseded. Mark the previous
+  // private key Rotating so it remains usable for verify/decrypt but cannot
+  // sign new data (plan §3.2 / §6).
+  if (hOldPrivate != CK_INVALID_HANDLE) {
+    if (auto old = store.v_get_object(hOldPrivate)) {
+      old->setKeyState(vhsm::keystore::KeyState::Rotating);
+    }
+  }
+
   std::string rotationLabel =
       label_from_template(pPrivateKeyTemplate, ulPrivateKeyAttributeCount);
   if (rotationLabel.empty()) {
@@ -244,6 +253,100 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
   }
   publish_rotation_event(*s, rotationLabel, {hPub, hPriv});
   return CKR_OK;
+}
+
+CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
+                        CK_ATTRIBUTE_PTR pPublicKeyTemplate,
+                        CK_ULONG ulPublicKeyAttributeCount,
+                        CK_ATTRIBUTE_PTR pPrivateKeyTemplate,
+                        CK_ULONG ulPrivateKeyAttributeCount,
+                        CK_OBJECT_HANDLE_PTR phPublicKey,
+                        CK_OBJECT_HANDLE_PTR phPrivateKey) {
+  VHSM_C_TRY
+  if (!p11_is_initialized())
+    return CKR_CRYPTOKI_NOT_INITIALIZED;
+  if (!pMechanism || !phPublicKey || !phPrivateKey)
+    return CKR_ARGUMENTS_BAD;
+
+  return p11_generate_and_store_keypair(
+      hSession, pMechanism, pPublicKeyTemplate, ulPublicKeyAttributeCount,
+      pPrivateKeyTemplate, ulPrivateKeyAttributeCount, phPublicKey,
+      phPrivateKey, CK_INVALID_HANDLE);
+VHSM_C_CATCH
+}
+
+// p11_rotate_keypair: generate a fresh replacement for `hOldPrivate`, matching
+// its algorithm family and parameters, inherit its CKA_LABEL/CKA_ID (so
+// label-based lookups transparently resolve the new Active key), and transition
+// the old key to Rotating. Returns the new public/private handles.
+CK_RV p11_rotate_keypair(CK_SESSION_HANDLE hSession,
+                         CK_OBJECT_HANDLE hOldPrivate,
+                         CK_ATTRIBUTE_PTR pPublicKeyTemplate,
+                         CK_ULONG ulPublicKeyAttributeCount,
+                         CK_ATTRIBUTE_PTR pPrivateKeyTemplate,
+                         CK_ULONG ulPrivateKeyAttributeCount,
+                         CK_OBJECT_HANDLE_PTR phPublicKey,
+                         CK_OBJECT_HANDLE_PTR phPrivateKey) {
+  VHSM_C_TRY
+  if (!p11_is_initialized())
+    return CKR_CRYPTOKI_NOT_INITIALIZED;
+  if (!phPublicKey || !phPrivateKey)
+    return CKR_ARGUMENTS_BAD;
+
+  auto s = p11_sessions().getSession(hSession);
+  if (!s)
+    return CKR_SESSION_HANDLE_INVALID;
+  auto old = p11_get_object(hSession, hOldPrivate);
+  if (!old)
+    return CKR_OBJECT_HANDLE_INVALID;
+  if (old->getType() != ObjectType::PRIVATE_KEY)
+    return CKR_KEY_HANDLE_INVALID;
+
+  // Determine the algorithm family from the existing key.
+  CK_MECHANISM mech{CKM_EC_KEY_PAIR_GEN, nullptr, 0};
+  const auto *kt = old->findAttribute(CKA_KEY_TYPE);
+  if (kt && kt->size() == sizeof(CK_ULONG)) {
+    CK_ULONG ktype = 0;
+    std::memcpy(&ktype, kt->data(), sizeof(CK_ULONG));
+    if (ktype == CKK_RSA) {
+      mech.mechanism = CKM_RSA_PKCS_KEY_PAIR_GEN;
+    }
+  }
+
+  // Inherit identity + parameters from the old key so the replacement is a
+  // drop-in for applications that look the key up by label/id or algorithm.
+  std::vector<CK_ATTRIBUTE> pubTmpl, privTmpl;
+  auto copy_tmpl = [](std::vector<CK_ATTRIBUTE> &dst, CK_ATTRIBUTE_PTR src,
+                      CK_ULONG n) {
+    if (!src)
+      return;
+    for (CK_ULONG i = 0; i < n; ++i)
+      dst.push_back(src[i]);
+  };
+  copy_tmpl(pubTmpl, pPublicKeyTemplate, ulPublicKeyAttributeCount);
+  copy_tmpl(privTmpl, pPrivateKeyTemplate, ulPrivateKeyAttributeCount);
+
+  auto ensure_attr = [&](std::vector<CK_ATTRIBUTE> &dst, CK_ATTRIBUTE_TYPE t) {
+    for (const auto &a : dst)
+      if (a.type == t)
+        return;
+    const auto *v = old->findAttribute(t);
+    if (v && !v->empty())
+      dst.push_back({t, const_cast<u8 *>(v->data()),
+                     static_cast<CK_ULONG>(v->size())});
+  };
+  ensure_attr(pubTmpl, CKA_LABEL);
+  ensure_attr(pubTmpl, CKA_ID);
+  ensure_attr(pubTmpl, CKA_EC_PARAMS);
+  ensure_attr(privTmpl, CKA_LABEL);
+  ensure_attr(privTmpl, CKA_ID);
+  ensure_attr(privTmpl, CKA_MODULUS_BITS);
+
+  return p11_generate_and_store_keypair(
+      hSession, &mech, pubTmpl.data(),
+      static_cast<CK_ULONG>(pubTmpl.size()), privTmpl.data(),
+      static_cast<CK_ULONG>(privTmpl.size()), phPublicKey, phPrivateKey,
+      hOldPrivate);
 VHSM_C_CATCH
 }
 
