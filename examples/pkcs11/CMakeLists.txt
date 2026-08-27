@@ -4,12 +4,12 @@
 # Enable with: cmake -S . -B build -DVHSM_BUILD_EXAMPLES=ON
 
 set(_ex
-    01_init_and_login
-    02_generate_keys
-    03_sign_verify
-    04_encrypt_decrypt
-    05_digest_and_find
-    06_wrap_unwrap
+    ex01_init_and_login
+    ex02_generate_keys
+    ex03_sign_verify
+    ex04_encrypt_decrypt
+    ex05_digest_and_find
+    ex06_wrap_unwrap
 )
 
 foreach(name IN LISTS _ex)

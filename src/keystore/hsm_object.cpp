@@ -22,6 +22,18 @@ HsmObject::HsmObject(ObjectType type, bool sensitive, bool extractable,
 
 HsmObject::~HsmObject() noexcept { wipe(); }
 
+KeyState HsmObject::getKeyState() const noexcept {
+  const std::vector<u8> *v = findAttribute(CKA_VHSM_KEY_STATE);
+  if (!v || v->empty())
+    return KeyState::Active;
+  return static_cast<KeyState>((*v)[0]);
+}
+
+void HsmObject::setKeyState(KeyState state) noexcept {
+  const u8 b = static_cast<u8>(state);
+  setAttribute(CKA_VHSM_KEY_STATE, &b, 1);
+}
+
 // WHY copy constructor checks sensitive_ and throws: We want PKCS#11 compliance
 // (sensitive objects are non-copyable) but also want to catch bugs early.
 // Throwing in copy construction (rather than silently failing or using a

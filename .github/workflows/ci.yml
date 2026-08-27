@@ -22,6 +22,24 @@ jobs:
         run: ctest --test-dir build --output-on-failure -j4
 
 
+  asan:
+    runs-on: ubuntu-latest
+    # ASan + UBSan via the existing `asan` CMake preset. Catches memory
+    # errors, leaks, and undefined behavior that the plain build misses.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libssl-dev libcurl4-openssl-dev nlohmann-json3-dev libgtest-dev ninja-build
+      - name: Configure (ASan + UBSan)
+        run: cmake --preset asan -DVHSM_STORE_BACKEND=db -DVHSM_LEDGER=OFF -DVHSM_ADMIN_GRPC=OFF
+      - name: Build (ASan)
+        run: cmake --build build-asan -j4
+      - name: Test (ASan)
+        run: ctest --test-dir build-asan --output-on-failure -j4
+
+
   linux-ledger:
     runs-on: ubuntu-latest
     # Scaffolding for Fabric Deliver integration — requires Docker + fabric-samples.

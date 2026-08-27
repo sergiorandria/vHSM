@@ -5,6 +5,7 @@ add_executable(vhsm_core_test
     secure_buffer_test.cpp
     clock_test.cpp
     thread_pool_test.cpp
+    utils_test.cpp
 )
 
 target_include_directories(vhsm_core_test

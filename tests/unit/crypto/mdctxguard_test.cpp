@@ -1,4 +1,4 @@
-#include "../../../src/crypto/MdCtxGuard.h"
+#include "../../../src/crypto/md_ctx_guard.h"
 #include <gtest/gtest.h>
 
 #include <openssl/evp.h>

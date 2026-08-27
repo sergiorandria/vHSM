@@ -25,7 +25,9 @@ TEST(v_AttributeStore_M1, SetAndGetLabel) {
   rv = store.v_get_attribute(CKA_LABEL, value.data(), &len);
   EXPECT_EQ(rv, CKR_OK);
   EXPECT_EQ(len, (CK_ULONG)strlen(label));
-  EXPECT_STREQ((char *)value.data(), label);
+  EXPECT_EQ(std::string(reinterpret_cast<const char *>(value.data()),
+                        value.size()),
+            std::string(label));
 }
 
 TEST(v_AttributeStore_M1, SetAndGetValue) {

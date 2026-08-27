@@ -7,7 +7,7 @@
 
 #include <sqlite3.h>
 
-#include "StmtGuard.h"
+#include "stmt_guard.h"
 
 #include "db_result_set.h"
 #include "db_row.h"

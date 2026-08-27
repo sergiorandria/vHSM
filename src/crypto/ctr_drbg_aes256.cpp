@@ -1,6 +1,6 @@
 #include "ctr_drbg_aes256.h"
 #include "../core/error.h"
-#include "SecureRNG.h"
+#include "secure_rng.h"
 #include "vhsm/scrypto/rng.h"
 #include "vhsm/scrypto/mem.h"
 

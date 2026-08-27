@@ -19,6 +19,10 @@ build/
 build2/
 build3/
 build-asan/
+
+# Compiled object files (should live only in build dirs, never in source tree)
+*.o
+*.obj
 build-release/
 _build_corrupt/
 docker-compose.yml

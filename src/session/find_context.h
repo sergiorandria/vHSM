@@ -3,7 +3,7 @@
 
 #include "../domain/core/kernel_types.h"
 #include "../domain/pkcs11/pkcs11_types.h"
-#include "OpContext.h"
+#include "op_context.h"
 #include <memory>
 #include <vector>
 
