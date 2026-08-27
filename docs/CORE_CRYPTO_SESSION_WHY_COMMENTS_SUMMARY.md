@@ -92,7 +92,7 @@ The crypto module encapsulates all cryptographic operations and enforces vHSM's 
 
 **Design principle**: Fail-closed, policy-driven. No silent failures or bypasses possible.
 
-### 2.3 SecureRNG.h
+### 2.3 secure_rng.h
 **Purpose**: Thread-safe wrapper around CTR_DRBG_AES256.
 
 **Key WHY comments**:
@@ -199,7 +199,7 @@ The session module implements PKCS#11 session state machines and operation conte
 
 **Design principle**: Handle-based API prevents use-after-free. Facade + core layering.
 
-### 3.3 SignContext.h
+### 3.3 sign_context.h
 **Purpose**: Multi-part signing operation context (accumulate data, then sign).
 
 **Key WHY comments**:
@@ -215,7 +215,7 @@ The session module implements PKCS#11 session state machines and operation conte
 
 **Design principle**: Streaming operations without loading entire payload into memory at once.
 
-### 3.4 FindContext.h
+### 3.4 find_context.h
 **Purpose**: Iterator over object search results.
 
 **Key WHY comments**:
@@ -286,7 +286,7 @@ Core: SecureBuffer, error.h, types.h, hsm_clock.h
 
 5. **crypto/crypto_engine.h**: Understand fail-closed policy and mechanism fallback
 6. **crypto/ctx_guard.h**: Learn C++20 concepts for type-safe OpenSSL wrappers
-7. **crypto/SecureRNG.h**: See thread-safe wrapper pattern
+7. **crypto/secure_rng.h**: See thread-safe wrapper pattern
 8. **crypto/ctr_drbg_aes256.h**: Study NIST-compliant DRBG implementation
 
 ### Cryptographic Primitives
@@ -299,8 +299,8 @@ Core: SecureBuffer, error.h, types.h, hsm_clock.h
 
 12. **session/session_manager.h**: Understand handle-based session registry
 13. **session/session.h**: Study PKCS#11 session state machine
-14. **session/SignContext.h**: See operation context for streaming operations
-15. **session/FindContext.h**: Learn iterator pattern for search results
+14. **session/sign_context.h**: See operation context for streaming operations
+15. **session/find_context.h**: Learn iterator pattern for search results
 
 ---
 
@@ -348,7 +348,7 @@ Core: SecureBuffer, error.h, types.h, hsm_clock.h
 ### Crypto Module (7 files)
 - `src/crypto/ctx_guard.h` — RAII OpenSSL context cleanup
 - `src/crypto/crypto_engine.h` — Fail-closed policy orchestration
-- `src/crypto/SecureRNG.h` — Thread-safe RNG wrapper
+- `src/crypto/secure_rng.h` — Thread-safe RNG wrapper
 - `src/crypto/ctr_drbg_aes256.h` — NIST SP 800-90A DRBG
 - `src/crypto/aes_gcm.h` — Authenticated encryption
 - `src/crypto/rsa.h` — RSA utilities
@@ -357,8 +357,8 @@ Core: SecureBuffer, error.h, types.h, hsm_clock.h
 ### Session Module (4 files)
 - `src/session/session_manager.h` — Handle-based session registry
 - `src/session/session.h` — PKCS#11 session state machine
-- `src/session/SignContext.h` — Multi-part signing context
-- `src/session/FindContext.h` — Object search iterator
+- `src/session/sign_context.h` — Multi-part signing context
+- `src/session/find_context.h` — Object search iterator
 
 **Total WHY comments added**: ~350+ comments across ~4000+ lines of code
 

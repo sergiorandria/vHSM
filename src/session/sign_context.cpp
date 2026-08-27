@@ -1,4 +1,4 @@
-#include "SignContext.h"
+#include "sign_context.h"
 
 namespace vhsm::session {
 SignContext::SignContext(CK_MECHANISM_TYPE mech, CK_OBJECT_HANDLE key)

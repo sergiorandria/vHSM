@@ -3,7 +3,7 @@
 #include "pkcs11_internal.h"
 #include "pkcs11_types.h"
 
-#include "../crypto/SecureRNG.h"
+#include "../crypto/secure_rng.h"
 #include "../crypto/aes_gcm.h"
 #include "../crypto/ecc.h"
 #include "../crypto/rsa.h"
@@ -37,10 +37,10 @@
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
-#include "../crypto/MdCtxGuard.h"
-#include "../crypto/PkeyCtxGuard.h"
-#include "../crypto/CipherCtxGuard.h"
-#include "../crypto/EvpPkeyGuard.h"
+#include "../crypto/md_ctx_guard.h"
+#include "../crypto/pkey_ctx_guard.h"
+#include "../crypto/cipher_ctx_guard.h"
+#include "../crypto/evp_pkey_guard.h"
 #include <openssl/rsa.h>
 
 #include <algorithm>
