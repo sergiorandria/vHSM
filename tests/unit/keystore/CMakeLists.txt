@@ -9,6 +9,7 @@ add_executable(vhsm_keystore_test
     object_store_test.cpp
     key_fingerprint_test.cpp
     token_core_test.cpp
+    key_rotation_test.cpp
 )
 
 # Include the project root so tests can include headers as <keystore/...>
@@ -21,6 +22,22 @@ target_link_libraries(vhsm_keystore_test
 )
 
 add_test(NAME vhsm_keystore_test COMMAND vhsm_keystore_test)
+
+# Slot/Token/SlotManager unit tests (covers vhsm_keystore + vhsm_session).
+add_executable(vhsm_slot_token_test
+    slot_token_slot_manager.cpp
+)
+
+target_include_directories(vhsm_slot_token_test PRIVATE ${PROJECT_SOURCE_DIR})
+
+target_link_libraries(vhsm_slot_token_test
+    PRIVATE
+    vhsm_keystore
+    vhsm_session
+    GTest::gtest_main
+)
+
+add_test(NAME vhsm_slot_token_test COMMAND vhsm_slot_token_test)
 
 # Placeholder - add test files as they are created
 

@@ -585,7 +585,7 @@ void dispatch(
 
 ### Crypto Module (Previous Session)
 5. `src/crypto/ctx_guard.h` ✓
-6. `src/crypto/SecureRNG.h` ✓
+6. `src/crypto/secure_rng.h` ✓
 7. `src/crypto/crypto_engine.h` ✓
 8. `src/crypto/aes_gcm.h` ✓
 9. `src/crypto/ctr_drbg_aes256.h` ✓
@@ -595,8 +595,8 @@ void dispatch(
 ### Session Module (Previous Session)
 12. `src/session/session.h` ✓
 13. `src/session/session_manager.h` ✓
-14. `src/session/SignContext.h` ✓
-15. `src/session/FindContext.h` ✓
+14. `src/session/sign_context.h` ✓
+15. `src/session/find_context.h` ✓
 
 ### Notification Module (This Session)
 16. `src/notification/notification_event.h` ✓

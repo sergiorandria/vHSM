@@ -7,7 +7,7 @@
 
 #include "../../../src/core/error.h"
 #include "../../../src/core/types.h"
-#include "../../../src/session/SignContext.h"
+#include "../../../src/session/sign_context.h"
 
 using namespace vhsm::session;
 

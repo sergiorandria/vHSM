@@ -2,7 +2,7 @@
 #include "pkcs11_internal.h"
 #include "pkcs11_types.h"
 
-#include "../crypto/SecureRNG.h"
+#include "../crypto/secure_rng.h"
 
 extern "C" {
 namespace vhsm::pkcs11 {

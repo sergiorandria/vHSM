@@ -6,7 +6,7 @@
 #include <string>
 
 #include "../core/error.h"
-#include "StmtGuard.h"
+#include "stmt_guard.h"
 #include "sqlite_helpers.h"
 
 namespace vhsm::signature_store {

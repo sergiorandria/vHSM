@@ -3,7 +3,7 @@
 #include <gtest/gtest.h>
 #include <thread>
 
-#include "../../../src/crypto/SecureRNG.h"
+#include "../../../src/crypto/secure_rng.h"
 
 // Test Fixture for organizing vHSM RNG tests
 class SecureRNGTest : public ::testing::Test {
@@ -19,7 +19,7 @@ protected:
 
 // 1. Test: Verifies successful initialization and non-zero execution
 TEST_F(SecureRNGTest, InitializationAndBasicGeneration) {
-  vHSM::SecureRNG rng;
+  vhsm::crypto::SecureRNG rng;
   uint8_t buffer[32] = {0};
 
   // Populate buffer
@@ -39,7 +39,7 @@ TEST_F(SecureRNGTest, InitializationAndBasicGeneration) {
 // 2. Test: Verifies that consecutive generations produce completely unique
 // arrays
 TEST_F(SecureRNGTest, UniquenessOfConsecutiveOutputs) {
-  vHSM::SecureRNG rng;
+  vhsm::crypto::SecureRNG rng;
   uint8_t run_a[16] = {0};
   uint8_t run_b[16] = {0};
 
@@ -61,7 +61,7 @@ TEST_F(SecureRNGTest, UniquenessOfConsecutiveOutputs) {
 
 // 3. Test: Verifies that the public API safely handles boundary constraints
 TEST_F(SecureRNGTest, RobustnessToNullOrZeroInputs) {
-  vHSM::SecureRNG rng;
+  vhsm::crypto::SecureRNG rng;
   uint8_t *null_ptr = nullptr;
 
   // These calls should return instantly without throwing or causing a
@@ -72,7 +72,7 @@ TEST_F(SecureRNGTest, RobustnessToNullOrZeroInputs) {
 
 // 4. Test: Concurrency Stress-testing multiple vCPU loops simultaneously
 TEST_F(SecureRNGTest, MultithreadedThreadSafety) {
-  vHSM::SecureRNG rng;
+  vhsm::crypto::SecureRNG rng;
   const int num_threads = 8;
   const int requests_per_thread = 500;
 
@@ -111,7 +111,7 @@ TEST_F(SecureRNGTest, MultithreadedThreadSafety) {
 
 // 5. Test: Administrative explicit state rotation execution path
 TEST_F(SecureRNGTest, ForceReseedExecutionPath) {
-  vHSM::SecureRNG rng;
+  vhsm::crypto::SecureRNG rng;
   EXPECT_NO_THROW(rng.force_reseed());
 
   uint8_t post_reseed_buffer[16];

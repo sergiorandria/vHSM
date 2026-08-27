@@ -2,7 +2,7 @@
 // Verifies iteration, reset, overflow handling and empty-list behavior.
 
 #include "../../../src/core/error.h"
-#include "../../../src/session/FindContext.h"
+#include "../../../src/session/find_context.h"
 #include <gtest/gtest.h>
 
 using namespace vhsm::session;

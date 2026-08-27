@@ -54,8 +54,11 @@ CK_RV AdminLoginCore::admin_login(CK_USER_TYPE userType, const std::string &pin,
     event.hsm_instance = vhsm::core::hsm_instance_id();
 
     bus_->publish(event);
-    audit_log_->append("ADMIN_LOGIN-" + std::to_string(created_at),
-                       "ADMIN_LOGIN");
+    if (auto st = audit_log_->append("ADMIN_LOGIN-" + std::to_string(created_at),
+                                     "ADMIN_LOGIN");
+        !st) {
+        // Audit append failed; the login still completes.
+    }
   }
 
   return CKR_OK;

@@ -19,6 +19,10 @@ build/
 build2/
 build3/
 build-asan/
+
+# Compiled object files (should live only in build dirs, never in source tree)
+*.o
+*.obj
 build-release/
 _build_corrupt/
 docker-compose.yml
@@ -45,8 +49,7 @@ rest_api/.env.example
 !rest_api/.env.example
 network/fabric_configuration/peer-data 
 network/fabric_configuration/crypto-config 
-network/fabric_configuration/chaincode
-network/chaincode/signature_ledger/chaincode-signature-ledger
+network/fabric_configuration/template_chaincode/chaincode
 
 
 # User-specific files (MonoDevelop/Xamarin Studio)
@@ -409,3 +412,5 @@ network/fabric_configuration/fabric-network/fabric-ca/
 network/fabric_configuration/fabric-network/organizations/
 build-bench/
 build-tsan/
+build-ledger/
+network/fabric_configuration/signature_ledger/signature_ledger

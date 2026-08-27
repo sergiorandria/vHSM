@@ -8,6 +8,7 @@ target_sources(vhsm_keystore
     internal/token_core.cpp
     key_wrap.cpp
     key_fingerprint.cpp
+    key_rotation.cpp
     token.cpp 
     slot.cpp
 )

@@ -4,6 +4,7 @@
 #include "../core/secure_buffer.h"
 #include "../domain/core/kernel_types.h"
 #include "../domain/pkcs11/pkcs11_types.h"
+#include "key_state.h"
 
 #include <cstdint>
 #include <memory>
@@ -74,6 +75,14 @@ public:
   bool isExtractable() const noexcept;
   bool isToken() const noexcept;
   bool isPrivate() const noexcept;
+
+  // WHY a lifecycle state on the base object: PLANv5 §3.2/§6 require key
+  // lifecycle states (active/rotating/revoked). The state is persisted as the
+  // vendor attribute CKA_VHSM_KEY_STATE (see key_state.h), so it travels with
+  // the object through serialization. Objects without the attribute default to
+  // Active, keeping the existing "everything is usable" behaviour.
+  KeyState getKeyState() const noexcept;
+  void setKeyState(KeyState state) noexcept;
 
   // WHY generic attribute storage on the object itself (not external store):
   // PKCS#11 applications set arbitrary CKA_* attributes at runtime (labels,

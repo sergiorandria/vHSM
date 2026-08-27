@@ -25,8 +25,8 @@ target_include_directories(vhsm_pkcs11
 
 target_compile_options(vhsm_pkcs11 PRIVATE -fPIC -Wno-deprecated-declarations)
 
-target_link_libraries(vhsm_pkcs11
-    PUBLIC
+# Link deps shared by both the OBJECT lib and the loadable .so module.
+set(_vhsm_pkcs11_libs
     vhsm_core
     vhsm_log
     vhsm_crypto
@@ -37,6 +37,11 @@ target_link_libraries(vhsm_pkcs11
     vhsm_notification
     vhsm_threadpool
     vhsm_crypto_provider
+)
+
+target_link_libraries(vhsm_pkcs11
+    PUBLIC
+    ${_vhsm_pkcs11_libs}
 )
 if(VHSM_LEDGER)
     target_link_libraries(vhsm_pkcs11 PUBLIC vhsm_ledger)
@@ -51,16 +56,7 @@ set_target_properties(vhsm_pkcs11_mod PROPERTIES
 target_compile_options(vhsm_pkcs11_mod PRIVATE -fPIC -Wno-deprecated-declarations)
 target_link_libraries(vhsm_pkcs11_mod
     PUBLIC
-    vhsm_core
-    vhsm_log
-    vhsm_crypto
-    vhsm_keystore
-    vhsm_persistence
-    vhsm_session
-    vhsm_signature_store
-    vhsm_notification
-    vhsm_threadpool
-    vhsm_crypto_provider
+    ${_vhsm_pkcs11_libs}
 )
 if(VHSM_LEDGER)
     target_link_libraries(vhsm_pkcs11_mod PUBLIC vhsm_ledger)

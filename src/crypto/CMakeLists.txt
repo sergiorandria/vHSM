@@ -11,7 +11,7 @@ target_sources(vhsm_crypto
     crypto_engine.cpp
     aes_gcm.cpp
     ctr_drbg_aes256.cpp
-    SecureRNG.cpp
+    secure_rng.cpp
     aes_ecb.cpp
 )
 
@@ -25,15 +25,3 @@ target_link_libraries(vhsm_crypto
 if(WIN32)
     target_link_libraries(vhsm_crypto PRIVATE bcrypt)
 endif()
-
-# ─── Experimental: Gentry-style FHE on ideal lattices (TOY PARAMETERS) ────
-# NOT secure — for research/demos only. Never link into production targets.
-add_library(vhsm_crypto_fhe_experimental STATIC
-    gentry_ideal_lattice.cpp
-    gentry_polynomial.cpp
-)
-target_include_directories(vhsm_crypto_fhe_experimental
-    PUBLIC ${PROJECT_SOURCE_DIR}/src
-)
-target_compile_definitions(vhsm_crypto_fhe_experimental
-    PUBLIC VHSM_FHE_EXPERIMENTAL_TOY_NOT_SECURE)

@@ -3,7 +3,7 @@
 #include "pkcs11_types.h"
 
 #include "../crypto/ecc.h"
-#include "../crypto/EvpPkeyGuard.h"
+#include "../crypto/evp_pkey_guard.h"
 #include "../keystore/key_wrap.h"
 #include "../notification/notification_event.h"
 
@@ -133,6 +133,14 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
   if (!wkey || !tkey)
     return CKR_KEY_HANDLE_INVALID;
 
+  // Lifecycle: a revoked wrapping key may not be used for any crypto op
+  // (plan §3.2 / §6).
+  {
+    CK_RV wst = p11_key_state_error(wkey->getKeyState(), /*forSigning=*/false);
+    if (wst != CKR_OK)
+      return wst;
+  }
+
   // PKCS#11: non-extractable keys may not be wrapped.
   if (!tkey->isExtractable())
     return CKR_KEY_UNEXTRACTABLE;
@@ -227,6 +235,13 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
   auto ukey = p11_get_object(hSession, hUnwrappingKey);
   if (!ukey)
     return CKR_UNWRAPPING_KEY_HANDLE_INVALID;
+
+  // Lifecycle: a revoked unwrapping key may not be used for any crypto op.
+  {
+    CK_RV ust = p11_key_state_error(ukey->getKeyState(), /*forSigning=*/false);
+    if (ust != CKR_OK)
+      return ust;
+  }
 
   std::vector<u8> raw;
   CK_RV rv = CKR_OK;
