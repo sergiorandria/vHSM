@@ -3,6 +3,7 @@
 #include "../core/error.h"
 #include "../core/utils.h"
 #include "../ledger/ledger_entry.h"
+#include "row_integrity.h"
 
 #include <vector>
 
@@ -92,8 +93,74 @@ bool SignatureRepository::update_ledger_fields(
   params.push_back(signature_id);
   try {
     i64 n = conn_.exec(sql, params);
-    return n > 0;
+    if (n == 0)
+      return false;
   } catch (const DbError &e) {
+    return false;
+  }
+  // The ledger fields (tx_id/block/status) just changed, so the row-integrity
+  // HMAC computed at insert is now stale. Recompute it over the current 18
+  // columns so tamper-evidence stays valid after the update. Fail-soft: if the
+  // HMAC key is unavailable we leave the old value rather than crash the caller.
+  recompute_integrity_hmac(signature_id);
+  return true;
+}
+
+bool SignatureRepository::recompute_integrity_hmac(
+    const std::string &signature_id) {
+  const std::string sql = R"SQL(
+      SELECT id, created_at, slot_id, token_label, key_id, key_fingerprint,
+             mechanism, payload_digest, signature_b64, session_handle,
+             user_label, app_context,
+             ledger_tx_id, ledger_block_num, ledger_tx_time, ledger_tx_proof,
+             ledger_tx_set_b64, ledger_status
+      FROM signature_records WHERE id = ?;
+    )SQL";
+  try {
+    auto rs = conn_.query(sql, {signature_id});
+    if (rs.rows_.empty())
+      return false;
+    const DbRow &row = rs.rows_[0];
+    std::vector<std::optional<std::string>> cols;
+    cols.reserve(18);
+    for (size_t i = 0; i < row.column_count(); ++i) {
+      auto opt = row.get_string(i);
+      cols.push_back(opt ? *opt : std::optional<std::string>{});
+    }
+    RowIntegrity ri(conn_, token_);
+    std::string hmac = ri.compute_hmac(cols);
+    conn_.exec("UPDATE signature_records SET integrity_hmac=? WHERE id=?",
+               {hmac, signature_id});
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
+bool SignatureRepository::verify_integrity(const std::string &signature_id) const {
+  const std::string sql = R"SQL(
+      SELECT id, created_at, slot_id, token_label, key_id, key_fingerprint,
+             mechanism, payload_digest, signature_b64, session_handle,
+             user_label, app_context,
+             ledger_tx_id, ledger_block_num, ledger_tx_time, ledger_tx_proof,
+             ledger_tx_set_b64, ledger_status, integrity_hmac
+      FROM signature_records WHERE id = ?;
+    )SQL";
+  try {
+    auto rs = conn_.query(sql, {signature_id});
+    if (rs.rows_.empty())
+      return false;
+    const DbRow &row = rs.rows_[0];
+    std::vector<std::optional<std::string>> cols;
+    cols.reserve(18);
+    for (size_t i = 0; i < 18; ++i) {
+      auto opt = row.get_string(i);
+      cols.push_back(opt ? *opt : std::optional<std::string>{});
+    }
+    auto stored = row.get_string(18);
+    RowIntegrity ri(conn_, token_);
+    return ri.verify_hmac(cols, stored);
+  } catch (...) {
     return false;
   }
 }
