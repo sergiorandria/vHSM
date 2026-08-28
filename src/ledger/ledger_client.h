@@ -80,7 +80,40 @@ public:
    */
   virtual std::optional<LedgerEntry> get_record(const std::string &record_id);
 
-protected:
+  // Result of a ledger-side policy/attestation verification.
+  struct PolicyVerification {
+    bool ok = false;
+    std::string reason;
+  };
+
+  /**
+   * Ask the ledger's PolicyContract whether `actor` may sign key `key_id` with
+   * `mechanism` at `now_ms`, taking the on-chain attestation registry and the
+   * published policy into account. This is the authoritative quorum check used
+   * by the sign path when attestations are required. Returns {ok=false} on any
+   * ledger error so callers fail closed.
+   */
+  virtual PolicyVerification verify_policy(const std::string &key_id,
+                                           const std::string &actor,
+                                           const std::string &mechanism,
+                                           int64_t now_ms);
+
+  /**
+   * Anchor the current audit hash-chain tail on the ledger via the
+   * RecordAuditTail transaction. Used to make the tamper-evident audit log
+   * externally verifiable (a truncated/forged local audit file is detectable
+   * because its tail no longer matches the anchored value). Returns false on
+   * any ledger error so callers can log but never block the audit path.
+   */
+  virtual bool publish_audit_tail(const std::string &tail_hash, int64_t seq,
+                                 const std::string &timestamp);
+
+  // Returns the most recently anchored audit tail hash from the ledger, or
+  // nullopt if none has been anchored yet. Used by the integrity verifier to
+  // confirm the local audit file's tail matches the external anchor.
+  virtual std::optional<std::string> get_latest_audit_tail_hash();
+
+ protected:
   // Allows test doubles to construct a LedgerClient without gRPC material.
   LedgerClient() = default;
 

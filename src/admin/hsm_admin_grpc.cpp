@@ -18,6 +18,8 @@
 #include "../keystore/token.h"
 #include "../ledger/ledger_client.h"
 #include "../ledger/ledger_worker.h"
+#include "../audit/audit_log.h"
+#include "../metrics/metrics.h"
 #include "../signature_store/db_connection.h"
 #include "../signature_store/ledger_retry_queue.h"
 #include "../signature_store/notification_repository.h"
@@ -63,15 +65,16 @@ int64_t to_int64(const std::optional<std::string> &v, int64_t fallback = 0) {
   }
 }
 
-// Row layout matches SignatureRepository::get_by_id() (18 columns):
+// Row layout matches SignatureRepository::get_by_id() (21 columns):
 // 0: id | 1: created_at | 2: slot_id | 3: token_label | 4: key_id
 // 5: key_fingerprint | 6: mechanism | 7: payload_digest | 8: signature_b64
 // 9: session_handle | 10: user_label | 11: app_context
 // 12: ledger_tx_id | 13: ledger_block_num | 14: ledger_tx_time
 // 15: ledger_tx_proof | 16: ledger_tx_set_b64 | 17: ledger_status
+// 18: pqc_algo | 19: signature_pqc_b64 | 20: key_fingerprint_pqc
 bool fill_signature_detail(const std::vector<std::optional<std::string>> &row,
                            SignatureDetail *detail) {
-  if (row.size() < 18 || detail == nullptr) {
+  if (row.size() < 21 || detail == nullptr) {
     return false;
   }
   auto str = [&row](std::size_t i) { return row[i].value_or(""); };
@@ -91,6 +94,9 @@ bool fill_signature_detail(const std::vector<std::optional<std::string>> &row,
   detail->set_ledger_block_num(to_int64(row[13]));
   detail->set_ledger_tx_time(str(14));
   detail->set_ledger_status(str(17));
+  detail->set_pqc_algo(str(18));
+  detail->set_signature_pqc_b64(str(19));
+  detail->set_key_fingerprint_pqc(str(20));
   return true;
 }
 
@@ -583,6 +589,95 @@ HsmAdminServiceImpl::QueryNotificationLog(::grpc::ServerContext * /*ctx*/,
     out->set_attempt_count(static_cast<uint32_t>(e.attempt_count));
     out->set_error_detail(e.error_detail);
   }
+  return ::grpc::Status::OK;
+}
+
+::grpc::Status HsmAdminServiceImpl::Metrics(::grpc::ServerContext * /*ctx*/,
+                                            const Empty * /*request*/,
+                                            MetricsResponse *response) {
+  if (!response) {
+    return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
+                          "invalid request");
+  }
+  response->set_prometheus_text(vhsm::metrics::Metrics::instance().prometheus());
+  return ::grpc::Status::OK;
+}
+
+::grpc::Status
+HsmAdminServiceImpl::VerifyIntegrity(::grpc::ServerContext * /*ctx*/,
+                                    const Empty * /*request*/,
+                                    IntegrityReport *response) {
+  if (!response) {
+    return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
+                          "invalid request");
+  }
+  response->set_ok(true);
+
+  // 1) Local audit hash-chain integrity.
+  if (auto *hca = dynamic_cast<vhsm::audit::HashChainedAuditLog *>(audit_log_)) {
+    if (auto bad = hca->verify_chain()) {
+      response->set_audit_chain_ok(false);
+      response->set_audit_chain_error("first bad record at line " +
+                                      std::to_string(*bad));
+      response->set_ok(false);
+    } else {
+      response->set_audit_chain_ok(true);
+    }
+    if (ledger_client_) {
+      if (auto anchored = ledger_client_->get_latest_audit_tail_hash()) {
+        response->set_audit_tail_anchored(*anchored);
+      }
+    }
+  } else {
+    // No hash-chained audit sink (e.g. pre-init stub): nothing to verify.
+    response->set_audit_chain_ok(true);
+  }
+
+  // 2) Per-row integrity HMAC + ledger cross-check for COMMITTED records.
+  if (!db_ || !token_) {
+    return ::grpc::Status(::grpc::StatusCode::FAILED_PRECONDITION,
+                          "signature store not configured");
+  }
+  vhsm::signature_store::db::SignatureRepository repo(*db_, *token_);
+  const auto ids = repo.get_all_ids();
+  response->set_records_checked(static_cast<int64_t>(ids.size()));
+
+  for (const auto &id : ids) {
+    if (repo.verify_integrity(id)) {
+      response->set_rows_integrity_ok(response->rows_integrity_ok() + 1);
+    } else {
+      response->set_rows_integrity_failed(response->rows_integrity_failed() + 1);
+      response->add_integrity_failures(id);
+      response->set_ok(false);
+    }
+
+    auto row = repo.get_by_id(id);
+    if (!row || row->size() < 18) {
+      continue;
+    }
+    const std::string status = (*row)[17].value_or("");
+    if (status != "COMMITTED") {
+      continue;
+    }
+    response->set_committed_checked(response->committed_checked() + 1);
+    const std::string local_tx = (*row)[12].value_or("");
+    if (!ledger_client_) {
+      // No ledger configured: cannot cross-check, but not a verification failure.
+      continue;
+    }
+    auto ledger = ledger_client_->get_record(id);
+    if (ledger && ledger->tx_id == local_tx) {
+      response->set_ledger_cross_ok(response->ledger_cross_ok() + 1);
+    } else {
+      response->set_ledger_cross_failed(response->ledger_cross_failed() + 1);
+      const std::string detail =
+          id + ": local tx=" + local_tx +
+          (ledger ? (" ledger tx=" + ledger->tx_id) : " (ledger missing)");
+      response->add_ledger_mismatches(detail);
+      response->set_ok(false);
+    }
+  }
+
   return ::grpc::Status::OK;
 }
 

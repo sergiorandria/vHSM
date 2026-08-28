@@ -89,10 +89,21 @@ public:
                                   SubscriberResponse *response) override;
 
   ::grpc::Status QueryNotificationLog(::grpc::ServerContext *ctx,
-                                      const NotificationLogQuery *request,
-                                      NotificationLogList *response) override;
+                                       const NotificationLogQuery *request,
+                                       NotificationLogList *response) override;
 
-private:
+  // Runtime metrics in Prometheus exposition format (no auth required — the
+  // endpoint only returns counters/gauges; restrict exposure via network ACLs).
+  ::grpc::Status Metrics(::grpc::ServerContext *ctx, const Empty *request,
+                        MetricsResponse *response) override;
+
+  // Full integrity verification pass — re-walks the row-integrity HMAC chain,
+  // verifies the audit hash-chain, and cross-checks COMMITTED rows against the
+  // ledger (F3).
+  ::grpc::Status VerifyIntegrity(::grpc::ServerContext *ctx, const Empty *request,
+                                IntegrityReport *response) override;
+
+ private:
   vhsm::signature_store::db::IDbConnection *const db_;
   vhsm::keystore::Token *const token_;
   vhsm::ledger::LedgerClient *const ledger_client_;

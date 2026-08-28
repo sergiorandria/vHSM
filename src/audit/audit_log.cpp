@@ -9,6 +9,7 @@
 
 #include <vhsm/scrypto/hmac.h>
 #include <vhsm/scrypto/mem.h>
+#include "../metrics/metrics.h"
 
 namespace vhsm::audit {
 
@@ -107,7 +108,22 @@ CkStatus HashChainedAuditLog::append(const std::string &event_id,
     return err_ck(CKR_FUNCTION_FAILED);
 
   tail_hex_.assign(hex, kHexDigestLen);
+  vhsm::metrics::Metrics::instance().set(
+      vhsm::metrics::names::audit_chain_length, static_cast<int64_t>(seq_));
+
+  if (tail_publisher_) {
+    try {
+      tail_publisher_(tail_hex_, seq_);
+    } catch (...) {
+      // Best-effort: a ledger publish failure must not fail the audit append.
+    }
+  }
   return ok_ck();
+}
+
+void HashChainedAuditLog::set_tail_publisher(
+    std::function<void(const std::string &, uint64_t)> cb) {
+  tail_publisher_ = std::move(cb);
 }
 
 std::optional<std::size_t> HashChainedAuditLog::verify_chain() const {

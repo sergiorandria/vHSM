@@ -115,6 +115,9 @@ LedgerClient::submit_record(const SignatureRecord &record) {
       record.payload_digest,
       record.signature_b64,
       std::to_string(record.created_at),
+      record.pqc_algo,
+      record.signature_pqc_b64.value_or(""),
+      record.key_fingerprint_pqc.value_or(""),
   };
 
   fabric::gateway::TransactionResult result;
@@ -186,6 +189,83 @@ LedgerClient::get_record(const std::string &record_id) {
   entry.tx_id = json_result["tx_id"].get<std::string>();
   entry.block_number = json_result["block_number"].get<int64_t>();
   return entry;
+}
+
+LedgerClient::PolicyVerification LedgerClient::verify_policy(
+    const std::string &key_id, const std::string &actor,
+    const std::string &mechanism, int64_t now_ms) {
+  PolicyVerification result;
+  result.ok = false;
+  result.reason = "ledger policy check unavailable";
+
+  if (!contract_) {
+    return result;
+  }
+
+  std::vector<std::string> args = {key_id, actor, mechanism,
+                                   std::to_string(now_ms)};
+  fabric::gateway::TransactionResult tx;
+  try {
+    tx = contract_->evaluateTransaction("VerifyPolicy", args);
+  } catch (const std::exception &e) {
+    result.reason = std::string("ledger policy evaluation failed: ") + e.what();
+    return result;
+  }
+  if (tx.responseStatus != 200) {
+    result.reason = "ledger returned status " + std::to_string(tx.responseStatus);
+    return result;
+  }
+  try {
+    auto j = json::parse(tx.payload);
+    result.ok = j.value("ok", false);
+    result.reason = j.value("reason", result.ok ? "ok" : "denied");
+  } catch (const std::exception &e) {
+    result.reason = std::string("failed to parse VerifyPolicy response: ") + e.what();
+  }
+  return result;
+}
+
+bool LedgerClient::publish_audit_tail(const std::string &tail_hash, int64_t seq,
+                                     const std::string &timestamp) {
+  if (!contract_) {
+    return false;
+  }
+  std::vector<std::string> args = {tail_hash, std::to_string(seq), timestamp};
+  fabric::gateway::TransactionResult tx;
+  try {
+    tx = contract_->submitTransaction("RecordAuditTail", args);
+  } catch (const std::exception &e) {
+    std::cerr << "publish_audit_tail failed: " << e.what() << std::endl;
+    return false;
+  }
+  return tx.committed && tx.responseStatus == 200;
+}
+
+std::optional<std::string> LedgerClient::get_latest_audit_tail_hash() {
+  if (!contract_) {
+    return std::nullopt;
+  }
+  fabric::gateway::TransactionResult tx;
+  try {
+    tx = contract_->evaluateTransaction("GetLatestAuditTail", {});
+  } catch (const std::exception &e) {
+    std::cerr << "get_latest_audit_tail_hash failed: " << e.what() << std::endl;
+    return std::nullopt;
+  }
+  if (tx.responseStatus != 200 || tx.payload.empty()) {
+    return std::nullopt;
+  }
+  try {
+    auto j = json::parse(tx.payload);
+    std::string h = j.value("tail_hash", "");
+    if (h.empty())
+      return std::nullopt;
+    return h;
+  } catch (const std::exception &e) {
+    std::cerr << "failed to parse GetLatestAuditTail response: " << e.what()
+              << std::endl;
+    return std::nullopt;
+  }
 }
 
 } // namespace vhsm::ledger
