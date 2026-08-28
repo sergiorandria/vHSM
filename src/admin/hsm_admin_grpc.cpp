@@ -2,13 +2,19 @@
 
 #include <cctype>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include <grpc/grpc.h>
+#include <grpcpp/security/auth_context.h>
+
 #include "../keystore/slot.h"
+#include "../log/logger.h"
 #include "../keystore/token.h"
 #include "../ledger/ledger_client.h"
 #include "../ledger/ledger_worker.h"
@@ -109,6 +115,76 @@ bool fill_subscriber(const std::vector<std::optional<std::string>> &row,
 
 } // namespace
 
+namespace {
+
+// Reads an environment variable, returning def when unset or empty.
+std::string env_val(const char *name, const std::string &def = "") {
+  const char *v = std::getenv(name);
+  if (!v || *v == '\0')
+    return def;
+  return v;
+}
+
+bool cn_in_list(const std::string &cn, const std::string &csv) {
+  size_t start = 0;
+  while (start < csv.size()) {
+    size_t comma = csv.find(',', start);
+    size_t end = (comma == std::string::npos) ? csv.size() : comma;
+    std::string item = csv.substr(start, end - start);
+    size_t b = item.find_first_not_of(" \t");
+    size_t e = item.find_last_not_of(" \t");
+    if (b != std::string::npos)
+      item = item.substr(b, e - b + 1);
+    if (item == cn)
+      return true;
+    start = (comma == std::string::npos) ? csv.size() : comma + 1;
+  }
+  return false;
+}
+
+// Authorization gate for sensitive admin RPCs. Two mutually-exclusive,
+// deployment-configured mechanisms:
+//   1. mTLS: if VHSM_ADMIN_ALLOWED_CNS is set, the peer certificate CN must be
+//      in the comma-separated allow-list.
+//   2. Shared token: if VHSM_ADMIN_TOKEN is set, the gRPC metadata key
+//      "vhsm-admin-token" must equal it.
+// If neither is configured the server runs in an explicit dev/permissive mode
+// and logs a one-time warning — there is NO silent default-allow in production
+// once either env var is set (fail-closed).
+bool require_admin(::grpc::ServerContext *ctx) {
+  std::string allowed_cns = env_val("VHSM_ADMIN_ALLOWED_CNS");
+  if (!allowed_cns.empty()) {
+    auto auth = ctx->auth_context();
+    if (auth && auth->IsPeerAuthenticated()) {
+      auto prop = auth->GetPeerIdentityPropertyName();
+      for (const auto &v : auth->FindPropertyValues(prop)) {
+        if (cn_in_list(std::string(v.begin(), v.end()), allowed_cns))
+          return true;
+      }
+    }
+    return false;
+  }
+  std::string token = env_val("VHSM_ADMIN_TOKEN");
+  if (!token.empty()) {
+    const auto &md = ctx->client_metadata();
+    auto it = md.find("vhsm-admin-token");
+    if (it != md.end() &&
+        std::string(it->second.begin(), it->second.end()) == token)
+      return true;
+    return false;
+  }
+  static std::once_flag warned;
+  std::call_once(warned, [] {
+    vhsm::log::global_logger().warning(
+        "admin",
+        "gRPC admin authorization is DISABLED (set VHSM_ADMIN_TOKEN or "
+        "VHSM_ADMIN_ALLOWED_CNS to require authentication/authorization)");
+  });
+  return true;
+}
+
+} // namespace
+
 ::grpc::Status HsmAdminServiceImpl::AdminLogin(::grpc::ServerContext * /*ctx*/,
                                                const AdminLoginRequest *request,
                                                AdminLoginResponse *response) {
@@ -161,9 +237,12 @@ bool fill_subscriber(const std::vector<std::optional<std::string>> &row,
 }
 
 ::grpc::Status
-HsmAdminServiceImpl::BackupToken(::grpc::ServerContext * /*ctx*/,
-                                 const BackupTokenRequest *request,
-                                 BackupTokenResponse *response) {
+HsmAdminServiceImpl::BackupToken(::grpc::ServerContext *ctx,
+                                const BackupTokenRequest *request,
+                                BackupTokenResponse *response) {
+  if (!require_admin(ctx))
+    return ::grpc::Status(::grpc::StatusCode::UNAUTHENTICATED,
+                          "admin authorization required");
   if (!request || !response || request->vault_path().empty() ||
       request->vault_password().empty()) {
     return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
@@ -186,9 +265,12 @@ HsmAdminServiceImpl::BackupToken(::grpc::ServerContext * /*ctx*/,
 }
 
 ::grpc::Status
-HsmAdminServiceImpl::RestoreToken(::grpc::ServerContext * /*ctx*/,
-                                  const RestoreTokenRequest *request,
-                                  RestoreTokenResponse *response) {
+HsmAdminServiceImpl::RestoreToken(::grpc::ServerContext *ctx,
+                                 const RestoreTokenRequest *request,
+                                 RestoreTokenResponse *response) {
+  if (!require_admin(ctx))
+    return ::grpc::Status(::grpc::StatusCode::UNAUTHENTICATED,
+                          "admin authorization required");
   if (!request || !response || request->vault_path().empty() ||
       request->vault_password().empty()) {
     return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
@@ -350,9 +432,12 @@ HsmAdminServiceImpl::ListPendingLedgerCommits(::grpc::ServerContext * /*ctx*/,
 }
 
 ::grpc::Status
-HsmAdminServiceImpl::RetryLedgerCommits(::grpc::ServerContext * /*ctx*/,
-                                        const Empty * /*request*/,
-                                        RetryLedgerResponse *response) {
+HsmAdminServiceImpl::RetryLedgerCommits(::grpc::ServerContext *ctx,
+                                       const Empty * /*request*/,
+                                       RetryLedgerResponse *response) {
+  if (!require_admin(ctx))
+    return ::grpc::Status(::grpc::StatusCode::UNAUTHENTICATED,
+                          "admin authorization required");
   if (!response) {
     return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
                           "invalid request");
@@ -385,9 +470,12 @@ HsmAdminServiceImpl::RetryLedgerCommits(::grpc::ServerContext * /*ctx*/,
 }
 
 ::grpc::Status
-HsmAdminServiceImpl::AddSubscriber(::grpc::ServerContext * /*ctx*/,
-                                   const Subscriber *request,
-                                   SubscriberResponse *response) {
+HsmAdminServiceImpl::AddSubscriber(::grpc::ServerContext *ctx,
+                                  const Subscriber *request,
+                                  SubscriberResponse *response) {
+  if (!require_admin(ctx))
+    return ::grpc::Status(::grpc::StatusCode::UNAUTHENTICATED,
+                          "admin authorization required");
   if (!request || !response) {
     return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
                           "invalid request");
