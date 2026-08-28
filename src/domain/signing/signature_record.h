@@ -31,6 +31,15 @@ struct SignatureRecord {
   std::optional<int64_t> ledger_block_num;
   std::string ledger_status; // PENDING|COMMITTED|FAILED|DISABLED
 
+  // Post-quantum / hybrid companion signature. When a PQC key is paired with
+  // the classical signing key, every sign also produces a Dilithium/SPHINCS+
+  // signature over the same digest; both are anchored to the ledger so the
+  // record remains verifiable against a quantum adversary. Empty when PQC is
+  // unavailable or no PQC key is paired.
+  std::string pqc_algo;                              // e.g. "DILITHIUM3"
+  std::optional<std::string> signature_pqc_b64;      // base64url PQC signature
+  std::optional<std::string> key_fingerprint_pqc;    // PQC public key (base64)
+
   // Domain invariants helpers (lightweight, no DB).
   bool is_pending() const noexcept { return ledger_status == "PENDING"; }
   void mark_committed(const std::string &tx_id, int64_t block_num) {

@@ -13,6 +13,8 @@ target_sources(vhsm_crypto
     ctr_drbg_aes256.cpp
     secure_rng.cpp
     aes_ecb.cpp
+    fips.cpp
+    pqc_provider.cpp
 )
 
 target_include_directories(vhsm_crypto
@@ -21,7 +23,23 @@ target_include_directories(vhsm_crypto
 
 target_link_libraries(vhsm_crypto
     PUBLIC vhsm_crypto_provider
+    PUBLIC vhsm_metrics
 )
+
+# Post-quantum signatures (Dilithium/SPHINCS+) via liboqs. Opt-in: off by
+# default so the production build never depends on liboqs. When enabled, the
+# PqcProvider compiles its real OQS-backed implementation and links liboqs.
+option(VHSM_PQC "Enable post-quantum (Dilithium/SPHINCS+) hybrid signatures via liboqs" OFF)
+if(VHSM_PQC)
+  find_package(OQS CONFIG REQUIRED)
+  if(NOT TARGET OQS::oqs)
+    find_library(OQS_LIB NAMES oqs REQUIRED)
+    add_library(OQS::oqs UNKNOWN IMPORTED)
+    set_target_properties(OQS::oqs PROPERTIES IMPORTED_LOCATION ${OQS_LIB})
+  endif()
+  target_compile_definitions(vhsm_crypto PUBLIC VHSM_PQC)
+  target_link_libraries(vhsm_crypto PUBLIC OQS::oqs)
+endif()
 if(WIN32)
     target_link_libraries(vhsm_crypto PRIVATE bcrypt)
 endif()
