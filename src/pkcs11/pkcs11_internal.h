@@ -128,6 +128,14 @@ inline constexpr CK_ULONG CKA_VHSM_RSA_PRIV = 0x81000001UL;
 inline constexpr CK_ULONG CKA_VHSM_RSA_PUB = 0x81000002UL;
 inline constexpr CK_ULONG CKA_VHSM_EC_PRIV = 0x81000003UL;
 inline constexpr CK_ULONG CKA_VHSM_EC_PUB = 0x81000004UL;
+// CKA_VHSM_POLICY: a JSON KeyPolicy document (see
+// domain/signing/key_policy.h) attached to a key object; when present, every
+// C_Sign with that key is gated by the policy (mechanism/who/when/quorum).
+inline constexpr CK_ATTRIBUTE_TYPE CKA_VHSM_POLICY = 0x81000005UL;
+// CKA_VHSM_ATTESTATION_COUNT: number of attestations collected for the key,
+// mirrored from the ledger attestation registry so the C++ sign path can fail
+// closed on quorum checks when the ledger is unreachable.
+inline constexpr CK_ATTRIBUTE_TYPE CKA_VHSM_ATTESTATION_COUNT = 0x81000006UL;
 
 bool p11_is_initialized();
 SessionManager &p11_sessions();
