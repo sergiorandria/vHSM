@@ -13,6 +13,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -242,6 +243,24 @@ func main() {
 		log.Fatalf("failed to create gateway client: %v", err)
 	}
 	defer fabricClient.Close()
+
+	// The signature_ledger is a separate chaincode (on a separate channel, by
+	// default "signaturechannel") that anchors HSM-generated signatures. It is
+	// queried read-only to build the public proof/audit view. Reuse the same
+	// gRPC connection, identity and signer as the thesis client.
+	sigChannel := os.Getenv("SIGNATURE_CHANNEL_NAME")
+	if sigChannel == "" {
+		sigChannel = "signaturechannel"
+	}
+	sigChaincode := os.Getenv("SIGNATURE_CHAINCODE_NAME")
+	if sigChaincode == "" {
+		sigChaincode = "signature_ledger"
+	}
+	sigClient, err := gateway_sdk.NewGatewayClient(grpcConn, sigChannel, sigChaincode, id, sign)
+	if err != nil {
+		log.Fatalf("failed to create signature ledger client: %v", err)
+	}
+	defer sigClient.Close()
 
 	// HSM
 	hsmSvc, err := internal.NewHSMService(hsmModule, hsmToken, hsmPin, hsmKeyLabel, hsmSignKeyLabel)
@@ -696,6 +715,91 @@ func main() {
 				},
 			})
 		})
+
+	// --- Read-only audit / proof endpoints ---
+
+	// signatureProof is the on-chain signature record returned by the
+	// signature_ledger chaincode's GetRecord. It is surfaced verbatim to the
+	// read-only audit UI so anyone with ReadThesis can verify a signature's
+	// block inclusion. Field names match the chaincode's JSON exactly.
+	type signatureProof struct {
+		RecordID       string `json:"record_id"`
+		KeyFingerprint string `json:"key_fingerprint"`
+		PayloadDigest  string `json:"payload_digest"`
+		SignatureB64   string `json:"signature_b64"`
+		CreatedAt      int64  `json:"created_at"`
+		TxID           string `json:"tx_id"`
+		BlockNumber    int64  `json:"block_number"`
+		Submitter      string `json:"submitter"`
+	}
+
+	// GET /api/v1/proof/:recordId fetches a single anchored signature record
+	// from the signature_ledger chaincode (read-only EvaluateTransaction). It
+	// does not depend on the thesis ledger and is safe for auditors/students to
+	// query with only ReadThesis permission.
+	r.GET("/api/v1/proof/:recordId", authRequired, requirePermission("ReadThesis"), func(c *gin.Context) {
+		recordID := c.Param("recordId")
+		if recordID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "recordId required"})
+			return
+		}
+
+		raw, err := sigClient.GetContract().EvaluateTransaction("GetRecord", recordID)
+		if err != nil {
+			log.Printf("get signature proof failed for %q: %v", recordID, err)
+			c.JSON(http.StatusNotFound, gin.H{"error": "signature record not found"})
+			return
+		}
+
+		var proof signatureProof
+		if err := json.Unmarshal(raw, &proof); err != nil {
+			log.Printf("failed to decode signature proof for %q: %v", recordID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to decode signature record"})
+			return
+		}
+
+		c.JSON(http.StatusOK, proof)
+	})
+
+	// GET /api/v1/audit/tail is a placeholder for the "audit log HMAC chain"
+	// tail hash. That hash is maintained by the C++ vhsmd daemon (which owns
+	// the local audit log), NOT by this Go process, so we cannot compute it
+	// here. The UI links to this endpoint and degrades gracefully to a 501
+	// until the daemon publishes the value (e.g. via a sidecar or shared
+	// store). Kept harmless on purpose.
+	r.GET("/api/v1/audit/tail", authRequired, requirePermission("ReadThesis"), func(c *gin.Context) {
+		c.JSON(http.StatusNotImplemented, gin.H{
+			"tail_hash": "",
+			"note": "The audit tail HMAC is published by the C++ vhsmd daemon, which " +
+				"owns the local audit log. This REST process does not have access to it. " +
+				"Until the daemon exposes the value (e.g. via a sidecar or shared store), " +
+				"the audit tail cannot be served from here.",
+		})
+	})
+
+	// --- Static UI (SPA) serving ---
+	//
+	// After every API route, fall through to the built web UI under web/dist.
+	// The Go build does not embed web/dist (it may not exist in a fresh
+	// checkout / offline build), so we serve from the directory at runtime and
+	// 404 harmlessly if it is missing. Unknown non-/api paths fall back to
+	// index.html for client-side routing.
+	webRoot := "web/dist"
+	r.NoRoute(func(c *gin.Context) {
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+
+		clean := filepath.Clean(c.Request.URL.Path)
+		fpath := filepath.Join(webRoot, clean)
+		if info, serr := os.Stat(fpath); serr != nil || info.IsDir() {
+			// Missing asset or directory request → SPA fallback.
+			c.File(filepath.Join(webRoot, "index.html"))
+			return
+		}
+		c.File(fpath)
+	})
 
 	port := os.Getenv("PORT")
 	if port == "" {
