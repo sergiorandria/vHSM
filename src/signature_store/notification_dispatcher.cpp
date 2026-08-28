@@ -5,6 +5,7 @@
 #include <thread>
 
 #include "../core/utils.h"
+#include "../metrics/metrics.h"
 
 namespace vhsm::signature_store {
 namespace db {
@@ -197,12 +198,14 @@ bool NotificationDispatcher::deliver_with_retry(
 
   if (ok) {
     ++delivered_;
+    metrics::Metrics::instance().inc(metrics::names::notification_delivered);
     repo_.log_notification(vhsm::utils::uuid_v4(), event.timestamp,
                            event_type_name(event), sub.id, "DELIVERED", 1, "");
     return true;
   }
 
   ++failed_;
+  metrics::Metrics::instance().inc(metrics::names::notification_failed);
   // Failure already logged above (FAILED).
   return false;
 }
@@ -235,6 +238,7 @@ void NotificationDispatcher::dispatch_loop() {
     } catch (const std::exception &) {
       // A failing subscriber query/adapter must not terminate the process.
       ++failed_;
+      metrics::Metrics::instance().inc(metrics::names::notification_failed);
     }
   }
 }
