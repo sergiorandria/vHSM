@@ -96,3 +96,50 @@ backend choice above only affects the Go REST API.
 > Note: the third-party `fabric-gateway-cpp` submodule ships its own
 > `fabric_gateway_cpp_gateway_tests`, which require a live Fabric peer and
 > are expected to fail in CI. They are not part of vHSM's test suite.
+
+## Submodules and the push workflow
+
+vHSM vendors two components as git submodules under `third_party/`:
+
+| Submodule | What it is | Why a submodule |
+|---|---|---|
+| `third_party/vhsm-secure-crypto` | The vHSM C++ crypto/PKCS#11 primitives this repo builds | Kept as its own repo so it can be versioned/tagged and consumed by other projects |
+| `third_party/fabric-gateway-cpp` | Third-party Hyperledger Fabric C++ SDK | Upstream dependency, vendored rather than CMake-fetched |
+
+Because a submodule is a **pointer (gitlink) to a specific commit**, a build
+breaks if the superproject points at a commit that was never pushed to the
+submodule's remote. The golden rule is therefore:
+
+> **Always push the submodule first, then the superproject.**
+
+Step-by-step:
+
+```bash
+# 1. Make your change inside the submodule, then commit + push it THERE.
+cd third_party/vhsm-secure-crypto
+git add -A
+git commit -m "crypto: fix foo"
+git push origin main            # or whichever branch the submodule tracks
+
+# 2. Go back to the superproject and bump the gitlink.
+cd ../..                        # back at vHSM root
+git add third_party/vhsm-secure-crypto
+git commit -m "chore: bump vhsm-secure-crypto"
+git push origin dev
+
+# 3. Verify the superproject points at a pushed commit (no dangling gitlink).
+git submodule status            # leading space = OK; leading '+' = differs from recorded
+git ls-remote third_party/vhsm-secure-crypto   # confirms the ref exists on the remote
+```
+
+Rules of thumb:
+
+- Never `git commit` the superproject with a dirty/unsaved submodule change
+  unless you intend to bump it. `git submodule status` showing a `+` means the
+  checked-out submodule commit differs from what the superproject records.
+- If CI clones with `--recurse-submodules` and fails with "reference not found",
+  it almost always means a submodule commit was committed but **not pushed**.
+  Push the submodule, then re-run CI.
+- After cloning, run `git submodule update --init --recursive` so the pinned
+  commits are checked out (the C++ build needs both submodules present).
+
