@@ -3,6 +3,8 @@
 #include "pkcs11_internal.h"
 #include "pkcs11_types.h"
 
+#include "../log/logger.h"
+
 #include "../crypto/secure_rng.h"
 #include "../crypto/aes_gcm.h"
 #include "../crypto/ecc.h"
@@ -156,9 +158,14 @@ void p11_publish_event(vhsm::notification::NotificationEvent::EventType type,
     event.hsm_instance = vhsm::core::hsm_instance_id();
     notification_bus->publish(event);
 
-    (void)audit_log->append(audit_event_type + "-" +
-                                std::to_string(created_at),
-                            audit_event_type);
+    auto audit_st = audit_log->append(
+        audit_event_type + "-" + std::to_string(created_at),
+        audit_event_type);
+    if (!audit_st) {
+      vhsm::log::global_logger().warning(
+          "audit", audit_event_type + " audit append failed: CK_RV=" +
+                       std::to_string(static_cast<int>(audit_st.error())));
+    }
   } catch (const std::exception &) {
     // Notification/audit must never raise across the C API boundary.
   }
