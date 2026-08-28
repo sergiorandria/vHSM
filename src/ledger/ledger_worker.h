@@ -5,7 +5,9 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_set>
 
 #include "../domain/core/kernel_types.h"
 #include "../domain/crypto/crypto_types.h"
@@ -49,6 +51,12 @@ public:
   using CommitCallback =
       std::function<void(const SignatureRecord &, const LedgerEntry &)>;
 
+  // Optional callback invoked when a record enters the in-flight state, so the
+  // store can mark the row PROCESSING.  This is part of the exactly-once
+  // anchoring guard: a record_id that is already in flight is never anchored
+  // twice (duplicate submissions are dropped in submit_record()).
+  using ProcessingCallback = std::function<void(const std::string &record_id)>;
+
   // concurrent_workers: pool size used for anchoring.  0 selects an automatic
   // default derived from hardware concurrency.  `pool` optionally injects a
   // shared threadpool owned by the caller; when null the worker creates and
@@ -69,8 +77,12 @@ public:
   void drain_and_stop();
 
   // Submit a record for ledger anchoring (to be called by the signature
-  // dispatcher).
+  // dispatcher).  Duplicate submissions for an in-flight record_id are dropped.
   void submit_record(const SignatureRecord &record);
+
+  void set_processing_callback(ProcessingCallback cb) {
+    processing_callback_ = std::move(cb);
+  }
 
   // Total number of records successfully committed since start() (thread-safe
   // diagnostic counter, reported and reset via notification events).
@@ -102,8 +114,13 @@ private:
   LedgerClient &ledger_client_;
   notification::NotificationBus &notification_bus_;
   CommitCallback on_committed_;
+  ProcessingCallback processing_callback_;
   RetryPolicy retry_policy_;
   std::size_t pool_size_;
+
+  // Exactly-once anchoring guard: record_ids currently being anchored.
+  std::mutex in_flight_mu_;
+  std::unordered_set<std::string> in_flight_;
 
   std::shared_ptr<threadpool::ThreadPool>
       owned_pool_;                         // set when created by start()
