@@ -4,6 +4,7 @@
 
 #include "../core/hsm_instance.h"
 #include "../core/system_hsm_clock.h"
+#include "../log/logger.h"
 #include "../crypto/crypto_engine.h"
 #include "../crypto/evp_pkey_guard.h"
 #include "../signature_store/signature_dispatcher.h"
@@ -641,6 +642,12 @@ static CK_RV dispatch_sign_result(
                              user_label, std::nullopt);
   } catch (const std::exception &) {
     dispatch_ok = false; // DB write failure must not escape the C ABI.
+    // Observability: the failure is swallowed (C ABI returns CKR_DEVICE_ERROR
+    // at most), so surface it here or it is invisible in logs.
+    vhsm::log::global_logger().error(
+        "pkcs11",
+        "dispatch_sign_result: signature persistence/audit/ledger dispatch "
+        "threw; returning CKR_DEVICE_ERROR (signature returned to caller)");
   }
 
   return dispatch_ok ? CKR_OK : CKR_DEVICE_ERROR;

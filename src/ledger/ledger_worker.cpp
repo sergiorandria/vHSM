@@ -184,6 +184,9 @@ void LedgerWorker::publish_failed(const SignatureRecord &record) {
   event.detail_json = "{}";
   event.hsm_instance = vhsm::core::hsm_instance_id();
   notification_bus_.publish(event);
+  vhsm::log::global_logger().error(
+      "ledger", "Ledger anchoring FAILED for record " + record.record_id +
+                    " (swallowed by retry/queue path; see LEDGER_COMMIT_FAILED)");
 }
 
 void LedgerWorker::drain_and_stop() {
@@ -209,7 +212,10 @@ void LedgerWorker::submit_record(const SignatureRecord &record) {
         pool_->enqueue(token_, [this, record] { process_record(record); });
     if (!accepted) {
       // Queue at capacity: the record cannot be anchored now.
+      ++failed_count_;
       publish_failed(record);
+    } else {
+      ++pending_count_;
     }
   } catch (const std::exception &e) {
     // Pool shutting down between running_ check and enqueue — record cannot
@@ -218,6 +224,7 @@ void LedgerWorker::submit_record(const SignatureRecord &record) {
     vhsm::log::global_logger().error(
         "ledger", "submit_record dropped record " + record.record_id +
                       " during teardown: " + e.what());
+    ++failed_count_;
     publish_failed(record);
   }
 }
@@ -228,6 +235,7 @@ void LedgerWorker::process_record(const SignatureRecord &record) {
     auto entry = ledger_client_.submit_record(record);
     if (entry) {
       ++committed_count_;
+      --pending_count_;
       publish_committed(record, *entry);
       if (on_committed_) {
         try {
@@ -264,6 +272,8 @@ void LedgerWorker::process_record(const SignatureRecord &record) {
     }
   }
 
+  --pending_count_;
+  ++failed_count_;
   publish_failed(record);
 }
 
