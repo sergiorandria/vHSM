@@ -87,6 +87,39 @@ jobs:
       - name: Run Fabric integration tests
         run: ctest --test-dir build -R integration --output-on-failure
 
+  go:
+    # Build, vet and smoke-test every Go module (REST API + both chaincodes).
+    # Previously the CI only exercised the C++ side, so Go regressions (e.g. the
+    # ECDSA double-hash bug) shipped undetected.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+      - name: Build & vet REST API
+        working-directory: rest_api
+        run: |
+          go build ./...
+          go vet ./...
+      - name: Build & vet signature_ledger chaincode
+        working-directory: network/fabric_configuration/signature_ledger
+        run: |
+          go build ./...
+          go vet ./...
+      - name: Build & vet thesis template chaincode
+        working-directory: network/fabric_configuration/template_chaincode
+        run: |
+          go build ./...
+          go vet ./...
+      - name: Test Go modules
+        run: |
+          (cd rest_api && go test ./...)
+          (cd network/fabric_configuration/signature_ledger && go test ./...)
+          (cd network/fabric_configuration/template_chaincode && go test ./...)
+
   windows:
     runs-on: windows-latest
     env:
