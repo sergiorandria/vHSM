@@ -33,22 +33,49 @@ mkdir -p "$HOST_ORG_ROOT"
 # -----------------------------------------------------------------
 fca_client() {
     local HOME_REL="$1"; shift
+    # When VHSM_TLS_CERT is set (CA serves TLS), pin the CA's TLS root cert so
+    # the client verifies the HTTPS connection instead of trusting anything.
+    local TLS_ARGS=()
+    if [ -n "$VHSM_TLS_CERT" ]; then
+        TLS_ARGS=(--tls.certfiles "$VHSM_TLS_CERT")
+    fi
     docker run --rm --network "$NETWORK_NAME" \
         -e FABRIC_CA_CLIENT_HOME="/organizations/${HOME_REL}" \
         -v "${HOST_ORG_ROOT}:/organizations" \
-        "$CA_CLIENT_IMAGE" fabric-ca-client "$@"
+        "$CA_CLIENT_IMAGE" fabric-ca-client "$@" "${TLS_ARGS[@]}"
+}
+
+# Copie le certificat TLS de la CA (généré au démarrage dans son home) vers
+# l'hôte afin que fabric-ca-client puisse vérifier le lien HTTPS.
+fetch_ca_tls_cert() {
+    local SHORT="$1"
+    local DEST="${HOST_ORG_ROOT}/tls-ca-${SHORT}.pem"
+    for i in $(seq 1 15); do
+        if docker cp "ca.${SHORT}:/etc/hyperledger/fabric-ca-server/tls-cert.pem" \
+            "$DEST" >/dev/null 2>&1 && [ -s "$DEST" ]; then
+            return 0
+        fi
+        sleep 2
+    done
+    echo "⚠️  impossible de récupérer le certificat TLS de ca.${SHORT}"
+    return 1
 }
 
 wait_for_ca() {
     local HOST="$1"
     local PORT="$2"
     local CANAME="$3"
-    echo "   ... attente de ${HOST}:${PORT}"
+    local SHORT="$4"
+    local CERT_HOST="${HOST_ORG_ROOT}/tls-ca-${SHORT}.pem"
+    local CERT_IN="/organizations/tls-ca-${SHORT}.pem"
+    echo "   ... attente de ${HOST}:${PORT} (TLS)"
     for i in $(seq 1 30); do
-        if docker run --rm --network "$NETWORK_NAME" "$CA_CLIENT_IMAGE" \
-            fabric-ca-client getcainfo -u "http://${HOST}:${PORT}" --caname "${CANAME}" \
-            --mspdir "/tmp/getcainfo-${HOST}" >/dev/null 2>&1; then
-            echo "   ✓ ${HOST}:${PORT} disponible"
+        docker cp "ca.${SHORT}:/etc/hyperledger/fabric-ca-server/tls-cert.pem" \
+            "$CERT_HOST" >/dev/null 2>&1 || true
+        if [ -s "$CERT_HOST" ] && docker run --rm --network "$NETWORK_NAME" "$CA_CLIENT_IMAGE" \
+            fabric-ca-client getcainfo -u "https://${HOST}:${PORT}" --caname "${CANAME}" \
+            --tls.certfiles "$CERT_IN" --mspdir "/tmp/getcainfo-${HOST}" >/dev/null 2>&1; then
+            echo "   ✓ ${HOST}:${PORT} disponible (TLS)"
             return 0
         fi
         sleep 2
@@ -103,13 +130,13 @@ enroll_identity() {
 
     # --- certificat MSP (signature) ---
     fca_client "${DEST_REL}" enroll \
-        -u "http://${ID_NAME}:${ID_SECRET}@${CA_HOST}:${CA_PORT}" \
+        -u "https://${ID_NAME}:${ID_SECRET}@${CA_HOST}:${CA_PORT}" \
         --caname "${CA_NAME}" \
         --mspdir "/organizations/${DEST_REL}/msp"
 
     # --- certificat TLS ---
     fca_client "${DEST_REL}" enroll \
-        -u "http://${ID_NAME}:${ID_SECRET}@${CA_HOST}:${CA_PORT}" \
+        -u "https://${ID_NAME}:${ID_SECRET}@${CA_HOST}:${CA_PORT}" \
         --caname "${CA_NAME}" \
         --enrollment.profile tls \
         --csr.hosts "${TLS_HOST}" --csr.hosts localhost \
@@ -159,11 +186,12 @@ echo "================================================================="
 # -----------------------------------------------------------------
 echo ""
 echo "==> [Orderer] ${ORDERER_DOMAIN}"
-wait_for_ca "ca.orderer" "$ORDERER_CA_PORT" "ca-orderer"
+wait_for_ca "ca.orderer" "$ORDERER_CA_PORT" "ca-orderer" "orderer"
+export VHSM_TLS_CERT="/organizations/tls-ca-orderer.pem"
 
 REGISTRAR_HOME="ordererOrganizations/${ORDERER_DOMAIN}/ca-admin"
 fca_client "$REGISTRAR_HOME" enroll \
-    -u "http://${CA_ADMIN_USER}:${CA_ADMIN_PASS}@ca.orderer:${ORDERER_CA_PORT}" \
+    -u "https://${CA_ADMIN_USER}:${CA_ADMIN_PASS}@ca.orderer:${ORDERER_CA_PORT}" \
     --caname ca-orderer --mspdir "/organizations/${REGISTRAR_HOME}/msp"
 
 fca_client "$REGISTRAR_HOME" register --caname ca-orderer \
@@ -196,11 +224,12 @@ for ((i=1; i<=NUM_ORGS; i++)); do
 
     echo ""
     echo "==> [${SHORTNAME}] ${DOMAIN}"
-    wait_for_ca "ca.${SHORTNAME}" "$CA_PORT" "ca-${SHORTNAME}"
+    wait_for_ca "ca.${SHORTNAME}" "$CA_PORT" "ca-${SHORTNAME}" "${SHORTNAME}"
+    export VHSM_TLS_CERT="/organizations/tls-ca-${SHORTNAME}.pem"
 
     REGISTRAR_HOME="peerOrganizations/${DOMAIN}/ca-admin"
     fca_client "$REGISTRAR_HOME" enroll \
-        -u "http://${CA_ADMIN_USER}:${CA_ADMIN_PASS}@ca.${SHORTNAME}:${CA_PORT}" \
+        -u "https://${CA_ADMIN_USER}:${CA_ADMIN_PASS}@ca.${SHORTNAME}:${CA_PORT}" \
         --caname "ca-${SHORTNAME}" --mspdir "/organizations/${REGISTRAR_HOME}/msp"
 
     fca_client "$REGISTRAR_HOME" register --caname "ca-${SHORTNAME}" \
