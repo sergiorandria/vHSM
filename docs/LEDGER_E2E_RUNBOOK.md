@@ -14,7 +14,7 @@ docs: `FABRIC_CHAINCODE.md` (architecture), `network/fabric_configuration/NEW_CH
 ## 1. Bring up the Fabric network
 
 ```bash
-cd network/fabric_configuration/fabric-network
+cd network/fabric_configuration/docker
 ./generate-network.sh
 ./enroll-network.sh
 # creates orgs, MSPs, the CA, orderer and peers

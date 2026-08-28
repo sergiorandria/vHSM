@@ -88,7 +88,7 @@ backend choice above only affects the Go REST API.
 
 ## End-to-end smoke test (C++ path)
 
-1. Bring up the network: `network/fabric_configuration/fabric-network/{generate-network.sh, enroll-network.sh}` (name the channel **`signaturechannel`**).
+1. Bring up the network: `network/fabric_configuration/docker/{generate-network.sh, enroll-network.sh}` (name the channel **`signaturechannel`**).
 2. Build + package `network/fabric_configuration/signature_ledger/` as a CCaaS image; `peer lifecycle chaincode` install/approve/commit it on `signaturechannel`.
 3. Build vHSM: `cmake -S . -B build -DVHSM_STORE_BACKEND=ledger -DVHSM_LEDGER=ON`, configure the gateway connection + mTLS (fail-closed).
 4. Run a `C_Sign` (it anchors to the ledger) and exercise `tests/integration/*` + `tests/rest_api/*`.
