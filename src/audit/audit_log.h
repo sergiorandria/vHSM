@@ -2,6 +2,7 @@
 #define VHSM_AUDIT_LOG_H
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include "../abi/result.h"
 #include <string>
@@ -62,13 +63,24 @@ public:
   /// Latest HMAC (hex) — for external anchoring. Empty if no records.
   const std::string &tail_hash() const noexcept { return tail_hex_; }
 
-private:
+  /// Current sequence number (number of records appended so far).
+  uint64_t seq() const noexcept { return seq_; }
+
+  // Register a callback invoked after each append with the new tail hash and
+  // sequence number. Used to anchor the tail on the ledger so the audit chain
+  // becomes externally verifiable (anti-truncation). Pass an empty function to
+  // disable. Best-effort: exceptions in the callback are swallowed.
+  void set_tail_publisher(
+      std::function<void(const std::string &tail_hash, uint64_t seq)> cb);
+
+ private:
   void recover_tail();
 
   std::string path_;
   std::vector<uint8_t> chain_key_;
   uint64_t seq_ = 0;
   std::string tail_hex_; // hex of last entry HMAC ("0"*(64) when empty)
+  std::function<void(const std::string &, uint64_t)> tail_publisher_;
 };
 
 } // namespace vhsm::audit

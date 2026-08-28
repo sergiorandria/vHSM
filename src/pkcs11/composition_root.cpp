@@ -404,6 +404,36 @@ std::unique_ptr<AppContainer> create_app_container() {
                 }
               }
             });
+        // Exactly-once anchoring guard: mark the row PROCESSING as soon as the
+        // worker accepts it, so a crash/restart between enqueue and commit does
+        // not re-anchor an already-inflight record. (The chaincode upsert makes
+        // the ledger write idempotent; this is the DB-side half.)
+        c->ledger_worker->set_processing_callback(
+            [db](const std::string &record_id) {
+              vhsm::signature_store::db::SignatureRepository repo(
+                  *db, *p11_get_token(0));
+              repo.mark_processing(record_id);
+            });
+        // Anchor the audit hash-chain tail on the ledger after every append so
+        // the tamper-evident audit log becomes externally verifiable (a
+        // truncated/forged local audit file no longer matches the anchored
+        // tail). Best-effort: failures are logged but never block the audit
+        // path.
+        if (auto *hca = dynamic_cast<vhsm::audit::HashChainedAuditLog *>(
+                c->audit_log.get())) {
+          vhsm::ledger::LedgerClient *lc = c->ledger_client.get();
+          hca->set_tail_publisher(
+              [lc](const std::string &tail_hash, uint64_t seq) {
+                if (lc == nullptr)
+                  return;
+                const auto now_ms =
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch())
+                        .count();
+                lc->publish_audit_tail(tail_hash, static_cast<int64_t>(seq),
+                                       std::to_string(now_ms));
+              });
+        }
         c->ledger_worker->start();
         // Replay any PENDING records from previous runs.
         vhsm::signature_store::db::LedgerRetryQueue retry(*db);
