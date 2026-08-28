@@ -287,14 +287,11 @@ TEST_F(SignatureStoreIntegrationTest,
   ASSERT_EQ(ids.size(), 1u);
   const std::string &record_id = ids[0];
 
-  // The dispatcher writes a PENDING ledger row atomically with the signature
-  // record; the LedgerRetryQueue is the (crash-recovery) seam that actually
-  // submits pending rows to the worker — the dispatcher never calls the worker
-  // directly under the outbox model.
+  // Under the fixed design the dispatcher submits the freshly-committed
+  // signature to the ledger worker directly (real-time anchoring); the
+  // LedgerRetryQueue remains only the crash-recovery seam for rows left
+  // PENDING after a restart, so we must not re-submit here.
   vhsm::signature_store::db::LedgerRetryQueue retry_queue(*conn_);
-  for (const auto &rec : retry_queue.load_pending_records()) {
-    worker->submit_record(rec);
-  }
 
   // Wait (up to 5s) for the ledger worker thread to commit + invoke callback.
   {
