@@ -9,6 +9,9 @@
 #include "../persistence/vault.h"
 
 #include "../core/hsm_instance.h"
+#include "../crypto/fips.h"
+#include "../crypto/pqc_provider.h"
+#include "../log/logger.h"
 
 #include <cstring>
 #include <memory>
@@ -74,6 +77,22 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
     return CKR_GENERAL_ERROR;
   }
   g_initialized = true;
+
+  // FIPS mode: run known-answer self-tests once at startup. A failed KAT is a
+  // hard refusal to operate in FIPS mode — fail closed.
+  if (vhsm::crypto::fips_mode() && !vhsm::crypto::fips_self_test()) {
+    vhsm::log::global_logger().error(
+        "fips", "FIPS self-test (KAT) failed; refusing to initialize");
+    return CKR_GENERAL_ERROR;
+  }
+
+  // Post-quantum hybrid signing: load any paired Dilithium3 keys for classical
+  // key fingerprints (VHSM_PQC_KEYRING_DIR). No-op when no keyring is set or
+  // PQC is disabled.
+  if (const char *kr = std::getenv("VHSM_PQC_KEYRING_DIR")) {
+    vhsm::crypto::PqcKeyring::instance().load_from_dir(kr);
+  }
+
   return CKR_OK;
 }
 
