@@ -1,0 +1,124 @@
+# Real-network channel configuration (TEMPLATE — fill in <...> placeholders)
+#
+# Same structure as ../docker/configtx.yaml, but consenter/peer addresses are
+# the PUBLIC hostnames of each machine (not container names). Run configtxgen
+# on the orderer host after filling this in.
+#
+#   configtxgen -profile MultiOrgsOrdererGenesis \
+#       -outputBlock ./channel-artifacts/genesis.block -channelID system-channel
+#   configtxgen -profile Profile_<canal> \
+#       -outputBlock ./channel-artifacts/<canal>_genesis.block -channelID <canal>
+
+Organizations:
+    - &OrdererOrg
+        Name: OrdererOrg
+        ID: OrdererMSP
+        # Local MSP path on the ORDerer host:
+        MSPDir: ./organizations/ordererOrganizations/<ORD_ORG_DOMAIN>/msp
+        Policies:
+            Readers: {Type: Signature, Rule: "OR('OrdererMSP.member')"}
+            Writers: {Type: Signature, Rule: "OR('OrdererMSP.member')"}
+            Admins:  {Type: Signature, Rule: "OR('OrdererMSP.admin')"}
+
+    - &Org1
+        Name: Org1
+        ID: Org1MSP
+        MSPDir: ./organizations/peerOrganizations/<ORG1_DOMAIN>/msp
+        Policies:
+            Readers:     {Type: Signature, Rule: "OR('Org1MSP.admin', 'Org1MSP.peer', 'Org1MSP.client')"}
+            Writers:     {Type: Signature, Rule: "OR('Org1MSP.admin', 'Org1MSP.client')"}
+            Admins:      {Type: Signature, Rule: "OR('Org1MSP.admin')"}
+            Endorsement: {Type: Signature, Rule: "OR('Org1MSP.peer')"}
+        AnchorPeers:
+            - Host: <ORG1_PUBLIC_HOST>   # public DNS/IP of Org1's peer host
+              Port: 7051
+
+    - &Org2
+        Name: Org2
+        ID: Org2MSP
+        MSPDir: ./organizations/peerOrganizations/<ORG2_DOMAIN>/msp
+        Policies:
+            Readers:     {Type: Signature, Rule: "OR('Org2MSP.admin', 'Org2MSP.peer', 'Org2MSP.client')"}
+            Writers:     {Type: Signature, Rule: "OR('Org2MSP.admin', 'Org2MSP.client')"}
+            Admins:      {Type: Signature, Rule: "OR('Org2MSP.admin')"}
+            Endorsement: {Type: Signature, Rule: "OR('Org2MSP.peer')"}
+        AnchorPeers:
+            - Host: <ORG2_PUBLIC_HOST>   # internet-reachable DNS/IP of Org2's peer host
+              Port: 7051
+
+Capabilities:
+    Channel: &ChannelCapabilities
+        V2_0: true
+    Orderer: &OrdererCapabilities
+        V2_0: true
+    Application: &ApplicationCapabilities
+        V2_0: true
+
+Channel: &ChannelDefaults
+    Policies:
+        Readers: {Type: ImplicitMeta, Rule: "ANY Readers"}
+        Writers: {Type: ImplicitMeta, Rule: "ANY Writers"}
+        Admins:  {Type: ImplicitMeta, Rule: "MAJORITY Admins"}
+
+Application: &ApplicationDefaults
+    Organizations:
+    Policies:
+        LifecycleEndorsement: {Type: ImplicitMeta, Rule: "MAJORITY Endorsement"}
+        Endorsement:          {Type: ImplicitMeta, Rule: "MAJORITY Endorsement"}
+        Readers:              {Type: ImplicitMeta, Rule: "ANY Readers"}
+        Writers:              {Type: ImplicitMeta, Rule: "ANY Writers"}
+        Admins:               {Type: ImplicitMeta, Rule: "MAJORITY Admins"}
+    Capabilities:
+        <<: *ApplicationCapabilities
+
+Orderer: &OrdererDefaults
+    OrdererType: etcdraft
+    Addresses:
+        - <ORD_ORG_PUBLIC_HOST>:7050   # public address of the orderer host
+    BatchTimeout: 2s
+    BatchSize:
+        MaxMessageCount: 100
+        AbsoluteMaxBytes: 99 MB
+        PreferredMaxBytes: 512 KB
+    Organizations:
+    Policies:
+        Readers:         {Type: ImplicitMeta, Rule: "ANY Readers"}
+        Writers:         {Type: ImplicitMeta, Rule: "ANY Writers"}
+        Admins:          {Type: ImplicitMeta, Rule: "MAJORITY Admins"}
+        BlockValidation: {Type: ImplicitMeta, Rule: "ANY Writers"}
+
+Profiles:
+    MultiOrgsOrdererGenesis:
+        <<: *ChannelDefaults
+        Capabilities: *ChannelCapabilities
+        Orderer:
+            <<: *OrdererDefaults
+            EtcdRaft:
+                Consenters:
+                    - Host: <ORD_ORG_PUBLIC_HOST>   # must match the TLS SAN of the orderer cert
+                      Port: 7050
+                      ClientTLSCert: ./organizations/ordererOrganizations/<ORD_ORG_DOMAIN>/orderers/orderer.<ORD_ORG_DOMAIN>/tls/server.crt
+                      ServerTLSCert: ./organizations/ordererOrganizations/<ORD_ORG_DOMAIN>/orderers/orderer.<ORD_ORG_DOMAIN>/tls/server.crt
+            Organizations: [*OrdererOrg]
+            Capabilities: *OrdererCapabilities
+        Consortiums:
+            SampleConsortium:
+                Organizations: [*Org1, *Org2]
+
+    Profile_<canal>:
+        <<: *ChannelDefaults
+        Capabilities: *ChannelCapabilities
+        Orderer:
+            <<: *OrdererDefaults
+            EtcdRaft:
+                Consenters:
+                    - Host: <ORD_ORG_PUBLIC_HOST>
+                      Port: 7050
+                      ClientTLSCert: ./organizations/ordererOrganizations/<ORD_ORG_DOMAIN>/orderers/orderer.<ORD_ORG_DOMAIN>/tls/server.crt
+                      ServerTLSCert: ./organizations/ordererOrganizations/<ORD_ORG_DOMAIN>/orderers/orderer.<ORD_ORG_DOMAIN>/tls/server.crt
+            Organizations: [*OrdererOrg]
+            Capabilities: *OrdererCapabilities
+        Application:
+            <<: *ApplicationDefaults
+            Organizations: [*Org1, *Org2]
+            Capabilities: *ApplicationCapabilities
