@@ -79,9 +79,18 @@ CK_RV create_from_raw(CK_SESSION_HANDLE hSession, const std::vector<u8> &raw,
     return CKR_SESSION_HANDLE_INVALID;
   auto &store = s->getObjectStore();
 
+  // p11_build_key_from_attrs reads CKA_VHSM_RSA_PRIV / CKA_VHSM_EC_PRIV, not
+  // CKA_VALUE, so a wrapped asymmetric key (an RSA/EC DER blob) must be placed
+  // in the correct attribute before the key can be reconstructed. Try RSA first,
+  // then EC; fall back to a raw secret blob below.
   HsmObject probe(ObjectType::PRIVATE_KEY, true, true, false, true);
-  probe.setAttribute(CKA_VALUE, raw.data(), raw.size());
+  probe.setAttribute(CKA_VHSM_RSA_PRIV, raw.data(), raw.size());
   EVP_PKEY *pk = p11_build_key_from_attrs(&probe, true, 0);
+  if (!pk) {
+    HsmObject ec_probe(ObjectType::PRIVATE_KEY, true, true, false, true);
+    ec_probe.setAttribute(CKA_VHSM_EC_PRIV, raw.data(), raw.size());
+    pk = p11_build_key_from_attrs(&ec_probe, true, 0);
+  }
   if (pk) {
     auto [h, ptr] = store.v_create_object<HsmObject>(ObjectType::PRIVATE_KEY,
                                                      true, true, false, true);
@@ -100,7 +109,7 @@ CK_RV create_from_raw(CK_SESSION_HANDLE hSession, const std::vector<u8> &raw,
   }
   if (raw.size() == 16 || raw.size() == 24 || raw.size() == 32) {
     auto [h, ptr] = store.v_create_object<HsmObject>(ObjectType::SECRET_KEY,
-                                                     false, true, false, false);
+                                                      true, true, false, false);
     CK_RV rv = p11_apply_template(*ptr, pTemplate, ulCount);
     if (rv == CKR_OK)
       p11_store_secret(*ptr, raw);
@@ -353,7 +362,7 @@ CK_RV C_DeriveKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
 
   auto &store = s->getObjectStore();
   auto [h, ptr] = store.v_create_object<HsmObject>(ObjectType::SECRET_KEY,
-                                                   false, true, false, false);
+                                                   true, true, false, false);
   CK_RV rv = p11_apply_template(*ptr, pTemplate, ulAttributeCount);
   if (rv == CKR_OK)
     p11_store_secret(*ptr, secret);
