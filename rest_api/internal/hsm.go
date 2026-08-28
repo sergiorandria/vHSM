@@ -17,6 +17,15 @@ const (
 	maxBodyBytes = 50 << 20 // 50 MiB, adjust according to your needs
 )
 
+// sha256DigestInfoPrefix is the DER-encoded AlgorithmIdentifier for SHA-256
+// (used to build the PKCS#1 v1.5 block for RSA signatures over a pre-computed
+// digest). It is the ASN.1 SEQUENCE { OID sha-256, NULL } followed by the
+// OCTET STRING tag/length for the 32-byte digest.
+var sha256DigestInfoPrefix = []byte{
+	0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01,
+	0x65, 0x03, 0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20,
+}
+
 type HSMService struct {
 	ctx       *pkcs11.Ctx
 	slot      uint
@@ -209,12 +218,20 @@ func (h *HSMService) Sign(data []byte) ([]byte, error) {
 	}
 
 	// CKK_RSA = 0x00000000, CKK_EC = 0x00000003 (per PKCS#11, as defined in miekg/pkcs11)
+	//
+	// The caller passes a pre-computed SHA-256 digest (32 bytes). The HSM must
+	// NOT hash again, otherwise signatures are over hash(hash(data)) and fail
+	// verification. So we use the "raw" mechanisms:
+	//   - EC: CKM_ECDSA signs the digest directly.
+	//   - RSA: CKM_RSA_PKCS signs the PKCS#1 v1.5 block; we prepend the
+	//     SHA-256 DigestInfo so the HSM signs exactly the digest.
 	var mech *pkcs11.Mechanism
 	switch keyType {
 	case pkcs11.CKK_RSA:
-		mech = pkcs11.NewMechanism(pkcs11.CKM_SHA256_RSA_PKCS, nil)
+		mech = pkcs11.NewMechanism(pkcs11.CKM_RSA_PKCS, nil)
+		data = append(sha256DigestInfoPrefix, data...)
 	case pkcs11.CKK_EC:
-		mech = pkcs11.NewMechanism(pkcs11.CKM_ECDSA_SHA256, nil)
+		mech = pkcs11.NewMechanism(pkcs11.CKM_ECDSA, nil)
 	default:
 		return nil, fmt.Errorf("unsupported key type 0x%04X for key %q (expected RSA or EC)", keyType, h.signLabel)
 	}
