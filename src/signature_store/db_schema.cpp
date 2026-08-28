@@ -66,7 +66,10 @@ CREATE TABLE IF NOT EXISTS signature_records (
     ledger_tx_set_b64 TEXT,
     ledger_status     TEXT    NOT NULL DEFAULT 'PENDING'
         CHECK(ledger_status IN ('PENDING','COMMITTED','FAILED')),
-    integrity_hmac    TEXT
+    integrity_hmac    TEXT,
+    pqc_algo          TEXT,
+    signature_pqc_b64 TEXT,
+    key_fingerprint_pqc TEXT
 );
 )SQL";
 }
@@ -305,6 +308,15 @@ void DbSchema::bootstrap() {
   if (!column_exists("signature_records", "integrity_hmac")) {
     conn_.with_transaction([&](IDbTransaction &tx) {
       tx.exec("ALTER TABLE signature_records ADD COLUMN integrity_hmac TEXT;");
+    });
+  }
+
+  // v8: post-quantum companion signatures (hybrid ECDSA + Dilithium/SPHINCS+).
+  if (!column_exists("signature_records", "pqc_algo")) {
+    conn_.with_transaction([&](IDbTransaction &tx) {
+      tx.exec("ALTER TABLE signature_records ADD COLUMN pqc_algo TEXT;");
+      tx.exec("ALTER TABLE signature_records ADD COLUMN signature_pqc_b64 TEXT;");
+      tx.exec("ALTER TABLE signature_records ADD COLUMN key_fingerprint_pqc TEXT;");
     });
   }
 }
