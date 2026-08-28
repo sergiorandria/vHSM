@@ -27,6 +27,10 @@ type SignatureRecord struct {
 	CreatedAt      int64  `json:"created_at"`
 	TxID           string `json:"tx_id"`
 	BlockNumber    int64  `json:"block_number"`
+	// Submitter is the authenticated client identity (mTLS cert) of the
+	// transaction that anchored this signature. It makes the on-chain record
+	// attributable to a real actor instead of an unverified claim.
+	Submitter string `json:"submitter,omitempty"`
 }
 
 // RecordSignature persists one signature record. The argument order and count
@@ -70,6 +74,11 @@ func (c *SignatureLedger) RecordSignature(
 		// when no commit metadata is available.
 		TxID:        ctx.GetStub().GetTxID(),
 		BlockNumber: 0,
+	}
+
+	// Record the authenticated submitter (mTLS identity) for auditability.
+	if submitter, serr := ctx.GetClientIdentity().GetID(); serr == nil && submitter != "" {
+		rec.Submitter = submitter
 	}
 
 	recJSON, err := json.Marshal(rec)
