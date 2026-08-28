@@ -379,13 +379,30 @@ std::unique_ptr<AppContainer> create_app_container() {
         // LedgerWorker anchors to Fabric asynchronously. The callback
         // updates ledger_tx_id/block/status in the local DB after anchor.
         auto *db = c->db.get();
+        auto *audit = c->audit_log.get();
         c->ledger_worker = std::make_unique<vhsm::ledger::LedgerWorker>(
             *c->ledger_client, *bus,
-            [db](const SignatureRecord &rec,
-                 const vhsm::ledger::LedgerEntry &e) {
+            [db, audit](const SignatureRecord &rec,
+                        const vhsm::ledger::LedgerEntry &e) {
               vhsm::signature_store::db::SignatureRepository repo(
                   *db, *p11_get_token(0));
               repo.update_ledger_fields(rec.record_id, e);
+              // Link the audit trail to the Fabric anchor: each successful
+              // ledger commit writes a hash-chained audit entry that records
+              // the on-chain tx_id/block, so the tamper-evident audit log
+              // proves which signatures were anchored and where. Best-effort:
+              // a failed append must not fail the already-succeeded commit.
+              if (audit) {
+                // Best-effort: a failed append must not fail the already
+                // succeeded ledger commit. Consume the nodiscard result.
+                if (auto st = audit->append(
+                        "LEDGER_ANCHOR:" + rec.record_id,
+                        "tx_id=" + e.tx_id +
+                            " block=" + std::to_string(e.block_number));
+                    !st) {
+                  // intentionally ignored
+                }
+              }
             });
         c->ledger_worker->start();
         // Replay any PENDING records from previous runs.
