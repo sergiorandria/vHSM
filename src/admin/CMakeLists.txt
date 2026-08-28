@@ -69,6 +69,7 @@ target_link_libraries(vhsm_admin
         vhsm_session
         vhsm_notification
         vhsm_signature_store
+        vhsm_metrics
         protobuf::libprotobuf
         gRPC::grpc++
 )

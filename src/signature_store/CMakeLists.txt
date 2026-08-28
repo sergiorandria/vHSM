@@ -24,6 +24,7 @@ target_sources(vhsm_signature_store
     internal/signature_dispatcher_core.cpp
     internal/signature_query_core.cpp
     internal/verification_service_core.cpp
+    ../domain/signing/key_policy.cpp
 )
 
 target_include_directories(vhsm_signature_store
@@ -37,8 +38,15 @@ target_link_libraries(vhsm_signature_store
     vhsm_keystore
     vhsm_persistence
     vhsm_notification
+    vhsm_metrics
     vhsm_crypto_provider
 )
+
+# KeyPolicy JSON (de)serialization uses nlohmann/json; link it when present so
+# the policy/attestation engine builds both with and without the ledger enabled.
+if(nlohmann_json_FOUND)
+    target_link_libraries(vhsm_signature_store PUBLIC nlohmann_json::nlohmann_json)
+endif()
 if(VHSM_LEDGER)
     target_link_libraries(vhsm_signature_store PUBLIC vhsm_ledger)
 endif()

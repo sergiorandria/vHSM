@@ -3,6 +3,7 @@
 
 #include "../core/hsm_instance.h"
 #include "../core/utils.h"
+#include "../metrics/metrics.h"
 #include <chrono>
 #include <thread>
 
@@ -42,6 +43,20 @@ void OutboxPoller::loop() {
 }
 
 void OutboxPoller::poll_once() {
+  // Expose the pending outbox depth for monitoring (alerts on backlog growth).
+  try {
+    auto c = db_.query(
+        "SELECT COUNT(*) FROM event_outbox WHERE status='PENDING';");
+    if (!c.rows_.empty()) {
+      if (auto v = c.get<std::string>(c.rows_[0], 0)) {
+        metrics::Metrics::instance().set(metrics::names::outbox_depth,
+                                         std::stoll(*v));
+      }
+    }
+  } catch (...) {
+    // Metrics are best-effort; never let a counting failure break replay.
+  }
+
   // Fetch up to 32 PENDING outbox rows in one go to avoid holding the DB
   // lock while publishing to the bus (which may block on subscriber I/O).
   auto rs = db_.query(
