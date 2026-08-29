@@ -82,6 +82,16 @@ public:
   std::optional<std::vector<std::optional<std::string>>>
   get_by_id(const std::string &signature_id) const;
 
+  // Recompute the row-integrity HMAC over the current 18 data columns (e.g.
+  // after update_ledger_fields changes the ledger_* columns) and persist it.
+  bool recompute_integrity_hmac(const std::string &signature_id);
+
+  // Verify the stored row-integrity HMAC against the current row. Returns
+  // false if the row is missing or the HMAC does not match (tamper detected);
+  // returns true when there is no HMAC to verify (e.g. key unavailable at
+  // insert time) so callers do not treat an unverifiable row as tampered.
+  bool verify_integrity(const std::string &signature_id) const;
+
 private:
   IDbConnection &conn_;
   vhsm::keystore::Token &token_;

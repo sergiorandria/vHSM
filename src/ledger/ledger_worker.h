@@ -75,6 +75,18 @@ public:
   // Total number of records successfully committed since start() (thread-safe
   // diagnostic counter, reported and reset via notification events).
   long committed_count() const { return committed_count_.load(); }
+  long failed_count() const { return failed_count_.load(); }
+  long pending_count() const { return pending_count_.load(); }
+
+  struct Stats {
+    long committed;
+    long failed;
+    long pending;
+  };
+  Stats stats() const {
+    return {committed_count_.load(), failed_count_.load(),
+            pending_count_.load()};
+  }
 
 private:
   // Runs on a pool worker: submits `record` with exponential backoff and
@@ -99,6 +111,8 @@ private:
   threadpool::CapabilityToken token_;
   std::atomic<bool> running_{false};
   std::atomic<long> committed_count_{0};
+  std::atomic<long> failed_count_{0};
+  std::atomic<long> pending_count_{0};
 };
 
 } // namespace vhsm::ledger

@@ -4,6 +4,7 @@
 
 #include "../core/hsm_instance.h"
 #include "../core/system_hsm_clock.h"
+#include "../log/logger.h"
 #include "../crypto/crypto_engine.h"
 #include "../crypto/evp_pkey_guard.h"
 #include "../signature_store/signature_dispatcher.h"
@@ -140,10 +141,12 @@ void op_end(CK_SESSION_HANDLE h) {
   if (auto s = p11_get_session(h))
     s->opEnd();
 }
-// Fetch session once; nullptr-safe helper for do_* functions.
-static session::Session *op_session(CK_SESSION_HANDLE h) {
-  auto sp = p11_get_session(h);
-  return sp.get();
+// Fetch session once; nullptr-safe helper for do_* functions. Returns an owning
+// shared_ptr so the Session object stays alive for the whole operation even if
+// another thread calls C_CloseSession concurrently (returning a raw pointer
+// from a temporary shared_ptr was a use-after-free).
+static std::shared_ptr<session::Session> op_session(CK_SESSION_HANDLE h) {
+  return p11_get_session(h);
 }
 
 // ----- Encrypt / Decrypt -----
@@ -190,10 +193,23 @@ static RsaEncDecParams resolve_rsa_encdec(CK_MECHANISM_TYPE mech,
 
 CK_RV do_encrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
                  std::vector<u8> &out) {
-  auto *sess = op_session(h);
+  auto sess = op_session(h);
   if (!sess)
     return CKR_SESSION_HANDLE_INVALID;
-  auto prm = read_encdec_params(sess);
+  auto prm = read_encdec_params(sess.get());
+
+  // Symmetric AND asymmetric encrypt must respect key lifecycle state. A
+  // revoked/compromised key must not be usable for encryption (decrypt already
+  // enforced this via p11_key_state_error); otherwise a revoked key could still
+  // protect new ciphertext.
+  {
+    auto o = p11_get_object(h, prm.key);
+    if (!o)
+      return CKR_KEY_HANDLE_INVALID;
+    CK_RV st_rv = p11_key_state_error(o->getKeyState(), /*forSigning=*/false);
+    if (st_rv != CKR_OK)
+      return st_rv;
+  }
 
   if (prm.mech == CKM_AES_GCM) {
     std::vector<u8> key = load_secret_key(h, prm.key);
@@ -218,10 +234,10 @@ CK_RV do_encrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
 
 CK_RV do_decrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
                  std::vector<u8> &out) {
-  auto *sess = op_session(h);
+  auto sess = op_session(h);
   if (!sess)
     return CKR_SESSION_HANDLE_INVALID;
-  auto prm = read_encdec_params(sess);
+  auto prm = read_encdec_params(sess.get());
 
   if (prm.mech == CKM_AES_GCM) {
     std::vector<u8> key = load_secret_key(h, prm.key);
@@ -293,7 +309,7 @@ resolve_ec_mech(CK_MECHANISM_TYPE mech, const std::vector<u8> &data) {
 
 CK_RV do_sign(CK_SESSION_HANDLE h, const std::vector<u8> &data,
               std::vector<u8> &sig) {
-  auto *sess = op_session(h);
+  auto sess = op_session(h);
   if (!sess)
     return CKR_SESSION_HANDLE_INVALID;
   const CK_MECHANISM_TYPE mech = sess->opMech();
@@ -333,7 +349,7 @@ CK_RV do_sign(CK_SESSION_HANDLE h, const std::vector<u8> &data,
 
 CK_RV do_verify(CK_SESSION_HANDLE h, const std::vector<u8> &data,
                 const std::vector<u8> &sig) {
-  auto *sess = op_session(h);
+  auto sess = op_session(h);
   if (!sess)
     return CKR_SESSION_HANDLE_INVALID;
   const CK_MECHANISM_TYPE mech = sess->opMech();
@@ -488,8 +504,14 @@ void publish_verify_event(CK_SESSION_HANDLE h, CK_RV rv,
 
   try {
     notification_bus->publish(event);
-    (void)audit_log->append("verify-" + std::to_string(created_at),
-                            rv == CKR_OK ? "C_VERIFY_OK" : "C_VERIFY_FAILED");
+    auto audit_st = audit_log->append(
+        "verify-" + std::to_string(created_at),
+        rv == CKR_OK ? "C_VERIFY_OK" : "C_VERIFY_FAILED");
+    if (!audit_st) {
+      vhsm::log::global_logger().warning(
+          "audit", "verify audit append failed: CK_RV=" +
+                       std::to_string(static_cast<int>(audit_st.error())));
+    }
   } catch (const std::exception &) {
     // Notification must never raise across the C API boundary.
   }
@@ -562,7 +584,13 @@ void publish_crypto_op_event(
 
   try {
     notification_bus->publish(event);
-    (void)audit_log->append(op_name + "-" + std::to_string(created_at), op_name);
+    auto audit_st = audit_log->append(
+        op_name + "-" + std::to_string(created_at), op_name);
+    if (!audit_st) {
+      vhsm::log::global_logger().warning(
+          "audit", op_name + " audit append failed: CK_RV=" +
+                       std::to_string(static_cast<int>(audit_st.error())));
+    }
   } catch (const std::exception &) {
     // Notification must never raise across the C API boundary.
   }
@@ -641,6 +669,12 @@ static CK_RV dispatch_sign_result(
                              user_label, std::nullopt);
   } catch (const std::exception &) {
     dispatch_ok = false; // DB write failure must not escape the C ABI.
+    // Observability: the failure is swallowed (C ABI returns CKR_DEVICE_ERROR
+    // at most), so surface it here or it is invisible in logs.
+    vhsm::log::global_logger().error(
+        "pkcs11",
+        "dispatch_sign_result: signature persistence/audit/ledger dispatch "
+        "threw; returning CKR_DEVICE_ERROR (signature returned to caller)");
   }
 
   return dispatch_ok ? CKR_OK : CKR_DEVICE_ERROR;

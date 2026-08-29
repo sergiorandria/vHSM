@@ -139,15 +139,32 @@ bool v_SignatureDispatcherCore_M1::v_dispatch(
     return false;
   }
 
-  // WHY no direct publish/ledger submit here: The SIGN_CREATED notification
-  // and the ledger anchor are now written to `event_outbox` inside the same
-  // DB transaction above. A crash between DB commit and bus publish no longer
-  // loses the event — the `OutboxPoller` (or `LedgerRetryQueue` for ledger)
-  // replays `PENDING` rows on the next `C_Initialize` or poll interval. Direct
-  // `v_notification_bus_.publish` and `v_ledger_worker_->submit_record` are
-  // intentionally removed; the poller is the single writer to the bus/ledger.
-  // For backward compat, `C_Sign` still returns `CKR_OK` as soon as the
-  // transaction commits (latency not blocked on Fabric).
+  // Real-time ledger anchor: the signature has now been durably committed to
+  // the local DB (same transaction as the outbox event). Submit it to the
+  // ledger worker so it is anchored to Fabric without waiting for a process
+  // restart or an admin-triggered retry. The outbox still guarantees the
+  // SIGN_CREATED notification is delivered (replayed by OutboxPoller), but
+  // ledger anchoring must not depend on a restart — it is a first-class
+  // outcome of every successful sign operation.
+  if (v_ledger_worker_) {
+    SignatureRecord rec;
+    rec.record_id = signature_id;
+    rec.created_at = input.created_at;
+    rec.slot_id = input.slot_id;
+    rec.token_label = input.token_label;
+    rec.key_id = input.key_id;
+    rec.key_fingerprint = input.key_fingerprint;
+    rec.mechanism = input.mechanism;
+    rec.digest_algorithm = input.digest_algorithm;
+    rec.payload_digest = payload_digest;
+    rec.signature_b64 = signature_b64;
+    rec.payload_size = static_cast<int>(input.sign_result.signature.size());
+    rec.session_handle = input.session_handle;
+    rec.user_label = input.user_label;
+    rec.app_context = input.app_context;
+    rec.ledger_status = "PENDING";
+    v_ledger_worker_->submit_record(rec);
+  }
   return true;
 }
 

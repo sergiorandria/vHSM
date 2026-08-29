@@ -134,7 +134,7 @@ CK_RV C_GenerateKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
     return rv;
 
   auto [handle, ptr] = store.v_create_object<HsmObject>(
-      ObjectType::SECRET_KEY, false, true, false, false);
+      ObjectType::SECRET_KEY, true, true, false, false);
   rv = p11_apply_template(*ptr, pTemplate, ulCount);
   if (rv != CKR_OK) {
     store.v_destroy_object(handle);

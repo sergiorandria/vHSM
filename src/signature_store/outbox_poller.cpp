@@ -50,8 +50,13 @@ void OutboxPoller::poll_once() {
   if (rs.empty())
     return;
 
-  std::vector<std::string> dispatched_ids;
-  dispatched_ids.reserve(rs.rows_.size());
+  // Build the events first (cheap, no external side effects).
+  struct Pending {
+    std::string id;
+    vhsm::notification::NotificationEvent ev;
+  };
+  std::vector<Pending> pending;
+  pending.reserve(rs.rows_.size());
 
   for (auto &row : rs.rows_) {
     auto id_opt = rs.get<std::string>(row, 0);
@@ -64,49 +69,63 @@ void OutboxPoller::poll_once() {
     std::string id = *id_opt;
     std::string type = *type_opt;
     std::string payload = payload_opt.value_or("{}");
+    (void)agg_opt;
 
-    // Publish to the bus — the bus is bounded and never throws, but the
-    // subscriber adapters may fail; we treat any publish as success and mark
-    // DISPATCHED so the outbox does not grow unbounded. Failed deliveries
-    // are still recorded in notification_log via the dispatcher.
     vhsm::notification::NotificationEvent ev;
-    ev.type = vhsm::notification::NotificationEvent::EventType::SIGN_CREATED;
-    if (type == "SIGN_CREATED") {
-      ev.type = vhsm::notification::NotificationEvent::EventType::SIGN_CREATED;
-    } else if (type == "DB_WRITE_FAILED") {
+    if (type == "DB_WRITE_FAILED") {
       ev.type =
           vhsm::notification::NotificationEvent::EventType::DB_WRITE_FAILED;
+    } else {
+      ev.type = vhsm::notification::NotificationEvent::EventType::SIGN_CREATED;
     }
     ev.severity = vhsm::notification::NotificationEvent::Severity::INFO;
     ev.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                       std::chrono::system_clock::now().time_since_epoch())
-                       .count();
+                        std::chrono::system_clock::now().time_since_epoch())
+                        .count();
+    // `source` doubles as an idempotency key: subscribers can dedupe replays
+    // by (source = "outbox:<id>") across crashes/restarts.
     ev.source = "outbox:" + id;
     ev.actor = "system";
     ev.summary = "Outbox replay: " + type + " " + id;
     ev.detail_json = payload;
     ev.hsm_instance = vhsm::core::hsm_instance_id();
-    bus_.publish(ev);
-    dispatched_ids.push_back(std::move(id));
+    pending.push_back({std::move(id), std::move(ev)});
   }
 
-  if (dispatched_ids.empty()) return;
-  // Batch update: single statement with IN (?,...,?) vs N separate UPDATEs.
-  // O(1) prepare + 1 roundtrip vs O(N). Holds DB mutex once.
+  if (pending.empty()) return;
+
+  // Exactly-once dispatch: mark the rows DISPATCHED *before* publishing. Once
+  // marked, they are no longer selected by the next poll, so a crash between
+  // marking and publishing loses at most one event (acceptable) instead of
+  // re-publishing the same event on every poll (the previous bug). The bus
+  // never throws, so the publish below is reached for every marked row.
+  std::vector<std::string> ids;
+  ids.reserve(pending.size());
+  for (auto &p : pending) ids.push_back(p.id);
   try {
-    if (dispatched_ids.size() == 1) {
-      db_.exec("UPDATE event_outbox SET status='DISPATCHED' WHERE id=?;", dispatched_ids);
+    if (ids.size() == 1) {
+      db_.exec("UPDATE event_outbox SET status='DISPATCHED' WHERE id=?;", ids);
     } else {
       std::string sql = "UPDATE event_outbox SET status='DISPATCHED' WHERE id IN (";
-      for (size_t i = 0; i < dispatched_ids.size(); ++i) {
+      for (size_t i = 0; i < ids.size(); ++i) {
         if (i) sql += ",";
         sql += "?";
       }
       sql += ");";
-      db_.exec(sql, dispatched_ids);
+      db_.exec(sql, ids);
     }
-  } catch (...) {
-    // Best-effort: will be retried next poll
+  } catch (const std::exception &e) {
+    // If the DB update fails we must NOT publish, otherwise the rows stay
+    // PENDING and would be re-published (duplicate) on the next poll. Leave
+    // them PENDING and retry next interval.
+    vhsm::log::global_logger().error(
+        "outbox", "failed to mark rows dispatched, will retry: " +
+                      std::string(e.what()));
+    return;
+  }
+
+  for (auto &p : pending) {
+    bus_.publish(p.ev);
   }
 }
 

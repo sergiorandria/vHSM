@@ -22,6 +22,7 @@ struct v_VerificationResult_M1 {
   bool signature_b64_match = false; // Ledger signature matches local signature
   bool key_fingerprint_match =
       false; // Ledger key fingerprint matches local key fingerprint
+  bool integrity_hmac_ok = false; // Local row-integrity HMAC verified
   std::optional<std::string> error_detail;
   std::optional<std::string> ledger_tx_id;
   std::optional<int64_t> ledger_block_num;
