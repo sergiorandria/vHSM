@@ -31,6 +31,14 @@ v_VerificationServiceCore_M1::v_verify(const std::string &signature_id,
   }
   result.local_record_exists = true;
 
+  // Tamper-evidence: verify the row-integrity HMAC over the stored columns.
+  // A mismatch means the row was altered outside the normal insert/update path.
+  result.integrity_hmac_ok =
+      v_signature_repository_.verify_integrity(signature_id);
+  if (!result.integrity_hmac_ok && !result.error_detail) {
+    result.error_detail = "Local record integrity HMAC verification failed";
+  }
+
   // Extract fields from local row (vector of 17 optional<string>).
   // Index mapping:
   // 0: id, 1: created_at, 2: slot_id, 3: token_label, 4: key_id,

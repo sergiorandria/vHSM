@@ -1,0 +1,63 @@
+{
+  "name": "vhsm-real-network-org1",
+  "description": "Hyperledger Gateway connection profile (TEMPLATE). Fill <...> placeholders. Use this (or the equivalent VHSM_LEDGER_* env vars) to point the vHSM C++ LedgerClient / Go REST API at a multi-host network.",
+  "client": {
+    "organization": "Org1",
+    "connectionTimeout": 3000
+  },
+  "organizations": {
+    "Org1": {
+      "mspid": "Org1MSP",
+      "peers": ["peer0.org1"],
+      "certificate": "/etc/vhsmd/organizations/peerOrganizations/<ORG1_DOMAIN>/users/Admin@<ORG1_DOMAIN>/msp/signcerts/cert.pem",
+      "privateKey": "/etc/vhsmd/organizations/peerOrganizations/<ORG1_DOMAIN>/users/Admin@<ORG1_DOMAIN>/msp/keystore/key.pem"
+    }
+  },
+  "peers": {
+    "peer0.org1": {
+      "url": "grpcs://<ORG1_PUBLIC_HOST>:7051",
+      "tlsCACerts": {
+        "pem": "-----BEGIN CERTIFICATE-----\n<ORG1_TLS_CA_PEM>\n-----END CERTIFICATE-----"
+      },
+      "grpcOptions": {
+        "ssl-target-name-override": "peer0.<ORG1_DOMAIN>",
+        "hostnameOverride": "peer0.<ORG1_DOMAIN>"
+      }
+    }
+  },
+  "orderers": {
+    "orderer.university.com": {
+      "url": "grpcs://<ORD_ORG_PUBLIC_HOST>:7050",
+      "tlsCACerts": {
+        "pem": "-----BEGIN CERTIFICATE-----\n<ORD_ORG_TLS_CA_PEM>\n-----END CERTIFICATE-----"
+      },
+      "grpcOptions": {
+        "ssl-target-name-override": "orderer.<ORD_ORG_DOMAIN>"
+      }
+    }
+  },
+  "channels": {
+    "signaturechannel": {
+      "orderers": ["orderer.university.com"],
+      "peers": {
+        "peer0.org1": {
+          "endorsingPeer": true,
+          "chaincodeQuery": true,
+          "ledgerQuery": true,
+          "eventSource": true
+        }
+      }
+    },
+    "canaltest": {
+      "orderers": ["orderer.university.com"],
+      "peers": {
+        "peer0.org1": {
+          "endorsingPeer": true,
+          "chaincodeQuery": true,
+          "ledgerQuery": true,
+          "eventSource": true
+        }
+      }
+    }
+  }
+}

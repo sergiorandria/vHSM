@@ -211,7 +211,7 @@ debug: false
 crlsizelimit: 512000
 
 tls:
-  enabled: false
+  enabled: true
 
 ca:
   name: ca-${SHORTNAME}
@@ -326,10 +326,15 @@ EOF
 dn: ou=users,${LDAP_BASE_DN}
 objectClass: organizationalUnit
 ou: users
+
+dn: ou=groups,${LDAP_BASE_DN}
+objectClass: organizationalUnit
+ou: groups
 EOF
 
     local ENTRY_FILE="${LDAP_DIR}/02-identities.ldif"
     > "$ENTRY_FILE"
+    local admin_members="" prof_members="" etu_members=""
     IFS=';' read -ra ID_ARRAY <<< "$IDENTITIES"
     for entry in "${ID_ARRAY[@]}"; do
         [ -z "$entry" ] && continue
@@ -347,7 +352,60 @@ businessCategory: ${UID_ROLE}
 userPassword: ${UID_PASS}
 
 EOF
+        # Map each provisioned identity to the application role groups the Go
+        # API RBAC expects (cn = admin / professeurs / etudiants). Without
+        # these group memberships, lookupRoles() returns nothing and every
+        # request gets 403.
+        local dn="uid=${UID_NAME},ou=users,${LDAP_BASE_DN}"
+        case "$UID_ROLE" in
+            admin)
+                admin_members="${admin_members}member: ${dn}
+"
+                prof_members="${prof_members}member: ${dn}
+"
+                ;;
+            professeur|prof)
+                prof_members="${prof_members}member: ${dn}
+"
+                ;;
+            etudiant|etudiants|student|client)
+                etu_members="${etu_members}member: ${dn}
+"
+                ;;
+        esac
     done
+
+    # ---- Groupes LDAP (groupOfNames) : requis par le RBAC de l'API Go ----
+    # L'API résout les rôles applicatifs via l'appartenance à des groupes dont
+    # le cn vaut exactement admin / professeurs / etudiants (voir roles.go).
+    # Avant ce correctif, aucun groupe n'était créé : lookupRoles() renvoyait []
+    # et toutes les requêtes échouaient avec 403.
+    local GROUP_FILE="${LDAP_DIR}/03-groups.ldif"
+    > "$GROUP_FILE"
+    if [ -n "$admin_members" ]; then
+        cat << EOF >> "$GROUP_FILE"
+dn: cn=admin,ou=groups,${LDAP_BASE_DN}
+objectClass: groupOfNames
+cn: admin
+${admin_members}
+EOF
+    fi
+    if [ -n "$prof_members" ]; then
+        cat << EOF >> "$GROUP_FILE"
+dn: cn=professeurs,ou=groups,${LDAP_BASE_DN}
+objectClass: groupOfNames
+cn: professeurs
+${prof_members}
+EOF
+    fi
+    if [ -n "$etu_members" ]; then
+        cat << EOF >> "$GROUP_FILE"
+dn: cn=etudiants,ou=groups,${LDAP_BASE_DN}
+objectClass: groupOfNames
+cn: etudiants
+${etu_members}
+EOF
+    fi
 }
 
 # Convertit un domaine (org1.example.com) en base DN LDAP (dc=org1,dc=example,dc=com)

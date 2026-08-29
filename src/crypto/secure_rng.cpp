@@ -19,17 +19,23 @@ namespace vhsm::crypto {
 SecureRNG::SecureRNG() {
   std::lock_guard<std::mutex> lock(engine_mutex);
 
-  // Lock this object in RAM so the DRBG state (key, V) never swaps to disk.
-#ifdef _WIN32
-  ::VirtualLock(this, sizeof(SecureRNG));
-#else
-  ::mlock(this, sizeof(SecureRNG));
-#endif
-
   // Blocking initialization at boot safely
   std::vector<uint8_t> boot_seed = get_system_entropy("/dev/random");
   engine = std::make_unique<CTR_DRBG_AES256>(boot_seed);
   vhsm::scrypto::cleanse(boot_seed.data(), boot_seed.size());
+
+  // Lock this object AND the heap-allocated DRBG state in RAM so the key/V
+  // material never swaps to disk. The engine is allocated via unique_ptr, so
+  // mlock(this) alone does not cover it — pin the engine block explicitly.
+  // mlock may fail in containers with a zero MEMLOCK rlimit; we treat that as
+  // best-effort (the RNG still works, just not page-locked).
+#ifdef _WIN32
+  ::VirtualLock(this, sizeof(SecureRNG));
+  if (engine) ::VirtualLock(engine.get(), sizeof(CTR_DRBG_AES256));
+#else
+  ::mlock(this, sizeof(SecureRNG));
+  if (engine) ::mlock(engine.get(), sizeof(CTR_DRBG_AES256));
+#endif
 }
 
 void SecureRNG::bytes(uint8_t *out_buffer, size_t size) {
@@ -64,8 +70,10 @@ void SecureRNG::force_reseed() {
 
 SecureRNG::~SecureRNG() {
 #ifdef _WIN32
+  if (engine) ::VirtualUnlock(engine.get(), sizeof(CTR_DRBG_AES256));
   ::VirtualUnlock(this, sizeof(SecureRNG));
 #else
+  if (engine) ::munlock(engine.get(), sizeof(CTR_DRBG_AES256));
   ::munlock(this, sizeof(SecureRNG));
 #endif
 }

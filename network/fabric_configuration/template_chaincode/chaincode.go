@@ -3,12 +3,27 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"time"
 
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
 )
+
+// clientID returns the authenticated submitter identity derived from the
+// transaction's x509 certificate (Fabric mTLS). Every state-changing
+// transaction must record this so the on-chain claims are attributable to a
+// real, authenticated actor rather than an arbitrary caller-supplied string.
+// It fails the transaction when the client identity is unavailable (i.e. the
+// transaction was not submitted over an authenticated channel).
+func clientID(ctx contractapi.TransactionContextInterface) (string, error) {
+	id, err := ctx.GetClientIdentity().GetID()
+	if err != nil || id == "" {
+		return "", fmt.Errorf("identité du client introuvable : la transaction doit être soumise via un canal authentifié (mTLS) : %w", err)
+	}
+	return id, nil
+}
 
 // ThesisContract regroupe les fonctions du smart contract (CRUD basique).
 type ThesisContract struct {
@@ -113,6 +128,9 @@ type JuryGrade struct {
 	Grade       float64   `json:"grade"`
 	Comment     string    `json:"comment,omitempty" metadata:",optional"`
 	SubmittedAt time.Time `json:"submittedAt"`
+	// SubmittedBy is the authenticated client identity (from the mTLS cert),
+	// recorded so the grade is attributable and not an unverified claim.
+	SubmittedBy string `json:"submittedBy,omitempty" metadata:",optional"`
 }
 
 // PvSignature is one jury member's signature over the shared PV hash
@@ -371,6 +389,20 @@ func (c *ThesisContract) SubmitJuryGrade(
 	if err != nil {
 		return fmt.Errorf("note invalide '%s' : %w", grade, err)
 	}
+	// Reject non-finite and out-of-range grades: ParseFloat happily accepts
+	// "NaN"/"+Inf"/"-Inf" and any magnitude, which would corrupt the averaged
+	// final grade and the notarization gate.
+	if math.IsNaN(gradeValue) || math.IsInf(gradeValue, 0) {
+		return fmt.Errorf("note invalide '%s' : NaN ou valeur infinie", grade)
+	}
+	if gradeValue < 0 || gradeValue > 20 {
+		return fmt.Errorf("note hors bornes (0..20) : %v", gradeValue)
+	}
+
+	submitter, err := clientID(ctx)
+	if err != nil {
+		return err
+	}
 
 	txTimestamp, err := ctx.GetStub().GetTxTimestamp()
 	if err != nil {
@@ -383,6 +415,7 @@ func (c *ThesisContract) SubmitJuryGrade(
 		Grade:       gradeValue,
 		Comment:     comment,
 		SubmittedAt: submittedAt,
+		SubmittedBy: submitter,
 	})
 
 	// All jury members have now graded — compute the final grade and
@@ -416,6 +449,9 @@ func (c *ThesisContract) SignPv(
 	hashPv string,
 	signature string,
 ) error {
+	if _, err := clientID(ctx); err != nil {
+		return err
+	}
 	thesis, err := c.getThesis(ctx, thesisID)
 	if err != nil {
 		return err
@@ -530,6 +566,9 @@ func (c *ThesisContract) UpdateAdministrative(
 	thesisID string,
 	updatedDataJSON string,
 ) error {
+	if _, err := clientID(ctx); err != nil {
+		return err
+	}
 	thesis, err := c.getThesis(ctx, thesisID)
 	if err != nil {
 		return err
@@ -563,6 +602,9 @@ func (c *ThesisContract) DeleteThesis(
 	ctx contractapi.TransactionContextInterface,
 	thesisID string,
 ) error {
+	if _, err := clientID(ctx); err != nil {
+		return err
+	}
 	exists, err := c.thesisExists(ctx, thesisID)
 	if err != nil {
 		return err

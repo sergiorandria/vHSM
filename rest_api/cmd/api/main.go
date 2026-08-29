@@ -273,13 +273,27 @@ func main() {
 
 	r.Use(func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
-		if origin != "" {
-			c.Header("Access-Control-Allow-Origin", origin)
+
+		// CORS allow-list: only echo a requesting origin when it is explicitly
+		// permitted (CORS_ALLOWED_ORIGINS, comma-separated). Reflecting an
+		// arbitrary Origin together with Allow-Credentials lets any malicious
+		// site drive authenticated cross-origin requests, so unknown origins get
+		// no CORS headers at all.
+		allowed := strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",")
+		allowedOrigin := ""
+		for _, a := range allowed {
+			if a = strings.TrimSpace(a); a != "" && a == origin {
+				allowedOrigin = a
+				break
+			}
+		}
+		if allowedOrigin != "" {
+			c.Header("Access-Control-Allow-Origin", allowedOrigin)
+			c.Header("Access-Control-Allow-Credentials", "true")
 		}
 
 		c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		c.Header("Access-Control-Allow-Credentials", "true")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return

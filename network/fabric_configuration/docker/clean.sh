@@ -5,7 +5,7 @@
 #   --keep-images  do not prune Fabric Docker images (faster re-up)
 #
 # SAFETY:
-# - Must be run from network/fabric_configuration/fabric-network (checks for docker-compose.yaml + organizations/)
+# - Must be run from network/fabric_configuration/docker (checks for docker-compose.yaml + organizations/)
 # - Never touches /etc/vhsmd, ledger data outside this subtree, or host files
 # - Uses `docker compose -f <file> down -v` with explicit file, not bare `docker rm -f $(docker ps -aq)`
 # - Requires confirmation unless --yes
@@ -33,7 +33,7 @@ done
 
 # --- Safety checks ---
 if [[ ! -f "$COMPOSE_FILE" ]]; then
-  echo "ERROR: $COMPOSE_FILE not found. Run this script from network/fabric_configuration/fabric-network/" >&2
+  echo "ERROR: $COMPOSE_FILE not found. Run this script from network/fabric_configuration/docker/" >&2
   exit 1
 fi
 if [[ ! -d "$ORGS_DIR" && ! -d "$CHANNEL_ARTIFACTS" && ! -d "$PEER_DATA_DIR" ]]; then
