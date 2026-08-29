@@ -1,6 +1,6 @@
 # vHSM Mobile — Direct Push Notifications
 
-React Native (Expo SDK 52) app that surfaces **vHSM thesis & HSM events directly on the phone** as system notifications. No polling-only web view — real `FCM` push via `expo-notifications`.
+React Native (Expo SDK 54) app that surfaces **vHSM thesis & HSM events directly on the phone** as system notifications. No polling-only web view — real `FCM` push via `expo-notifications`.
 
 ## Features
 
@@ -19,14 +19,25 @@ npm install
 # point at your rest_api (or set EXPO_PUBLIC_API_URL)
 echo "EXPO_PUBLIC_API_URL=http://10.0.2.2:8080" > .env
 npx expo start
-# scan QR with Expo Go (Android) or Camera (iOS)
+# scan QR with Expo Go (Android) or Camera (iOS) — see Expo Go limitation below
 ```
 
-Build APK/AAB:
+> **SDK 53+ — Expo Go limitation:** Remote push (`FCM`) was removed from Expo Go. Your app **still works in Expo Go** via polling + local `scheduleLocalNotification` (tray alerts every 30s), but for true background `FCM` push use a **development build**:
+> ```bash
+> # One-time: install dev client on device/emulator
+> npx expo prebuild
+> npx expo run:android   # or run:ios — installs com.vhsm.mobile dev build
+> # or EAS:
+> eas build --profile development --platform android
+> npx expo start --dev-client
+> ```
+> The app auto-detects `Constants.appOwnership === 'expo'` and skips remote token in Go, falling back to local notifications.
+
+Build APK/AAB (production):
 
 ```bash
-npm run build:android   # EAS
-npx expo prebuild && npx expo run:android  # bare
+npm run build:android   # EAS production
+eas build --profile preview --platform android
 ```
 
 ## Push setup

@@ -16,6 +16,16 @@ Notifications.setNotificationHandler({
 });
 
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
+  // SDK 53+ : remote push removed from Expo Go — detect and degrade gracefully
+  const isExpoGo = Constants.appOwnership === 'expo';
+  if (isExpoGo) {
+    console.log(
+      '[push] Running in Expo Go — remote push (FCM) is disabled since SDK 53. ' +
+        'Local polling + scheduleLocalNotification will still show tray alerts. ' +
+        'For true FCM push use a development build: npx expo run:android / eas build.'
+    );
+  }
+
   if (!Device.isDevice) {
     console.log('Must use physical device for Push Notifications');
     return null;
@@ -32,6 +42,12 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     return null;
   }
 
+  // In Expo Go, skip remote token — local notifications via polling are used
+  if (isExpoGo) {
+    console.log('[push] Expo Go: skipping remote token, using local polling');
+    return null;
+  }
+
   const projectId = Constants.expoConfig?.extra?.eas?.projectId;
   let token: string | null = null;
   try {
@@ -41,9 +57,13 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     token = t.data;
   } catch (e) {
     console.log('Expo push token failed, trying FCM:', e);
-    // Fallback to native device push token (FCM)
-    const t = await Notifications.getDevicePushTokenAsync();
-    token = t.data as unknown as string;
+    try {
+      const t = await Notifications.getDevicePushTokenAsync();
+      token = t.data as unknown as string;
+    } catch (e2) {
+      console.log('[push] FCM token also unavailable (Expo Go):', e2);
+      return null;
+    }
   }
 
   if (Platform.OS === 'android') {
