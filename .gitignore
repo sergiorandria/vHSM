@@ -14,7 +14,8 @@ test_*
 # .clangd is kept (project clangd config for vhsm-secure-crypto)
 !.clangd
 .astylerc
-.clang-format
+# .clang-format is kept — professional formatting standard (C++23, 100 cols, 2-space)
+!.clang-format
 build/
 build2/
 build3/

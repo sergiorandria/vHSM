@@ -44,34 +44,58 @@ AppContainer::~AppContainer() = default;
 AppContainer::AppContainer(AppContainer &&) noexcept = default;
 AppContainer &AppContainer::operator=(AppContainer &&) noexcept = default;
 
-// In-memory store for tests / fallback when no backend is configured.
-// Keeps the port usable without requiring DB or Fabric.
-class InMemoryStore final : public vhsm::domain::signing::ISignatureStore {
+// =============================================================================
+// In-memory store — STRICTLY for tests / explicit opt-in.
+// Production must use a persistent backend (DB or ledger). Instantiation is
+// gated by allow_inmemory() → VHSM_ALLOW_INMEMORY=1 or VHSM_TEST, otherwise
+// create_app_container() throws fail-closed (no silent fallback).
+// =============================================================================
+static bool
+allow_inmemory()
+{
+  if (auto* v = std::getenv("VHSM_ALLOW_INMEMORY"))
+    return std::string(v) == "1";
+#ifdef VHSM_TEST
+  return true;
+#endif
+  return false;
+}
+
+class InMemoryStore final : public vhsm::domain::signing::ISignatureStore
+{
 public:
-  std::optional<std::string> store(const SignatureRecord &rec) override {
+  std::optional<std::string>
+  store(const SignatureRecord& rec) override
+  {
     std::lock_guard<std::mutex> lk(mu_);
-    auto it = std::find_if(data_.begin(), data_.end(), [&](const auto &r) {
-      return r.record_id == rec.record_id;
-    });
+    auto it = std::find_if(data_.begin(), data_.end(),
+                           [&](const auto& r) { return r.record_id == rec.record_id; });
     if (it != data_.end())
       return it->record_id;
+
     data_.push_back(rec);
     return rec.record_id;
   }
-  std::optional<SignatureRecord> load(const std::string &id) const override {
+
+  std::optional<SignatureRecord>
+  load(const std::string& id) const override
+  {
     std::lock_guard<std::mutex> lk(mu_);
-    for (auto &r : data_)
+    for (auto& r : data_)
       if (r.record_id == id)
         return r;
     return std::nullopt;
   }
-  std::vector<SignatureRecord> list() const override {
+
+  std::vector<SignatureRecord>
+  list() const override
+  {
     std::lock_guard<std::mutex> lk(mu_);
     return data_;
   }
 
 private:
-  mutable std::mutex mu_;
+  mutable std::mutex         mu_;
   std::vector<SignatureRecord> data_;
 };
 
@@ -295,18 +319,23 @@ std::unique_ptr<AppContainer> create_app_container() {
       } catch (const std::exception &e) {
         VHSM_LOG_ERROR(*c->logger, "audit",
                        "hash-chained audit unavailable: " << e.what());
-        c->audit_log = std::make_unique<P11AuditLog>();
+        c->audit_log = std::make_unique<P11AuditLog>(audit_path + ".fallback");
       }
     } else {
       VHSM_LOG_WARNING(*c->logger, "audit",
-                       "no KEK — audit records are NOT hash-chained");
-      c->audit_log = std::make_unique<P11AuditLog>();
+                       "no KEK — audit records are file-backed fallback, not hash-chained");
+      auto audit_path = c->db_path + ".audit";
+      c->audit_log = std::make_unique<P11AuditLog>(audit_path + ".fallback");
     }
   }
 
   auto *token = p11_get_token(0);
   if (!token) {
-    // No token yet: still provide an in-memory store so tests can proceed.
+    if (!allow_inmemory()) {
+      throw std::runtime_error(
+          "VHSM: no token present and no persistent store configured — "
+          "refusing to use InMemoryStore without VHSM_ALLOW_INMEMORY=1");
+    }
     c->store = std::make_unique<InMemoryStore>();
     return c;
   }
@@ -455,9 +484,17 @@ std::unique_ptr<AppContainer> create_app_container() {
       c->store = std::make_unique<vhsm::domain::signing::FabricStoreAdapter>(
           *c->ledger_client);
     } else {
+      if (!allow_inmemory()) {
+        throw std::runtime_error(
+            "VHSM: ledger backend without ledger_client — refusing InMemoryStore without VHSM_ALLOW_INMEMORY=1");
+      }
       c->store = std::make_unique<InMemoryStore>();
     }
 #else
+    if (!allow_inmemory()) {
+      throw std::runtime_error(
+          "VHSM: ledger backend requested but VHSM_LEDGER not compiled — refusing InMemoryStore");
+    }
     c->store = std::make_unique<InMemoryStore>();
 #endif
   } else {
@@ -465,6 +502,10 @@ std::unique_ptr<AppContainer> create_app_container() {
       c->store = std::make_unique<vhsm::domain::signing::DbStoreAdapter>(
           *c->db, *token);
     } else {
+      if (!allow_inmemory()) {
+        throw std::runtime_error(
+            "VHSM: DB backend without DB connection — refusing InMemoryStore without VHSM_ALLOW_INMEMORY=1");
+      }
       c->store = std::make_unique<InMemoryStore>();
     }
   }
