@@ -96,6 +96,9 @@ message SignatureDetail {
   int64 ledger_block_num = 14;
   string ledger_tx_time = 15;
   string ledger_status = 16;  // PENDING / COMMITTED / FAILED
+  string pqc_algo = 17;       // DILITHIUM3 / SPHINCS_SHA256 (hybrid)
+  string signature_pqc_b64 = 18;
+  string key_fingerprint_pqc = 19;
 }
 
 message SignatureList {
@@ -186,6 +189,29 @@ message NotificationLogList {
   repeated NotificationLogEntry entries = 1;
 }
 
+// Prometheus exposition text for the daemon's runtime metrics (ledger
+// committed/failed/pending, outbox depth, notification delivered/failed,
+// audit chain length, ...). Scrape with a Prometheus server or curl.
+message MetricsResponse {
+  string prometheus_text = 1;
+}
+
+// Result of a full integrity verification pass (F3: audit↔ledger proof).
+message IntegrityReport {
+  bool ok = 1;                          // overall: no tamper + ledger matches
+  int64 records_checked = 2;            // signature rows walked
+  int64 rows_integrity_ok = 3;          // rows whose HMAC verified
+  int64 rows_integrity_failed = 4;      // rows whose HMAC did NOT verify
+  repeated string integrity_failures = 5;
+  bool audit_chain_ok = 6;              // local audit hash-chain intact
+  string audit_chain_error = 7;         // detail when audit_chain_ok == false
+  int64 committed_checked = 8;          // COMMITTED rows cross-checked vs ledger
+  int64 ledger_cross_ok = 9;            // rows whose ledger tx matched
+  int64 ledger_cross_failed = 10;       // rows whose ledger tx mismatched/missing
+  repeated string ledger_mismatches = 11;
+  string audit_tail_anchored = 12;      // latest anchored audit tail hash (ledger)
+}
+
 service HsmAdmin {
   rpc AdminLogin(AdminLoginRequest) returns (AdminLoginResponse);
   // Backup/Restore the token's durable state (KEK, flags, counters) into an
@@ -207,4 +233,13 @@ service HsmAdmin {
   rpc ListSubscribers(Empty) returns (SubscriberList);
   rpc RemoveSubscriber(SubscriberIdRequest) returns (SubscriberResponse);
   rpc QueryNotificationLog(NotificationLogQuery) returns (NotificationLogList);
+
+  // Runtime metrics in Prometheus exposition format.
+  rpc Metrics(Empty) returns (MetricsResponse);
+
+  // Full integrity verification: re-walk the row-integrity HMAC chain for every
+  // signature record, verify the local audit hash-chain, and cross-check every
+  // COMMITTED row's ledger tx_id against the Fabric ledger. This is the
+  // externally-verifiable audit↔ledger proof (F3).
+  rpc VerifyIntegrity(Empty) returns (IntegrityReport);
 }

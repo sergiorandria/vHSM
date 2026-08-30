@@ -7,6 +7,8 @@
 #include "../log/logger.h"
 #include "../crypto/crypto_engine.h"
 #include "../crypto/evp_pkey_guard.h"
+#include "../crypto/fips.h"
+#include "../domain/signing/key_policy.h"
 #include "../signature_store/signature_dispatcher.h"
 
 #include <openssl/evp.h>
@@ -45,6 +47,34 @@ extern "C" {
 namespace vhsm::pkcs11 {
 
 namespace {
+
+// Parse a CKA_VHSM_ATTESTATION_COUNT attribute value as an unsigned count.
+// Applications may store it either as an ASCII decimal string or as a raw
+// little-endian 64-bit integer; we accept both so the policy gate is robust.
+size_t parse_attr_count(const std::vector<u8> &v) {
+  if (v.empty())
+    return 0;
+  bool all_digits = true;
+  for (u8 b : v) {
+    if (b < '0' || b > '9') {
+      all_digits = false;
+      break;
+    }
+  }
+  if (all_digits) {
+    try {
+      return static_cast<size_t>(std::stoull(std::string(v.begin(), v.end())));
+    } catch (...) {
+      return 0;
+    }
+  }
+  // Raw little-endian integer (up to 8 bytes).
+  uint64_t val = 0;
+  for (size_t i = 0; i < v.size() && i < 8; ++i) {
+    val |= static_cast<uint64_t>(v[i]) << (8 * i);
+  }
+  return static_cast<size_t>(val);
+}
 
 // OAEP/MGF1 mechanism -> OpenSSL digest name.
 const char *oaep_md_name(CK_MECHANISM_TYPE m) {
@@ -198,6 +228,10 @@ CK_RV do_encrypt(CK_SESSION_HANDLE h, const std::vector<u8> &in,
     return CKR_SESSION_HANDLE_INVALID;
   auto prm = read_encdec_params(sess.get());
 
+  // FIPS mode: reject non-approved mechanisms (fail closed).
+  if (vhsm::crypto::fips_mode() && !vhsm::crypto::mechanism_approved(prm.mech))
+    return CKR_MECHANISM_INVALID;
+
   // Symmetric AND asymmetric encrypt must respect key lifecycle state. A
   // revoked/compromised key must not be usable for encryption (decrypt already
   // enforced this via p11_key_state_error); otherwise a revoked key could still
@@ -307,12 +341,18 @@ resolve_ec_mech(CK_MECHANISM_TYPE mech, const std::vector<u8> &data) {
   return p11_hash(mech_to_hash(mech), data);
 }
 
+// Forward declaration: defined later in this translation unit.
+std::string mech_to_str(CK_MECHANISM_TYPE mech);
+
 CK_RV do_sign(CK_SESSION_HANDLE h, const std::vector<u8> &data,
-              std::vector<u8> &sig) {
+               std::vector<u8> &sig) {
   auto sess = op_session(h);
   if (!sess)
     return CKR_SESSION_HANDLE_INVALID;
   const CK_MECHANISM_TYPE mech = sess->opMech();
+  // FIPS mode: reject non-approved mechanisms (fail closed).
+  if (vhsm::crypto::fips_mode() && !vhsm::crypto::mechanism_approved(mech))
+    return CKR_MECHANISM_INVALID;
   const CK_OBJECT_HANDLE k = sess->opKey();
   {
     auto o = p11_get_object(h, k);
@@ -321,6 +361,59 @@ CK_RV do_sign(CK_SESSION_HANDLE h, const std::vector<u8> &data,
     CK_RV st_rv = p11_key_state_error(o->getKeyState(), /*forSigning=*/true);
     if (st_rv != CKR_OK)
       return st_rv;
+
+    // Policy/attestation gate: if the key carries a CKA_VHSM_POLICY document,
+    // evaluate it (who/when/mechanism/quorum) and fail closed when unsatisfied.
+    if (auto policy_attr = o->findAttribute(CKA_VHSM_POLICY); policy_attr) {
+      std::string policy_json(policy_attr->begin(), policy_attr->end());
+      if (!policy_json.empty()) {
+        vhsm::domain::signing::KeyPolicy policy;
+        try {
+          policy = vhsm::domain::signing::KeyPolicy::from_json(policy_json);
+        } catch (const std::exception &e) {
+          vhsm::log::global_logger().error(
+              "crypto", std::string("sign policy parse failed, denying sign: ") +
+                            e.what());
+          return CKR_ACTION_PROHIBITED;
+        }
+        // Actor = the authenticated session user label ("user-N"), if any.
+        std::string actor = "UNKNOWN";
+        {
+          CK_USER_TYPE ut = sess ? sess->getUserType() : CKU_INVALID;
+          if (ut != CKU_INVALID)
+            actor = "user-" + std::to_string(static_cast<int>(ut));
+        }
+        const std::string mech_str = mech_to_str(mech);
+        const int64_t now_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch())
+                .count();
+        // Quorum source: prefer the chaincode attestation registry when the
+        // ledger client is available, else fall back to the locally-mirrored
+        // CKA_VHSM_ATTESTATION_COUNT attribute.
+        size_t attestation_count = 0;
+        if (auto att = o->findAttribute(CKA_VHSM_ATTESTATION_COUNT); att) {
+          attestation_count = parse_attr_count(*att);
+        }
+        bool use_chaincode = policy.min_attestations > 0 && g_ledgerClient;
+        if (use_chaincode) {
+          auto vr = g_ledgerClient->verify_policy(
+              p11_key_id(o.get()), actor, mech_str, now_ms);
+          if (!vr.ok) {
+            vhsm::log::global_logger().warning(
+                "crypto", "sign denied by ledger policy: " + vr.reason);
+            return CKR_ACTION_PROHIBITED;
+          }
+        } else {
+          auto ev = policy.evaluate(actor, mech_str, now_ms, attestation_count);
+          if (!ev.ok) {
+            vhsm::log::global_logger().warning(
+                "crypto", "sign denied by key policy: " + ev.reason);
+            return CKR_ACTION_PROHIBITED;
+          }
+        }
+      }
+    }
   }
   vhsm::crypto::EvpPkeyGuard pk_guard(load_asym_key(h, k));
   auto *pk = pk_guard.get();

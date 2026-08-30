@@ -1,0 +1,203 @@
+# =============================================================================
+# vHSM — Professional clang-format (C++23, clang-format 17+)
+# =============================================================================
+# Design goals:
+#   • Deterministic, review-friendly diffs (left pointer alignment, no bin-packing)
+#   • 2-space indent — matches existing codebase (composition_root, core, pkcs11)
+#   • 100-column limit — modern widescreen, keeps HSM crypto lines readable
+#   • Google-based but stricter: braces always broken, includes sorted, concepts
+#     and requires-clauses on their own lines.
+# =============================================================================
+Language: Cpp
+BasedOnStyle: Google
+Standard: Latest
+
+# --- Layout ------------------------------------------------------------------
+ColumnLimit: 100
+TabWidth: 2
+IndentWidth: 2
+UseTab: Never
+IndentCaseLabels: true
+IndentCaseBlocks: false
+IndentGotoLabels: false
+IndentPPDirectives: AfterHash
+IndentWrappedFunctionNames: false
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+ContinuationIndentWidth: 4
+NamespaceIndentation: None
+AccessModifierOffset: -1
+FixNamespaceComments: true
+NamespaceMacros: ["TEST", "TEST_F", "TEST_P", "TYPED_TEST"]
+
+# --- Line breaking -----------------------------------------------------------
+DeriveLineEnding: false
+UseCRLF: false
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel: false
+  AfterClass: true
+  AfterControlStatement: Always
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterStruct: true
+  AfterUnion: true
+  AfterExternBlock: true
+  BeforeCatch: true
+  BeforeElse: true
+  BeforeLambdaBody: false
+  BeforeWhile: true
+  IndentBraces: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: Empty
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakAfterDefinitionReturnType: None
+AlwaysBreakAfterReturnType: None
+AlwaysBreakBeforeMultilineStrings: true
+AlwaysBreakTemplateDeclarations: Yes
+BinPackArguments: false
+BinPackParameters: false
+BreakAfterJavaFieldAnnotations: false
+BreakBeforeBinaryOperators: None
+BreakBeforeConceptDeclarations: Always
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeColon
+BreakInheritanceList: BeforeColon
+BreakStringLiterals: true
+CompactNamespaces: false
+SortUsingDeclarations: true
+SpaceBeforeParens: ControlStatements
+SpaceBeforeCaseColon: false
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeParensOptions:
+  AfterControlStatements: true
+  AfterForeachMacros: true
+  AfterFunctionDefinitionName: false
+  AfterFunctionDeclarationName: false
+  AfterIfMacros: true
+  AfterOverloadedOperator: false
+  BeforeNonEmptyParentheses: false
+SpaceInEmptyBlock: false
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 2
+SpacesInAngles: Never
+SpacesInConditionalStatement: false
+SpacesInContainerLiterals: false
+SpacesInCStyleCastParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+# --- Alignment (readability over density) ------------------------------------
+AlignAfterOpenBracket: Align
+AlignArrayOfStructures: Left
+AlignConsecutiveAssignments:
+  Enabled: false
+  AcrossEmptyLines: false
+  AcrossComments: false
+  AlignCompound: false
+  AlignFunctionPointers: false
+AlignConsecutiveBitFields:
+  Enabled: false
+AlignConsecutiveDeclarations:
+  Enabled: false
+AlignConsecutiveMacros:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: true
+AlignEscapedNewlines: Left
+AlignOperands: Align
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 0
+
+# --- Pointer & reference style — left (modern C++) ---------------------------
+DerivePointerAlignment: false
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# --- Templates, lambdas, concepts --------------------------------------------
+RequiresClausePosition: OwnLine
+RequiresExpressionIndentation: Keyword
+SpaceAroundPointerQualifiers: Default
+
+# --- Includes — deterministic, grouped ---------------------------------------
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^<.*\.h>$'
+    Priority: 1
+    SortPriority: 0
+    CaseSensitive: false
+  - Regex: '^<.*>$'
+    Priority: 2
+    SortPriority: 0
+    CaseSensitive: false
+  - Regex: '^".*\.h"$'
+    Priority: 3
+    SortPriority: 0
+    CaseSensitive: false
+  - Regex: '.*'
+    Priority: 4
+    SortPriority: 0
+    CaseSensitive: false
+IncludeIsMainRegex: '([-_](test|mock))?$'
+
+# --- Modern C++ hygiene ------------------------------------------------------
+Cpp11BracedListStyle: true
+SpaceAfterCStyleCast: false
+SpaceAfterLogicalNot: false
+SpaceAfterTemplateKeyword: true
+PenaltyBreakAssignment: 50
+PenaltyBreakBeforeFirstCallParameter: 80
+PenaltyBreakComment: 300
+PenaltyBreakString: 1000
+PenaltyBreakTemplateDeclaration: 10
+PenaltyExcessCharacter: 1000000
+PenaltyReturnTypeOnItsOwnLine: 60
+
+# --- Comment handling ---------------------------------------------------------
+CommentPragmas: '^ IWYU pragma:'
+
+# --- Disable formatting inside raw string / macro-heavy regions --------------
+# Use // clang-format off / on in firmware/third_party if needed
+
+---
+# Proto files (keep 2-space indent, same column limit)
+Language: Proto
+BasedOnStyle: Google
+ColumnLimit: 100
+TabWidth: 2
+IndentWidth: 2
+UseTab: Never
+AllowShortFunctionsOnASingleLine: Empty
+SpacesInAngles: Never
+
+---
+# JavaScript / TypeScript (web/ React/Vite)
+Language: JavaScript
+BasedOnStyle: Google
+ColumnLimit: 100
+TabWidth: 2
+IndentWidth: 2
+UseTab: Never
+
+---
+Language: Json
+BasedOnStyle: Google
+ColumnLimit: 100
+TabWidth: 2
+IndentWidth: 2
+
+---
+Language: TableGen
+DisableFormat: true

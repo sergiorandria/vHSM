@@ -1,10 +1,12 @@
 #include "ctr_drbg_aes256.h"
 #include "../core/error.h"
 #include "secure_rng.h"
+#include "fips.h"
 #include "vhsm/scrypto/rng.h"
 #include "vhsm/scrypto/mem.h"
 
 #include <cstring>
+#include <cstdlib>
 #include <fstream>
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -23,6 +25,37 @@
 #endif
 
 namespace vhsm::crypto {
+
+// Hardware RNG (RDRAND) entropy binding. FIPS mode requires an approved entropy
+// source; on x86 we bind the DRBG seed to the CPU RDRAND instruction. Fails
+// closed when RDRAND is requested but unavailable. TPM2-bound entropy is a
+// documented opt-in (VHSM_TPM) left as a hook: wire tpm2-tss RNG output here
+// the same way when that flag is enabled.
+#if defined(__x86_64__) || defined(__i386__)
+static bool rdrand64(uint64_t *out) {
+  uint8_t ok = 0;
+  asm volatile("rdrand %0\n\tsetc %1" : "=r"(*out), "=qm"(ok) : : "cc");
+  return ok != 0;
+}
+static bool hardware_rand_bytes(std::vector<u8> &buf) {
+  for (size_t i = 0; i < buf.size(); i += 8) {
+    uint64_t v = 0;
+    bool got = false;
+    for (int attempt = 0; attempt < 10; ++attempt) {
+      if (rdrand64(&v)) {
+        got = true;
+        break;
+      }
+    }
+    if (!got)
+      return false;
+    std::memcpy(buf.data() + i, &v, std::min<size_t>(8, buf.size() - i));
+  }
+  return true;
+}
+#else
+static bool hardware_rand_bytes(std::vector<u8> &) { return false; }
+#endif
 
 // DRBG merge: CTR_DRBG_AES256 is now a thin adapter over
 // vhsm::scrypto::CtrDrbgAes256 (the audited clone implementation). The
@@ -55,12 +88,27 @@ std::vector<u8> CTR_DRBG_AES256::generate(size_t requested_bytes) {
 }
 
 std::vector<u8> SecureRNG::get_system_entropy(const std::string &source_path) {
+  std::vector<u8> entropy(48);
+  // Opt-in hardware RNG (RDRAND) binding. Selected by VHSM_ENTROPY=rdrand, or
+  // forced under FIPS mode (RDRAND is the only entropy source we bind on x86).
+  // Fails closed when RDRAND is requested but unavailable; under FIPS without
+  // RDRAND we still fall through to getrandom (a CSPRNG) rather than refusing.
+  const char *ent = std::getenv("VHSM_ENTROPY");
+  const bool want_rdrand = (ent && std::strstr(ent, "rdrand") != nullptr);
+  if (want_rdrand || fips_mode()) {
+    if (hardware_rand_bytes(entropy)) {
+      return entropy;
+    }
+    if (want_rdrand) {
+      throw std::runtime_error(
+          "RNG Failure: VHSM_ENTROPY=rdrand requested but RDRAND unavailable");
+    }
+  }
 #ifdef _WIN32
   // Windows: BCryptGenRandom is the CSPRNG; source_path is ignored (kept for
   // API compat with POSIX /dev/* call-sites). BCRYPT_USE_SYSTEM_PREFERRED_RNG
   // is the recommended flag per MS docs.
   (void)source_path;
-  std::vector<u8> entropy(48);
   NTSTATUS s = ::BCryptGenRandom(nullptr, entropy.data(),
                                  static_cast<ULONG>(entropy.size()),
                                  BCRYPT_USE_SYSTEM_PREFERRED_RNG);
@@ -71,7 +119,6 @@ std::vector<u8> SecureRNG::get_system_entropy(const std::string &source_path) {
 #else
   // POSIX: try getrandom(2) first (no FD, no fallback file needed), then
   // fall back to reading source_path for older kernels/containers.
-  std::vector<u8> entropy(48);
   std::size_t off = 0;
   while (off < entropy.size()) {
     ssize_t n = ::getrandom(entropy.data() + off, entropy.size() - off, 0);
