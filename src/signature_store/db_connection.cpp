@@ -12,6 +12,8 @@
 #include "db_connection.h"
 #include "../core/error.h"
 #include "stmt_guard.h"
+#include "mysql_connection.h"
+#include "postgres_connection.h"
 #include "sqlite_connection.h"
 
 #include <sqlite3.h>
@@ -28,16 +30,14 @@ std::unique_ptr<IDbConnection> make_sqlite_connection(const std::string &path) {
   return std::make_unique<SqliteConnection>(path);
 }
 
-// Stub for PostgreSQL connection — to be implemented in future phases
-std::unique_ptr<IDbConnection>
-make_postgresql_connection(const std::string & /*connection_string*/) {
-  throw std::runtime_error("PostgreSQL backend not yet implemented");
+std::unique_ptr<IDbConnection> make_postgresql_connection(
+    const std::string &connection_string) {
+  return std::make_unique<PostgresConnection>(connection_string);
 }
 
-// Stub for MySQL connection — to be implemented in future phases
-std::unique_ptr<IDbConnection>
-make_mysql_connection(const std::string & /*connection_string*/) {
-  throw std::runtime_error("MySQL backend not yet implemented");
+std::unique_ptr<IDbConnection> make_mysql_connection(
+    const std::string &connection_string) {
+  return std::make_unique<MySqlConnection>(connection_string);
 }
 
 } // namespace db

@@ -106,6 +106,18 @@ bool SignatureRepository::update_ledger_fields(
   return true;
 }
 
+bool SignatureRepository::mark_processing(const std::string &signature_id) {
+  const std::string sql =
+      "UPDATE signature_records SET ledger_status = 'PROCESSING' WHERE id = ? "
+      "AND ledger_status = 'PENDING';";
+  try {
+    conn_.exec(sql, {signature_id});
+    return true;
+  } catch (const DbError &) {
+    return false;
+  }
+}
+
 bool SignatureRepository::recompute_integrity_hmac(
     const std::string &signature_id) {
   const std::string sql = R"SQL(
@@ -172,7 +184,8 @@ SignatureRepository::get_by_id(const std::string &signature_id) const {
                mechanism, payload_digest, signature_b64, session_handle,
                user_label, app_context,
                ledger_tx_id, ledger_block_num, ledger_tx_time, ledger_tx_proof,
-               ledger_tx_set_b64, ledger_status
+               ledger_tx_set_b64, ledger_status,
+               pqc_algo, signature_pqc_b64, key_fingerprint_pqc
         FROM signature_records
         WHERE id = ?;
     )SQL";
@@ -207,10 +220,30 @@ SignatureRepository::get_by_id(const std::string &signature_id) const {
         result.push_back(std::nullopt);
       }
     }
-    return result;
-  } catch (const DbError &e) {
+  return result;
+   } catch (const DbError &e) {
     return std::nullopt;
   }
+}
+
+std::vector<std::string> SignatureRepository::get_all_ids() const {
+  const std::string sql =
+      "SELECT id FROM signature_records ORDER BY created_at ASC;";
+  std::vector<std::string> ids;
+  try {
+    auto rs = conn_.query(sql, {});
+    ids.reserve(rs.rows_.size());
+    for (const auto &row : rs.rows_) {
+      if (row.column_count() > 0) {
+        if (auto v = row.get_string(0)) {
+          ids.push_back(*v);
+        }
+      }
+    }
+  } catch (const DbError &) {
+    return ids;
+  }
+  return ids;
 }
 
 } // namespace db

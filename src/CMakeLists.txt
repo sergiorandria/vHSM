@@ -2,6 +2,7 @@
 add_subdirectory(core)
 add_subdirectory(log)
 add_subdirectory(threadpool)
+add_subdirectory(metrics)
 add_subdirectory(crypto)
 add_subdirectory(persistence)
 add_subdirectory(session)

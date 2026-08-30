@@ -75,12 +75,20 @@ public:
   bool update_ledger_fields(const std::string &signature_id,
                             const vhsm::ledger::LedgerEntry &entry);
 
+  // WHY mark_processing: Exactly-once anchoring guard. Marks a row as
+  // PROCESSING as soon as the ledger worker accepts it, so that a crash/restart
+  // between enqueue and commit does not re-anchor an already-inflight record.
+  bool mark_processing(const std::string &signature_id);
+
   // WHY get_by_id: Retrieve a complete signature record for
   // auditing/verification. Returns a vector of optional strings (each column
   // value). Nulls are represented as optional.nullopt (no value). The caller
   // (dispatcher, audit) maps these to typed fields.
   std::optional<std::vector<std::optional<std::string>>>
   get_by_id(const std::string &signature_id) const;
+
+  // Return every signature record id currently stored, for integrity walks.
+  std::vector<std::string> get_all_ids() const;
 
   // Recompute the row-integrity HMAC over the current 18 data columns (e.g.
   // after update_ledger_fields changes the ledger_* columns) and persist it.

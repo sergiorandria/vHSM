@@ -1,6 +1,7 @@
 #include "../log/logger.h"
 #include "ledger_worker.h"
 #include "../core/hsm_instance.h"
+#include "../metrics/metrics.h"
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -207,15 +208,37 @@ void LedgerWorker::submit_record(const SignatureRecord &record) {
   if (!running_.load(std::memory_order_acquire) || pool_ == nullptr) {
     return;
   }
+  // Exactly-once anchoring guard: drop duplicate submissions for a record_id
+  // that is already in flight (the chaincode upsert also makes the ledger
+  // write idempotent, but rejecting here avoids redundant network round-trips).
+  {
+    std::lock_guard<std::mutex> lock(in_flight_mu_);
+    if (!in_flight_.insert(record.record_id).second) {
+      vhsm::log::global_logger().warning(
+          "ledger", "submit_record dropped duplicate in-flight record " +
+                        record.record_id);
+      return;
+    }
+  }
+  if (processing_callback_) {
+    try {
+      processing_callback_(record.record_id);
+    } catch (...) {
+      // Best-effort: a failure to mark PROCESSING must not block anchoring.
+    }
+  }
   try {
     const bool accepted =
         pool_->enqueue(token_, [this, record] { process_record(record); });
     if (!accepted) {
       // Queue at capacity: the record cannot be anchored now.
       ++failed_count_;
+      metrics::Metrics::instance().inc(metrics::names::ledger_failed);
       publish_failed(record);
     } else {
       ++pending_count_;
+      metrics::Metrics::instance().set(metrics::names::ledger_pending,
+                                       pending_count_.load());
     }
   } catch (const std::exception &e) {
     // Pool shutting down between running_ check and enqueue — record cannot
@@ -236,6 +259,9 @@ void LedgerWorker::process_record(const SignatureRecord &record) {
     if (entry) {
       ++committed_count_;
       --pending_count_;
+      metrics::Metrics::instance().inc(metrics::names::ledger_committed);
+      metrics::Metrics::instance().set(metrics::names::ledger_pending,
+                                       pending_count_.load());
       publish_committed(record, *entry);
       if (on_committed_) {
         try {
@@ -244,6 +270,10 @@ void LedgerWorker::process_record(const SignatureRecord &record) {
           // Best-effort: the DB update is asynchronous and must not
           // fail the ledger commit that already succeeded.
         }
+      }
+      {
+        std::lock_guard<std::mutex> lock(in_flight_mu_);
+        in_flight_.erase(record.record_id);
       }
       return;
     }
@@ -274,7 +304,14 @@ void LedgerWorker::process_record(const SignatureRecord &record) {
 
   --pending_count_;
   ++failed_count_;
+  metrics::Metrics::instance().inc(metrics::names::ledger_failed);
+  metrics::Metrics::instance().set(metrics::names::ledger_pending,
+                                    pending_count_.load());
   publish_failed(record);
+  {
+    std::lock_guard<std::mutex> lock(in_flight_mu_);
+    in_flight_.erase(record.record_id);
+  }
 }
 
 } // namespace vhsm::ledger

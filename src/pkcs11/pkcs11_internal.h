@@ -46,6 +46,8 @@
 #include <openssl/evp.h>
 #include <openssl/rsa.h>
 
+#include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <memory>
@@ -53,18 +55,72 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#ifdef __linux__
+#include <unistd.h>
+#endif
 
-// AuditLog implementation — writes to stderr (stub; production should
-// persist to DB via the notification pipeline). Owned by AppContainer.
-class P11AuditLog : public vhsm::audit::AuditLog {
+// =============================================================================
+// File-backed fallback audit log — persists when HashChainedAuditLog cannot
+// be created (e.g. no KEK yet). Unlike the old stderr-only stub, this writes
+// to <db_path>.audit.fallback with fsync + ISO8601 timestamp, so audit events
+// are not lost pre-KEK and can later be migrated to the hash chain.
+// Production always prefers HashChainedAuditLog; this is the fail-persistent
+// fallback, not a silent drop.
+// =============================================================================
+class P11AuditLog : public vhsm::audit::AuditLog
+{
 public:
-  vhsm::v1::CkStatus append(const std::string &event_id,
-                  const std::string &event_type) noexcept override {
-    // Fallback sink (pre-KEK only). Production uses HashChainedAuditLog.
-    std::cerr << "[AUDIT] event_id=" << event_id
-              << " event_type=" << event_type << std::endl;
-    return vhsm::v1::ok_ck();
+  explicit P11AuditLog(std::string path = "")
+    : path_(path.empty() ? "/tmp/vhsm_audit_fallback.log" : std::move(path))
+  {
   }
+
+  vhsm::v1::CkStatus
+  append(const std::string& event_id, const std::string& event_type) noexcept override
+  {
+    try
+    {
+      using namespace std::chrono;
+
+      auto now = system_clock::now();
+      auto ms  = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
+      std::time_t t = system_clock::to_time_t(now);
+      std::tm tm{};
+      gmtime_r(&t, &tm);
+
+      char ts[48];
+      std::snprintf(ts, sizeof(ts), "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
+                    tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour,
+                    tm.tm_min, tm.tm_sec, static_cast<int>(ms.count()));
+
+      std::string line = std::string(ts) + "|" + event_id + "|" + event_type + "\n";
+
+      // Mirror to stderr for container / journald visibility
+      std::cerr << "[AUDIT-FALLBACK] " << line;
+
+      if (!path_.empty())
+      {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (FILE* f = std::fopen(path_.c_str(), "ab"))
+        {
+          const bool ok = std::fwrite(line.data(), 1, line.size(), f) == line.size() &&
+                          std::fflush(f) == 0 && ::fsync(::fileno(f)) == 0;
+          std::fclose(f);
+          if (!ok)
+            return vhsm::v1::err_ck(CKR_DEVICE_ERROR);
+        }
+      }
+      return vhsm::v1::ok_ck();
+    }
+    catch (...)
+    {
+      return vhsm::v1::err_ck(CKR_DEVICE_ERROR);
+    }
+  }
+
+private:
+  std::string path_;
+  std::mutex  mu_;
 };
 
 // Forward-declared at global scope so g_vault (a unique_ptr<..::Vault>) can be
@@ -128,6 +184,14 @@ inline constexpr CK_ULONG CKA_VHSM_RSA_PRIV = 0x81000001UL;
 inline constexpr CK_ULONG CKA_VHSM_RSA_PUB = 0x81000002UL;
 inline constexpr CK_ULONG CKA_VHSM_EC_PRIV = 0x81000003UL;
 inline constexpr CK_ULONG CKA_VHSM_EC_PUB = 0x81000004UL;
+// CKA_VHSM_POLICY: a JSON KeyPolicy document (see
+// domain/signing/key_policy.h) attached to a key object; when present, every
+// C_Sign with that key is gated by the policy (mechanism/who/when/quorum).
+inline constexpr CK_ATTRIBUTE_TYPE CKA_VHSM_POLICY = 0x81000005UL;
+// CKA_VHSM_ATTESTATION_COUNT: number of attestations collected for the key,
+// mirrored from the ledger attestation registry so the C++ sign path can fail
+// closed on quorum checks when the ledger is unreachable.
+inline constexpr CK_ATTRIBUTE_TYPE CKA_VHSM_ATTESTATION_COUNT = 0x81000006UL;
 
 bool p11_is_initialized();
 SessionManager &p11_sessions();
