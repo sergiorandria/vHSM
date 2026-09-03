@@ -1,13 +1,49 @@
 #include "mysql_connection.h"
 
+#if __has_include(<mysql.h>)
 #include <mysql.h>
 #include <mysqld_error.h>
+#define VHSM_HAVE_MYSQL 1
+#else
+#define VHSM_HAVE_MYSQL 0
+// Forward-declare minimal MySQL types for stub build
+struct st_mysql {};
+#endif
 
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "../core/error.h"
+
+#if !VHSM_HAVE_MYSQL
+// Stub when libmysqlclient not installed — build succeeds with sqlite backend.
+// Any attempt to actually use MySQL will throw at runtime.
+namespace vhsm::signature_store { namespace db {
+MySqlConnection::MySqlConnection(const std::string&) {
+  throw DbError(DbError::Kind::ConnectionError,
+                "MySQL support not compiled: install libmysqlclient-dev and reconfigure with -DVHSM_DB_BACKEND=mysql");
+}
+MySqlConnection::~MySqlConnection() {}
+std::string MySqlConnection::build_sql(const std::string&, const std::vector<std::string>&) { return {}; }
+DbResultSet MySqlConnection::query(const std::string&, const std::vector<std::string>&) {
+  throw DbError(DbError::Kind::IoError, "MySQL not available");
+}
+i64 MySqlConnection::exec(const std::string&, const std::vector<std::string>&) {
+  throw DbError(DbError::Kind::IoError, "MySQL not available");
+}
+void MySqlConnection::with_transaction(const std::function<void(IDbTransaction&)>&) {
+  throw DbError(DbError::Kind::TransactionError, "MySQL not available");
+}
+MySqlTransaction::MySqlTransaction(MYSQL* c, std::mutex& m) : conn_(c), mu_(m) {}
+DbResultSet MySqlTransaction::query(const std::string&, const std::vector<std::string>&) {
+  throw DbError(DbError::Kind::IoError, "MySQL not available");
+}
+i64 MySqlTransaction::exec(const std::string&, const std::vector<std::string>&) {
+  throw DbError(DbError::Kind::IoError, "MySQL not available");
+}
+} }
+#else
 
 namespace vhsm::signature_store
 {
@@ -313,3 +349,4 @@ i64 MySqlTransaction::exec(const std::string& sql, const std::vector<std::string
 
 }  // namespace db
 }  // namespace vhsm::signature_store
+#endif // VHSM_HAVE_MYSQL
