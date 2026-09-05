@@ -7,6 +7,7 @@ target_sources(vhsm_notification
     email_adapter.cpp
     webhook_adapter.cpp
     grpc_push_adapter.cpp
+    mobile_push_adapter.cpp
 )
 
 target_include_directories(vhsm_notification

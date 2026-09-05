@@ -1,12 +1,59 @@
 #include "postgres_connection.h"
 
+#if __has_include(<libpq-fe.h>)
 #include <libpq-fe.h>
+#define VHSM_HAVE_POSTGRES 1
+#else
+#define VHSM_HAVE_POSTGRES 0
+struct pg_conn {};
+struct pg_result {};
+typedef struct pg_result PGresult;
+#ifndef CONNECTION_OK
+#define CONNECTION_OK 0
+#endif
+#ifndef PGRES_COMMAND_OK
+#define PGRES_COMMAND_OK 1
+#endif
+#ifndef PGRES_TUPLES_OK
+#define PGRES_TUPLES_OK 2
+#endif
+#endif
 
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "../core/error.h"
+
+#if !VHSM_HAVE_POSTGRES
+namespace vhsm::signature_store { namespace db {
+PostgresConnection::PostgresConnection(const std::string&) {
+  throw DbError(DbError::Kind::ConnectionError,
+                "PostgreSQL support not compiled: install libpq-dev and reconfigure with -DVHSM_DB_BACKEND=postgres");
+}
+PostgresConnection::~PostgresConnection() {}
+std::string PostgresConnection::translate_placeholders(const std::string& s) { return s; }
+DbResultSet PostgresConnection::exec_params(const std::string&, const std::vector<std::string>&, bool) {
+  throw DbError(DbError::Kind::IoError, "PostgreSQL not available");
+}
+DbResultSet PostgresConnection::query(const std::string&, const std::vector<std::string>&) {
+  throw DbError(DbError::Kind::IoError, "PostgreSQL not available");
+}
+i64 PostgresConnection::exec(const std::string&, const std::vector<std::string>&) {
+  throw DbError(DbError::Kind::IoError, "PostgreSQL not available");
+}
+void PostgresConnection::with_transaction(const std::function<void(IDbTransaction&)>&) {
+  throw DbError(DbError::Kind::TransactionError, "PostgreSQL not available");
+}
+PostgresTransaction::PostgresTransaction(PGconn* c, std::mutex& m) : conn_(c), mu_(m) {}
+DbResultSet PostgresTransaction::query(const std::string&, const std::vector<std::string>&) {
+  throw DbError(DbError::Kind::IoError, "PostgreSQL not available");
+}
+i64 PostgresTransaction::exec(const std::string&, const std::vector<std::string>&) {
+  throw DbError(DbError::Kind::IoError, "PostgreSQL not available");
+}
+} }
+#else
 
 namespace vhsm::signature_store
 {
@@ -305,3 +352,4 @@ i64 PostgresTransaction::exec(const std::string& sql, const std::vector<std::str
 
 }  // namespace db
 }  // namespace vhsm::signature_store
+#endif // VHSM_HAVE_POSTGRES
