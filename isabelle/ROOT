@@ -1,0 +1,11 @@
+chapter VHSM
+
+session VHSM = HOL +
+  theories
+    VHSM
+    Audit_Chain
+    HSM_State
+    Crypto
+    Ledger
+
+(* Build: isabelle build -D isabelle  (requires Isabelle2024) *)
