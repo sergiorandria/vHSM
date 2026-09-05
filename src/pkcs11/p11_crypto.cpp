@@ -395,6 +395,7 @@ CK_RV do_sign(CK_SESSION_HANDLE h, const std::vector<u8> &data,
         if (auto att = o->findAttribute(CKA_VHSM_ATTESTATION_COUNT); att) {
           attestation_count = parse_attr_count(*att);
         }
+#ifdef VHSM_LEDGER
         bool use_chaincode = policy.min_attestations > 0 && g_ledgerClient;
         if (use_chaincode) {
           auto vr = g_ledgerClient->verify_policy(
@@ -404,7 +405,9 @@ CK_RV do_sign(CK_SESSION_HANDLE h, const std::vector<u8> &data,
                 "crypto", "sign denied by ledger policy: " + vr.reason);
             return CKR_ACTION_PROHIBITED;
           }
-        } else {
+        } else
+#endif
+        {
           auto ev = policy.evaluate(actor, mech_str, now_ms, attestation_count);
           if (!ev.ok) {
             vhsm::log::global_logger().warning(

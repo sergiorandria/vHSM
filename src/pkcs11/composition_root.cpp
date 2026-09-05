@@ -12,6 +12,7 @@
 #include "../notification/bounded_notification_bus.h"
 #include "../notification/email_adapter.h"
 #include "../notification/grpc_push_adapter.h"
+#include "../notification/mobile_push_adapter.h"
 #include "../notification/webhook_adapter.h"
 #include "../audit/audit_log.h"
 #include "../persistence/kdf.h"
@@ -361,9 +362,15 @@ std::unique_ptr<AppContainer> create_app_container() {
       vhsm::notification::EmailAdapter email_adapter;
       vhsm::notification::WebhookAdapter webhook_adapter;
       vhsm::notification::GrpcPushAdapter grpc_push_adapter;
+      // Mobile push — FCM / Expo push for the vHSM Mobile app (channel mobile_push)
+      // Uses Expo push when token is ExponentPushToken, otherwise FCM. Fails closed
+      // when FCM_SERVER_KEY is not set, so operators notice misconfig.
+      vhsm::notification::MobilePushAdapter mobile_adapter(
+          vhsm::notification::MobilePushAdapter::default_expo_sender());
       disp->add_adapter(email_adapter);
       disp->add_adapter(webhook_adapter);
       disp->add_adapter(grpc_push_adapter);
+      disp->add_adapter(mobile_adapter);
       disp->start();
       c->notif_dispatcher = std::move(disp);
     } catch (const std::exception &e) {
