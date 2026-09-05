@@ -105,6 +105,12 @@ Prometheus or `curl`.
 ledger-anchored proof and audit tail. The `rest_api` serves it as static SPA and
 exposes `GET /api/v1/proof/:recordId` and `GET /api/v1/audit/tail`.
 
+### F8 — Fabric Control Console (2026-09-04)
+`web/` now includes a **control console** + `rest_api/internal/fabric_manager.go` (979 LOC): guided `generate-network.sh`/`enroll-network.sh`/`docker compose`/`peer channel join`/`chaincode approve/commit` lifecycle, live SSE transactions (`/transactions/stream`), audit tamper VerifyIntegrity, and HSM Sign. See `rest_api/README.md` for `/api/v1/fabric/*`.
+
+### F9 — Mobile app (Expo SDK 54)
+`mobile/` (React Native / Expo, 6 screens: Home/Thesis/History/Notifications/Login/Settings) via `rest_api/internal/mobile_service.go` + C++ `MobilePushAdapter` (`src/notification/mobile_push_adapter.*`) — FCM/Expo push registration and inbox polling (`/api/v1/mobile/*`). See `mobile/README.md`.
+
 ## Getting Started
 
 ### Prerequisites
