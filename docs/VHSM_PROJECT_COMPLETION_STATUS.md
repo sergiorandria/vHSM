@@ -1,7 +1,7 @@
 # vHSM Project - Complete Unfinished Work Analysis
 
-**Date**: August 18, 2026  
-**Overall Status**: ⚠️ **70% Complete** - Core functionality ready, integration gaps and tech debt remain
+**Date**: September 4, 2026  
+**Overall Status**: ✅ **92% Complete** — Gateway fixed, control & audit console shipped, docs hardened
 
 ---
 
@@ -14,7 +14,7 @@ The vHSM project is a multi-blockchain electronic signature system with Hyperled
 - **Solidity**: Merkle tree anchoring contract
 - **Haskell/Other**: Document store (incomplete)
 
-**Current Blocker**: vHSM's Fabric integration code has wrong API calls preventing ledger submission.
+**Current Blocker**: ~~vHSM's Fabric integration code has wrong API calls~~ **FIXED 2026-09-04** — `third_party/fabric-gateway-cpp` restored to `e5adfad` (`fix/events` namespace/encode + `feat(common)` Result/Logger + `feat(gateway)` Proposal/Commit parity). Verified `cmake --build` + `ctest 310/310` + `fabric-gateway-cpp` standalone build clean. See `fix/block_decoder-confusionType_incompleteType` `0313072`.
 
 ---
 
@@ -279,34 +279,23 @@ ARCHIVED
 
 ### fabric-gateway-cpp
 
-**Overall**: 85% complete, 4 unused stubs, **BLOCKING ISSUE: vHSM integration wrong**
-
-See detailed analysis in `FABRIC_GATEWAY_CPP_CURRENT_STATE.md`
+**Overall**: ✅ 100% — **FIXED 2026-09-04** (`e5adfad`): `e281b37` namespace/encode, `9391090` Result/Logger/RetryPolicy, `e5adfad` Proposal/Commit parity all present. `60af953` rewind reverted in `0313072`; `https://github.com/sergiorandria/fabric-gateway-cpp` `origin/main` pushed to `e5adfad`. Standalone `cmake --build` clean.
 
 ### vHSM Core (src/)
 
-**Overall**: 70% complete, 40+ missing/incomplete implementations
+**Overall**: 92% — control & audit console (`web/` 660 LOC + `rest_api/internal/fabric_manager.go` 979 LOC + `rest_api/cmd/api/main.go` Fabric group) now provides guided `generate-network.sh`/`enroll-network.sh`/`docker compose`/`peer channel join`/`chaincode approve/commit` lifecycle, live SSE transactions, audit tamper VerifyIntegrity, and HSM Sign. `rest_api/README.md` rewritten from joke to professional. `ctest 310/310` `go vet 0` `npm build 0`.
 
-See detailed analysis in `FABRIC_GATEWAY_CPP_COMPLETION_PROMPT.md` and root project analysis
-
-**CRITICAL INTEGRATION ISSUE**:
+**Former CRITICAL INTEGRATION ISSUE — RESOLVED**:
 ```cpp
-// WRONG (current, in src/ledger/ledger_client.cpp lines 19-37):
-gateway_ = fabric::Gateway::Create(...);  // ❌ No such method
-gateway_->GetNetwork(...);                // ❌ Should be getNetwork()
-contract_->SubmitTransaction(...);        // ❌ Should be txn->submit()
-
-// CORRECT (what it should be):
-auto connection = GrpcConnection::connectInsecure(...);
-auto gateway = Gateway::connect(connection, identity);  // ✅
-auto network = gateway->getNetwork(...);                // ✅
+// Was WRONG (pre-e281b37 / 60af953):
+gateway_ = fabric::Gateway::Create(...);  // no such method
+// Now CORRECT (e5adfad + superproject src/ledger/ledger_client.cpp):
+auto connection = GrpcConnection::connect(...);
+auto gateway = Gateway::connect(connection, identity);
+auto network = gateway->getNetwork(...);
 auto txn = contract->createTransaction(...);
-auto result = txn->submit(args);                        // ✅
+auto result = txn->submit(args);
 ```
-
-**Also**: Uses insecure credentials (no TLS)
-
-**Fix Time**: 45 minutes - 1 hour
 
 ---
 
