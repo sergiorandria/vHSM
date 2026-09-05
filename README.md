@@ -245,6 +245,7 @@ Key configuration files:
 ## Documentation
 
 - [REST API Documentation](rest_api/README.md)
+- [Isabelle Correctness](isabelle/README.md) — formal HOL proofs for audit chain, HSM state, crypto, ledger (`isabelle build -D isabelle`)
 - [Project Plan](plan/)
 - [Source Code Structure](src/)
 
