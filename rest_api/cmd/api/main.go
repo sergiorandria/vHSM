@@ -905,6 +905,99 @@ func main() {
 		})
 	}
 
+	// --- Mobile push (vHSM Mobile app) ---
+	mobileSvc := internal.NewMobileService()
+	// POST /api/v1/mobile/devices — register FCM/Expo push token for the authenticated user.
+	// The C++ MobilePushAdapter (channel mobile_push) will deliver to every registered token.
+	r.POST("/api/v1/mobile/devices", authRequired, func(c *gin.Context) {
+		claims := c.MustGet("claims").(*internal.SessionClaims)
+		var body struct {
+			FCMToken string `json:"fcm_token"`
+			Platform string `json:"platform"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil || body.FCMToken == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "fcm_token required"})
+			return
+		}
+		if body.Platform == "" {
+			body.Platform = "unknown"
+		}
+		dev := mobileSvc.Register(claims.Username, body.FCMToken, body.Platform)
+		log.Printf("mobile device registered: user=%s platform=%s token=%.8s...", claims.Username, body.Platform, body.FCMToken)
+		c.JSON(http.StatusCreated, dev)
+	})
+	r.DELETE("/api/v1/mobile/devices", authRequired, func(c *gin.Context) {
+		claims := c.MustGet("claims").(*internal.SessionClaims)
+		var body struct {
+			FCMToken string `json:"fcm_token"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil || body.FCMToken == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "fcm_token required"})
+			return
+		}
+		mobileSvc.Unregister(claims.Username, body.FCMToken)
+		c.JSON(http.StatusOK, gin.H{"status": "unregistered"})
+	})
+	r.GET("/api/v1/mobile/devices", authRequired, func(c *gin.Context) {
+		claims := c.MustGet("claims").(*internal.SessionClaims)
+		c.JSON(http.StatusOK, mobileSvc.List(claims.Username))
+	})
+	// GET /api/v1/mobile/notifications — polling fallback for the app (aggregated history)
+	// The app also receives true push via FCM; this endpoint lets it refresh the inbox on launch.
+	r.GET("/api/v1/mobile/notifications", authRequired, requirePermission("ReadThesis"), func(c *gin.Context) {
+		// Aggregate last 20 theses' histories into a single inbox (same as mobile poll)
+		result, err := notarySvc.GetAllTheses()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query theses"})
+			return
+		}
+		var theses []map[string]interface{}
+		if err := json.Unmarshal(result, &theses); err != nil {
+			c.JSON(http.StatusOK, []interface{}{})
+			return
+		}
+		type inboxItem struct {
+			ID        string `json:"id"`
+			Type      string `json:"type"`
+			Summary   string `json:"summary"`
+			Timestamp string `json:"timestamp"`
+			ThesisId  string `json:"thesisId"`
+		}
+		var inbox []inboxItem
+		for _, t := range theses {
+			thesisId, _ := t["thesisId"].(string)
+			if thesisId == "" {
+				thesisId, _ = t["thesisID"].(string)
+			}
+			if thesisId == "" {
+				continue
+			}
+			hist, err := notarySvc.GetThesisHistory(thesisId)
+			if err != nil {
+				continue
+			}
+			var entries []map[string]interface{}
+			_ = json.Unmarshal(hist, &entries)
+			for _, e := range entries {
+				ts, _ := e["timestamp"].(string)
+				inbox = append(inbox, inboxItem{
+					ID:        fmt.Sprintf("%v", e["txId"]),
+					Type:      "LEDGER_COMMIT",
+					Summary:   fmt.Sprintf("Thesis %s updated", thesisId),
+					Timestamp: ts,
+					ThesisId:  thesisId,
+				})
+				if len(inbox) >= 50 {
+					break
+				}
+			}
+			if len(inbox) >= 50 {
+				break
+			}
+		}
+		c.JSON(http.StatusOK, inbox)
+	})
+
 	// --- Static UI (SPA) serving ---
 	//
 	// After every API route, fall through to the built web UI under web/dist.
