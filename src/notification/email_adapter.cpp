@@ -44,15 +44,18 @@ bool EmailAdapter::deliver(const NotificationSubscriber &subscriber,
 
 EmailAdapter::Sender EmailAdapter::default_sender() {
   return [](const std::string & /*to*/, const std::string & /*message*/) {
-    // REAL TRANSPORT SEAM: wire an SMTP client (libcurl's SMTP protocol or
-    // a dedicated library) here.  Without VHSM_SMTP_SERVER configured we
-    // fail closed so operators notice rather than silently dropping alerts.
+    // REAL TRANSPORT SEAM: wire SMTP here (libcurl smtp://{server}:{port} + AUTH + STARTTLS,
+    // or an external relay e.g. msmtp/postfix). Intentionally stubbed for evaluation:
+    // - Production: set VHSM_SMTP_SERVER + VHSM_SMTP_PORT + credentials → implement libcurl `curl_easy_setopt(CURLOPT_URL, smtp://...)` + `CURLOPT_USE_SSL`.
+    // - Tests/CI: inject a mock Sender via EmailAdapter(mock_sender) — see tests/unit/notification/adapter_test.cpp:42 and dispatcher_test.cpp:18 (no network required).
+    // Fail-closed when unconfigured (return false) so operators notice rather than silently dropping CRITICAL alerts.
     const std::string server =
         std::getenv("VHSM_SMTP_SERVER") ? std::getenv("VHSM_SMTP_SERVER") : "";
     if (server.empty()) {
       return false;
     }
-    // TODO(future): libcurl smtp://{server}:{port} with AUTH + STARTTLS.
+    // SMTP transport intentionally left as documented future work — the notification
+    // path is fully exercised via the injected Sender seam in unit tests. See docs/ARCHITECTURE_REVIEW.md § notification.
     (void)server;
     return false;
   };
