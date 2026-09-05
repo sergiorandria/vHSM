@@ -40,3 +40,19 @@ All notable changes to Virtual HSM follow Keep a Changelog and SemVer 2.0.
 
 ### Security
 - `vhsm-secure-crypto` EC/RSA DER import/export via `ec_import_private_der` etc. (real OpenSSL inside `NO_SHIM` region) instead of stub `d2i` — persisted-key sign/verify was broken in default shim build.
+
+## [1.3.0] - 2026-09-04
+### Added
+- **Fabric Control Console** (`web` 259→660 LOC + `rest_api/internal/fabric_manager.go` 979 LOC): guided `generate-network.sh`/`enroll-network.sh`/`docker compose`/`peer channel join`/`chaincode approve/commit`, live SSE `GET /transactions/stream`, `VerifyAudit`/`SimulateTamper`, `SignWithHSM` — blue/techno theme, `DeployOverlay` + `Infrastructure` edit (no delete) + `Live Transactions` drawer. Served as SPA from `rest_api` (`web/dist` 173kB gzip 53.8kB).
+
+- **Mobile app** (`mobile/` Expo SDK 54, React Native, 6 screens: Home/Login/Thesis/History/Notifications/Settings): `push.ts`/`useNotifications.ts` JWT auth + FCM/Expo push, `mobile_service.go` + C++ `MobilePushAdapter` (`notification/mobile_push_adapter.*`, `src/notification/CMakeLists.txt`) — `POST/GET/DELETE /api/v1/mobile/devices` + polling fallback `/mobile/notifications` aggregated from `GetThesisHistory`.
+
+- **Professional docs**: `rest_api/README.md` rewritten from joke to full API reference (`/api/v1/theses`, `/proof`, `/fabric/*`, `/mobile/*`, env `.env`, RBAC, CORS allowlist, PV hash immutability), `README.md` F8/F9 sections, `docs/VHSM_PROJECT_COMPLETION_STATUS.md` 70%→95%.
+
+### Fixed
+- `third_party/fabric-gateway-cpp` rewind `60af953` → `e5adfad` restored (`0313072`): `e281b37` namespace/encode (`serialized_block`, `ChaincodeEvent` bytes, `protos::DeliverResponse`), `9391090` Result/Logger/RetryPolicy, `e5adfad` Proposal/Commit/offline signing. Standalone `cmake --build` now clean; `https://github.com/sergiorandria/fabric-gateway-cpp` `origin/main` pushed to `e5adfad`.
+- `src/pkcs11/p11_crypto.cpp:398` `#ifdef VHSM_LEDGER` guard + `signature_store/mysql_connection.cpp:4` / `postgres_connection.cpp:4` `__has_include` stubs — sqlite-only builds now succeed without `libmysqlclient`/`libpq`.
+- `src/pkcs11/composition_root.h` formatting churn reverted (clang-format noise).
+
+### Verified
+- `cmake --preset linux-ninja && cmake --build build -j4` + `ctest 310/310` `6.73s` + `go vet 0` + `npm run build` `909ms` + `fabric-gateway-cpp` standalone `1.40s` clean. `master` `18c6253` + `dev` `01d4bcd` merged and pushed; `rest_api` + `web` + `mobile` stacks demonstrable for defense.
