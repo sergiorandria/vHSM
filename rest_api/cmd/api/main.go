@@ -285,6 +285,9 @@ func main() {
 	// Notary
 	notarySvc := internal.NewNotaryService(fabricClient, hsmSvc, cfg.ChannelName)
 
+	// Fabric lifecycle manager (Docker-based)
+	fabricMgr := internal.NewFabricManager(hsmSvc)
+
 	// HTTP server
 	r := gin.Default()
 
@@ -776,6 +779,131 @@ func main() {
 				"the audit tail cannot be served from here.",
 		})
 	})
+
+	// --- Fabric lifecycle / blockchain environment (Docker) ---
+	// All fabric routes reuse the same auth + RBAC (ReadThesis as baseline; admin ops require CreateThesis)
+	fabric := r.Group("/api/v1/fabric")
+	fabric.Use(authRequired)
+	{
+		fabric.GET("/status", requirePermission("ReadThesis"), func(c *gin.Context) {
+			c.JSON(http.StatusOK, fabricMgr.GetStatus())
+		})
+		fabric.GET("/containers", requirePermission("ReadThesis"), func(c *gin.Context) {
+			st := fabricMgr.GetStatus()
+			c.JSON(http.StatusOK, gin.H{"containers": st.Containers})
+		})
+		fabric.POST("/network", requirePermission("CreateThesis"), func(c *gin.Context) {
+			var payload map[string]interface{}
+			_ = c.ShouldBindJSON(&payload)
+			job, err := fabricMgr.CreateNetwork(payload)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusAccepted, job)
+		})
+		fabric.POST("/deploy", requirePermission("CreateThesis"), func(c *gin.Context) {
+			job, err := fabricMgr.DeployNetwork()
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusAccepted, job)
+		})
+		fabric.GET("/jobs", requirePermission("ReadThesis"), func(c *gin.Context) {
+			c.JSON(http.StatusOK, fabricMgr.ListJobs())
+		})
+		fabric.GET("/jobs/:id", requirePermission("ReadThesis"), func(c *gin.Context) {
+			job, ok := fabricMgr.GetJob(c.Param("id"))
+			if !ok {
+				c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+				return
+			}
+			c.JSON(http.StatusOK, job)
+		})
+		fabric.GET("/transactions", requirePermission("ReadThesis"), func(c *gin.Context) {
+			limitStr := c.Query("limit")
+			limit := 50
+			if v, err := strconv.Atoi(limitStr); err == nil && v > 0 {
+				limit = v
+			}
+			channel := c.Query("channel")
+			c.JSON(http.StatusOK, gin.H{"transactions": fabricMgr.GetTransactions(limit, channel)})
+		})
+		// SSE live stream: pushes a transaction every 3s until client disconnects
+		fabric.GET("/transactions/stream", requirePermission("ReadThesis"), func(c *gin.Context) {
+			c.Header("Content-Type", "text/event-stream")
+			c.Header("Cache-Control", "no-cache")
+			c.Header("Connection", "keep-alive")
+			c.Header("Access-Control-Allow-Origin", "*")
+			// gin SSE helper
+			c.Stream(func(w io.Writer) bool {
+				txs := fabricMgr.GetTransactions(1, "")
+				if len(txs) > 0 {
+					data, _ := json.Marshal(txs[0])
+					c.SSEvent("transaction", string(data))
+				}
+				// sleep then continue; return false to stop after one batch if client requested single
+				// Use context cancellation for live mode: we loop with select
+				select {
+				case <-c.Request.Context().Done():
+					return false
+				case <-time.After(3000 * time.Millisecond):
+					return true
+				}
+			})
+		})
+		fabric.GET("/audit", requirePermission("ReadThesis"), func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"events": fabricMgr.GetAuditLog()})
+		})
+		fabric.POST("/audit/verify", requirePermission("ReadThesis"), func(c *gin.Context) {
+			ev := fabricMgr.VerifyAudit()
+			status := http.StatusOK
+			if ev.Status == "tamper" {
+				status = http.StatusConflict
+			}
+			c.JSON(status, ev)
+		})
+		fabric.POST("/audit/simulate-tamper", requirePermission("CreateThesis"), func(c *gin.Context) {
+			var body struct {
+				Enable bool `json:"enable"`
+			}
+			_ = c.ShouldBindJSON(&body)
+			if err := fabricMgr.SimulateTamper(body.Enable); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"tamperSimulated": body.Enable})
+		})
+		fabric.PUT("/peers/:peerId", requirePermission("CreateThesis"), func(c *gin.Context) {
+			var updates map[string]interface{}
+			if err := c.ShouldBindJSON(&updates); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+				return
+			}
+			peer, err := fabricMgr.UpdatePeer(c.Param("peerId"), updates)
+			if err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, peer)
+		})
+		fabric.POST("/sign", requirePermission("SignPv"), func(c *gin.Context) {
+			var body struct {
+				Payload string `json:"payload"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil || body.Payload == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "payload required"})
+				return
+			}
+			res, err := fabricMgr.SignWithHSM(body.Payload)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, res)
+		})
+	}
 
 	// --- Static UI (SPA) serving ---
 	//
