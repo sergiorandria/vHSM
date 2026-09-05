@@ -1,7 +1,7 @@
 # vHSM Project - Complete Unfinished Work Analysis
 
-**Date**: September 4, 2026  
-**Overall Status**: ✅ **98% Complete** — Gateway fixed, control & audit console shipped, mobile Expo SDK 54 merged, DEMO+GRADE_CARD+CHANGELOG 1.3.0, email TODO documented
+**Date**: September 5, 2026  
+**Overall Status**: ✅ **99% Complete** — Gateway fixed, control & audit console shipped, mobile Expo SDK 54 merged, DEMO+GRADE_CARD+CHANGELOG 1.3.0, Isabelle correctness (VHSM session builds)
 
 ---
 
