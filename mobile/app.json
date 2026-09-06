@@ -36,8 +36,7 @@
         "android.permission.VIBRATE",
         "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT"
-      ],
-      "useNextNotificationsApi": true
+      ]
     },
     "web": {
       "bundler": "metro"
@@ -54,7 +53,7 @@
       "expo-secure-store"
     ],
     "extra": {
-      "apiUrl": "http://localhost:8080",
+      "apiUrl": "http://10.0.2.2:8080",
       "eas": {
         "projectId": "vhsm-mobile-prod"
       }
