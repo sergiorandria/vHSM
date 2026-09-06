@@ -5,3 +5,7 @@
 	path = third_party/vhsm-secure-crypto
 	url = https://github.com/sergiorandria/vhsm-secure-crypto.git
 	branch = main
+[submodule "kvm_module"]
+	path = kvm_module
+	url = https://github.com/sergiorandria/kvm_module.git
+	branch = main
