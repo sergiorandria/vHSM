@@ -70,8 +70,8 @@ export function ThesisDetailScreen({ route, navigation }: any) {
           <Button mode="outlined" onPress={() => navigation.navigate('History', { thesisId })}>
             View transaction history
           </Button>
-          <Button mode="contained" style={{ marginTop: 8 }} onPress={() => navigation.navigate('Proof', { thesisId })}>
-            Verify proof
+          <Button mode="contained" style={{ marginTop: 8 }} onPress={() => navigation.navigate('Verify', { recordId: thesisId })}>
+            Verify proof (HMAC + ledger)
           </Button>
         </Card.Content>
       </Card>

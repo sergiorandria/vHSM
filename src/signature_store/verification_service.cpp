@@ -4,7 +4,7 @@ namespace vhsm::signature_store {
 namespace db {
 
 VerificationService::VerificationService(
-    IDbConnection &conn, vhsm::ledger::LedgerClient &ledger_client,
+    IDbConnection &conn, vhsm::ledger::LedgerClient *ledger_client,
     SignatureRepository &signature_repository)
     : v_core_(conn, ledger_client, signature_repository) {}
 

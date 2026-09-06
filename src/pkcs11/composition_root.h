@@ -9,6 +9,8 @@
 #include "../log/logger.h"
 #include "../session/slot_manager.h"
 #include "../signature_store/db_connection.h"
+#include "../signature_store/signature_repository.h"
+#include "../signature_store/verification_service.h"
 
 // Forward declares for impl to keep header light
 #ifdef VHSM_LEDGER
@@ -100,6 +102,17 @@ struct AppContainer {
   // signature_records table, publishes SIGN_CREATED to notification bus,
   // optionally anchors to ledger via LedgerWorker.
   std::unique_ptr<vhsm::signature_store::db::SignatureDispatcher> dispatcher;
+
+  // Verification service — THE production read path for "is this record trustworthy?".
+  // Consolidates row-integrity HMAC (RowIntegrity::verify_hmac, constant-time) + ledger
+  // cross-check (payload_digest/sig/fingerprint). Replaces SignatureQuery::verify_signature
+  // which only checked ledger_status=="COMMITTED" without HMAC. See docs/ARCHITECTURE_REVIEW.md.
+  // C_Verify remains crypto-only (do_verify); tamper check lives in Admin::VerifySignature → this.
+  // Owned repository for verification (shares DB/token with dispatcher but independent lifetime).
+  std::unique_ptr<vhsm::signature_store::db::SignatureRepository>
+      verify_repo;
+  std::unique_ptr<vhsm::signature_store::db::VerificationService>
+      verification_service;
 
   // Vault (optional)
   std::unique_ptr<vhsm::persistence::Vault> vault;

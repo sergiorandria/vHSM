@@ -529,6 +529,24 @@ std::unique_ptr<AppContainer> create_app_container() {
           *c->db, *token, *c->bus, *c->audit_log, nullptr);
 #endif
 
+  // Verification service — single place that answers "is this record trustworthy?"
+  // Row-integrity HMAC (fail-closed) + ledger cross-check. See header comment.
+  // C_Verify stays crypto-only; Admin::VerifySignature and REST /verify/:id call this.
+  if (c->db && token) {
+    c->verify_repo =
+        std::make_unique<vhsm::signature_store::db::SignatureRepository>(
+            *c->db, *token);
+#ifdef VHSM_LEDGER
+    c->verification_service =
+        std::make_unique<vhsm::signature_store::db::VerificationService>(
+            *c->db, c->ledger_client.get(), *c->verify_repo);
+#else
+    c->verification_service =
+        std::make_unique<vhsm::signature_store::db::VerificationService>(
+            *c->db, nullptr, *c->verify_repo);
+#endif
+  }
+
   c->vault = open_or_create_vault();
 
   return c;
@@ -556,6 +574,8 @@ void destroy_app_container(std::unique_ptr<AppContainer> &container) noexcept {
   container->ledger_client.reset();
 #endif
   container->dispatcher.reset();
+  container->verification_service.reset();
+  container->verify_repo.reset();
   container->store.reset();
   // vault is closed after dispatcher (persist token before reset in p11)
   container->vault.reset();

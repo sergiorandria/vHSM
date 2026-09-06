@@ -34,7 +34,7 @@ struct v_VerificationResult_M1 {
 class v_VerificationServiceCore_M1 {
 public:
   v_VerificationServiceCore_M1(IDbConnection &conn,
-                               vhsm::ledger::LedgerClient &ledger_client,
+                               vhsm::ledger::LedgerClient *ledger_client,
                                SignatureRepository &signature_repository);
 
   v_VerificationResult_M1 v_verify(const std::string &signature_id,
@@ -42,7 +42,7 @@ public:
 
 private:
   IDbConnection &v_conn_;
-  vhsm::ledger::LedgerClient &v_ledger_client_;
+  vhsm::ledger::LedgerClient *v_ledger_client_;
   SignatureRepository &v_signature_repository_;
 };
 

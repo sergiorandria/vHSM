@@ -8,6 +8,7 @@ import { ThesisDetailScreen } from '../screens/ThesisDetailScreen';
 import { NotificationsScreen } from '../screens/NotificationsScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
+import { VerifyScreen } from '../screens/VerifyScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -59,6 +60,7 @@ export function AppNavigator({ onLogout }: { onLogout: () => void }) {
         </Stack.Screen>
         <Stack.Screen name="ThesisDetail" component={ThesisDetailScreen} options={{ title: 'Thesis' }} />
         <Stack.Screen name="History" component={HistoryScreen} options={{ title: 'History' }} />
+        <Stack.Screen name="Verify" component={VerifyScreen} options={{ title: 'Verify' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

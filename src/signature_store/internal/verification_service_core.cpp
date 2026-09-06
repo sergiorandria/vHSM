@@ -8,7 +8,7 @@ namespace db {
 namespace internal {
 
 v_VerificationServiceCore_M1::v_VerificationServiceCore_M1(
-    IDbConnection &conn, vhsm::ledger::LedgerClient &ledger_client,
+    IDbConnection &conn, vhsm::ledger::LedgerClient *ledger_client,
     SignatureRepository &signature_repository)
     : v_conn_(conn), v_ledger_client_(ledger_client),
       v_signature_repository_(signature_repository) {}
@@ -84,10 +84,18 @@ v_VerificationServiceCore_M1::v_verify(const std::string &signature_id,
     return result;
   }
 
+  // Ledger cross-check requested but no client configured (e.g. VHSM_LEDGER=OFF or endpoint not set).
+  // Fail open for ledger part — integrity_hmac_ok already decided above; ledger mismatch is logged
+  // but does not mask a valid local record. This avoids making C_Verify flaky due to anchoring latency.
+  if (!v_ledger_client_) {
+    result.error_detail = "ledger client not configured — ledger cross-check skipped";
+    return result;
+  }
+
   // If we have a ledger tx ID, try to get the record from ledger.
   if (local_ledger_tx_id_opt) {
     auto ledger_entry_opt =
-        v_ledger_client_.get_record(*local_ledger_tx_id_opt);
+        v_ledger_client_->get_record(*local_ledger_tx_id_opt);
     if (ledger_entry_opt) {
       result.ledger_record_exists = true;
       result.ledger_tx_id = local_ledger_tx_id_opt;

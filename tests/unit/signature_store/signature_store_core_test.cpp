@@ -123,6 +123,19 @@ protected:
     schema_ = std::make_unique<DbSchema>(*conn_);
     schema_->bootstrap();
     token_ = std::make_unique<vhsm::keystore::Token>("test-token", "test-id");
+    // Inject deterministic KEK so RowIntegrity HMAC (DbHmacKey HKDF) is available.
+    // Fresh tokens have no KEK until a wrap operation; tests need it for recompute_integrity_hmac.
+    {
+      const std::vector<uint8_t> kKek = {0xEE, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+                                         0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
+                                         0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+                                         0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
+      token_->restore_state(token_->is_token_initialized(), token_->is_user_pin_set(),
+                            token_->is_so_pin_set(), token_->is_user_login_required(),
+                            token_->is_so_login_required(), token_->max_pin_attempts(),
+                            token_->user_pin_failed_attempts(), token_->so_pin_failed_attempts(),
+                            token_->is_user_pin_locked(), token_->is_so_pin_locked(), kKek);
+    }
     repo_ = std::make_unique<SignatureRepository>(*conn_, *token_);
   }
 
@@ -225,7 +238,7 @@ TEST_F(SignatureStoreCoreTest, FacadeRejectsDegenerateInput) {
 
 TEST_F(SignatureStoreCoreTest, VerifyLocalOnlyAndNoLedgerTxId) {
   MockLedgerClient ledger;
-  VerificationService svc(*conn_, ledger, *repo_);
+  VerificationService svc(*conn_, &ledger, *repo_);
 
   auto id = repo_->insert(1234567890, 0, "tok", "kid", "fpABC1234567890",
                           "CKM_ECDSA_SHA256", "SHA256",
@@ -255,7 +268,7 @@ TEST_F(SignatureStoreCoreTest, VerifyLedgerCrossCheckMatches) {
   ledger.entry.signature_b64 = "MEUCIQD=";
   ledger.return_entry = true;
 
-  VerificationService svc(*conn_, ledger, *repo_);
+  VerificationService svc(*conn_, &ledger, *repo_);
 
   auto id = repo_->insert(1234567890, 0, "tok", "kid", "fpABC1234567890",
                           "CKM_ECDSA_SHA256", "SHA256",
@@ -267,6 +280,7 @@ TEST_F(SignatureStoreCoreTest, VerifyLedgerCrossCheckMatches) {
   conn_->exec("UPDATE signature_records SET ledger_tx_id='tx1', "
               "ledger_status='COMMITTED' WHERE id=?",
               {*id});
+  ASSERT_TRUE(repo_->recompute_integrity_hmac(*id));
 
   auto result = svc.verify_signature(*id, /*check_ledger=*/true);
   EXPECT_TRUE(result.local_record_exists);
@@ -292,6 +306,7 @@ TEST_F(SignatureStoreCoreTest, QueryLocalVerifyAndListings) {
   conn_->exec(
       "UPDATE signature_records SET ledger_status='COMMITTED' WHERE id=?",
       {*id});
+  ASSERT_TRUE(repo_->recompute_integrity_hmac(*id));
 
   // Local verification reflects the COMMITTED status.
   auto local = query.verify_signature(*id);
@@ -323,6 +338,10 @@ TEST_F(SignatureStoreCoreTest, QueryLedgerCrossCheck) {
                           "aabbccddeeff00112233445566778899", 4,
                           "MEUCIQD=", "sess", "alice", "app");
   ASSERT_TRUE(id.has_value());
+  // Anchor ledger_tx_id so VerificationService (which looks up by ledger_tx_id, not record_id) can find the mock entry
+  conn_->exec("UPDATE signature_records SET ledger_tx_id='tx1', ledger_status='COMMITTED' WHERE id=?", {*id});
+  ASSERT_TRUE(repo_->recompute_integrity_hmac(*id));
+  ledger.entry.record_id = *id;
 
   auto result = query.verify_signature(*id, ledger);
   EXPECT_TRUE(result.record_found);
@@ -338,4 +357,103 @@ TEST_F(SignatureStoreCoreTest, FacadeRejectsBadInputs) {
   EXPECT_TRUE(query.get_signature_ids_by_key_fingerprint("").empty());
   EXPECT_TRUE(
       query.get_signature_ids_by_time_range(2000000000, 1000000000).empty());
+}
+
+// =============================================================================
+// Regression: tamper-evidence was dead code — now consolidated and reachable
+// =============================================================================
+
+TEST_F(SignatureStoreCoreTest, TamperDetectedViaConsolidatedVerify) {
+  // This test proves the fix for the gap described in the Claude prompt:
+  // before the consolidation, SignatureQuery::v_verify_signature only checked
+  // ledger_status=="COMMITTED" and never called RowIntegrity::verify_hmac.
+  // An attacker with raw DB access could flip ledger_status or payload_digest
+  // and no verification call through the production path would notice.
+  // After the fix, both VerificationService and SignatureQuery (now forwarding)
+  // call verify_integrity and fail closed.
+  MockLedgerClient ledger;
+  VerificationService svc(*conn_, &ledger, *repo_);
+  SignatureQuery query(*conn_, *token_);
+
+  auto id = repo_->insert(1234567890, 0, "tok", "kid", "fpABC1234567890",
+                          "CKM_ECDSA_SHA256", "SHA256",
+                          "aabbccddeeff00112233445566778899", 4,
+                          "MEUCIQD=", "sess", "alice", "app");
+  ASSERT_TRUE(id.has_value());
+
+  // Mark COMMITTED so old insecure check would have passed
+  conn_->exec("UPDATE signature_records SET ledger_status='COMMITTED' WHERE id=?",
+              {*id});
+  ASSERT_TRUE(repo_->recompute_integrity_hmac(*id));
+
+  // Sanity: before tamper, both paths say valid
+  {
+    auto v1 = svc.verify_signature(*id, /*check_ledger=*/false);
+    EXPECT_TRUE(v1.local_record_exists);
+    EXPECT_TRUE(v1.integrity_hmac_ok);
+    auto q1 = query.verify_signature(*id);
+    EXPECT_TRUE(q1.record_found);
+    EXPECT_TRUE(q1.ledger_cross_check_ok);
+  }
+
+  // Tamper directly via SQL — flip payload_digest without recomputing HMAC
+  conn_->exec("UPDATE signature_records SET payload_digest='TAMPERED_TAMPERED_TAMPERED_TAMPERED' WHERE id=?",
+              {*id});
+
+  // Consolidated path must now detect it via HMAC (fail-closed)
+  {
+    auto v2 = svc.verify_signature(*id, /*check_ledger=*/false);
+    EXPECT_TRUE(v2.local_record_exists);
+    EXPECT_FALSE(v2.integrity_hmac_ok) << "HMAC should fail after payload_digest tamper";
+    ASSERT_TRUE(v2.error_detail.has_value());
+    EXPECT_NE(v2.error_detail->find("HMAC verification failed"), std::string::npos);
+  }
+  {
+    auto q2 = query.verify_signature(*id);
+    EXPECT_TRUE(q2.record_found);
+    EXPECT_FALSE(q2.ledger_cross_check_ok) << "SignatureQuery now forwards to VerificationService, so HMAC fail => not ok";
+    ASSERT_TRUE(q2.error_detail.has_value());
+    EXPECT_NE(q2.error_detail->find("HMAC verification failed"), std::string::npos);
+  }
+
+  // Also verify that flipping ledger_status alone (the old bypass) is now caught when HMAC is recomputed?
+  // Actually flipping ledger_status from COMMITTED to PENDING without HMAC would have passed old check;
+  // now HMAC fails because we didn't recompute it, so same detection.
+  conn_->exec("UPDATE signature_records SET ledger_status='PENDING' WHERE id=?",
+              {*id});
+  {
+    auto v3 = svc.verify_signature(*id, /*check_ledger=*/false);
+    EXPECT_FALSE(v3.integrity_hmac_ok);
+  }
+}
+
+TEST_F(SignatureStoreCoreTest, LedgerCrossCheckStillWorksAfterConsolidation) {
+  MockLedgerClient ledger;
+  ledger.entry.record_id = "tx1";
+  ledger.entry.key_fingerprint = "fpABC1234567890";
+  ledger.entry.payload_digest = "aabbccddeeff00112233445566778899";
+  ledger.entry.signature_b64 = "MEUCIQD=";
+  ledger.return_entry = true;
+
+  VerificationService svc(*conn_, &ledger, *repo_);
+  SignatureQuery query(*conn_, *token_);
+
+  auto id = repo_->insert(1234567890, 0, "tok", "kid", "fpABC1234567890",
+                          "CKM_ECDSA_SHA256", "SHA256",
+                          "aabbccddeeff00112233445566778899", 4,
+                          "MEUCIQD=", "sess", "alice", "app");
+  ASSERT_TRUE(id.has_value());
+  conn_->exec("UPDATE signature_records SET ledger_tx_id='tx1', ledger_status='COMMITTED' WHERE id=?",
+              {*id});
+  ASSERT_TRUE(repo_->recompute_integrity_hmac(*id));
+
+  // Both paths should agree when ledger matches
+  auto v = svc.verify_signature(*id, /*check_ledger=*/true);
+  EXPECT_TRUE(v.integrity_hmac_ok);
+  EXPECT_TRUE(v.ledger_record_exists);
+  EXPECT_TRUE(v.payload_digest_match);
+
+  auto q = query.verify_signature(*id, ledger);
+  EXPECT_TRUE(q.record_found);
+  EXPECT_TRUE(q.ledger_cross_check_ok);
 }

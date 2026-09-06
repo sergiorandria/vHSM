@@ -20,7 +20,7 @@ namespace db {
 class VerificationService {
 public:
   VerificationService(IDbConnection &conn,
-                      vhsm::ledger::LedgerClient &ledger_client,
+                      vhsm::ledger::LedgerClient *ledger_client,
                       SignatureRepository &signature_repository);
 
   // Verify a signature by ID: check local DB and optionally verify with ledger.

@@ -122,12 +122,13 @@ message VerifySignatureRequest {
 
 message VerifySignatureResponse {
   bool record_found = 1;          // present in the local store
-  bool valid = 2;                 // record_found AND ledger cross-check ok (if requested)
+  bool valid = 2;                 // record_found AND integrity_hmac_ok AND (if check_ledger) ledger_cross_check_ok
   bool ledger_cross_check_ok = 3; // ledger entry matches the local row
   string ledger_status = 4;       // PENDING / COMMITTED / FAILED
   string ledger_tx_id = 5;
   int64 ledger_block_num = 6;
   string error_detail = 7;
+  bool integrity_hmac_ok = 8;     // local row-integrity HMAC verified (RowIntegrity::verify_hmac, constant-time)
 }
 
 // ---- Ledger management ----
