@@ -24,6 +24,8 @@
 #include "../signature_store/ledger_retry_queue.h"
 #include "../signature_store/notification_repository.h"
 #include "../signature_store/signature_query.h"
+#include "../signature_store/signature_repository.h"
+#include "../signature_store/verification_service.h"
 
 namespace vhsm::admin {
 
@@ -389,23 +391,33 @@ HsmAdminServiceImpl::VerifySignature(::grpc::ServerContext * /*ctx*/,
                           "signature_id is required");
   }
 
-  signature_store::db::SignatureQuery query(*db_, *token_);
-  signature_store::db::SignatureQuery::VerificationResult res;
-  if (request->check_ledger()) {
-    if (!ledger_client_) {
-      return ::grpc::Status(::grpc::StatusCode::FAILED_PRECONDITION,
-                            "ledger client not configured");
-    }
-    res = query.verify_signature(request->signature_id(), *ledger_client_);
-  } else {
-    res = query.verify_signature(request->signature_id());
-  }
+  // Consolidated verification: single path via VerificationService (row-integrity HMAC + ledger cross-check)
+  // This replaces SignatureQuery which only checked ledger_status=="COMMITTED" without HMAC.
+  // See src/pkcs11/composition_root.h: verification_service comment and docs/ARCHITECTURE_REVIEW.md.
+  signature_store::db::SignatureRepository repo(*db_, *token_);
+  signature_store::db::VerificationService svc(*db_, ledger_client_, repo);
+  auto res = svc.verify_signature(request->signature_id(), request->check_ledger());
 
-  response->set_record_found(res.record_found);
-  response->set_ledger_cross_check_ok(res.ledger_cross_check_ok);
-  response->set_valid(res.record_found &&
-                      (!request->check_ledger() || res.ledger_cross_check_ok));
-  response->set_ledger_status(res.ledger_status);
+  response->set_record_found(res.local_record_exists);
+  response->set_integrity_hmac_ok(res.integrity_hmac_ok);
+  // Ledger cross-check is the conjunction of the three field matches + existence
+  bool ledger_ok = res.ledger_record_exists && res.payload_digest_match &&
+                   res.signature_b64_match && res.key_fingerprint_match;
+  // When check_ledger==false, ledger_ok is not required for valid (but integrity still is)
+  if (!request->check_ledger()) {
+    ledger_ok = true;
+  }
+  response->set_ledger_cross_check_ok(ledger_ok);
+  // Fail-closed: valid only if record exists AND HMAC ok AND (if requested) ledger ok
+  response->set_valid(res.local_record_exists && res.integrity_hmac_ok && ledger_ok);
+  // Map ledger_status for backward compat: COMMITTED if ledger_ok, else PENDING/FAILED from local
+  if (ledger_ok && res.ledger_record_exists) {
+    response->set_ledger_status("COMMITTED");
+  } else if (!res.local_record_exists) {
+    response->set_ledger_status("");
+  } else {
+    response->set_ledger_status("PENDING");
+  }
   if (res.ledger_tx_id) {
     response->set_ledger_tx_id(*res.ledger_tx_id);
   }
@@ -414,6 +426,16 @@ HsmAdminServiceImpl::VerifySignature(::grpc::ServerContext * /*ctx*/,
   }
   if (res.error_detail) {
     response->set_error_detail(*res.error_detail);
+  }
+  // Audit/notification distinction: integrity vs ledger vs crypto (crypto already handled in p11_crypto)
+  // HMAC failure and ledger mismatch are different operational signals; log them distinctly.
+  if (!res.integrity_hmac_ok && res.local_record_exists) {
+    vhsm::log::global_logger().warning(
+        "audit", "VerifySignature: integrity HMAC failed for " + request->signature_id());
+  } else if (!ledger_ok && request->check_ledger() && res.local_record_exists) {
+    vhsm::log::global_logger().warning(
+        "audit", "VerifySignature: ledger cross-check failed for " + request->signature_id() +
+                     (res.error_detail ? (": " + *res.error_detail) : ""));
   }
   return ::grpc::Status::OK;
 }

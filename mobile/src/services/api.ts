@@ -54,6 +54,21 @@ export async function fetchProof(recordId: string) {
   return data;
 }
 
+export async function fetchVerify(recordId: string) {
+  const { data } = await api.get(`/api/v1/verify/${recordId}`);
+  return data as {
+    record_id: string;
+    record_found: boolean;
+    valid: boolean;
+    integrity_hmac_ok: boolean;
+    ledger_cross_check_ok: boolean;
+    ledger_status: string;
+    ledger_tx_id?: string;
+    ledger_block_num?: number;
+    error_detail?: string;
+  };
+}
+
 export async function fetchAuditTail() {
   const { data } = await api.get('/api/v1/audit/tail');
   return data;

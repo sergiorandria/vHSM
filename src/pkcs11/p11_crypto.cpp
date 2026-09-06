@@ -445,6 +445,14 @@ CK_RV do_sign(CK_SESSION_HANDLE h, const std::vector<u8> &data,
 
 CK_RV do_verify(CK_SESSION_HANDLE h, const std::vector<u8> &data,
                 const std::vector<u8> &sig) {
+  // NOTE: This is the cryptographic verify only (p11_rsa_verify / p11_ecdsa_verify).
+  // Row-integrity HMAC (RowIntegrity::verify_hmac, constant-time) and ledger cross-check
+  // are deliberately NOT done here — C_Verify takes (key_handle, data, signature) not
+  // record_id, so it cannot reliably correlate to a signature_records row. The tamper-evident
+  // check lives in the admin surface: HsmAdmin::VerifySignature → VerificationService
+  // (src/signature_store/verification_service.cpp, src/pkcs11/composition_root.cpp:verification_service)
+  // and REST GET /api/v1/verify/:recordId / GET /api/v1/proof/:recordId (mobile) which proxy there.
+  // See docs/ARCHITECTURE_REVIEW.md §3.
   auto sess = op_session(h);
   if (!sess)
     return CKR_SESSION_HANDLE_INVALID;

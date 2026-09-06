@@ -1,7 +1,7 @@
 # vHSM — Architecture Review Document
-**Version 1.2.0 — `dev` branch — 2026-08-26**
+**Version 1.3.0 — `dev` branch — 2026-09-05**
 *For code review: one place to see the whole system, why it is shaped this way, and where the seams are.*
-*Changelog: `CHANGELOG.md` §1.2.0 — Deliver checkpoint/full-block, hash-chained audit, login throttle, CkStatus, TSan/bench harnesses, PKCS#11 examples, shim persistence fix.*
+*Changelog: `CHANGELOG.md` §1.3.0 — Deliver checkpoint/full-block, hash-chained audit, login throttle, plus `VerificationService` consolidation (row-integrity HMAC), Isabelle correctness, mobile Expo 54, control console.*
 
 ---
 
@@ -14,9 +14,13 @@
 **Build & test (what to run in review):**
 ```bash
 cmake --preset linux-ninja -DVHSM_STORE_BACKEND=db   # or ledger
-cmake --build build -j4 && ctest --test-dir build -j4  # 280/280
+cmake --build build -j4 && ctest --test-dir build -j4  # 345/345 (310 base + ledger + new tamper tests; 1 fabric gateway mock flaky if Docker absent)
 cmake -S . -B build -DVHSM_BUILD_EXAMPLES=ON && cmake --build build -j4  # 01..06 examples
 cmake -S . -B build-bench -G Ninja -DVHSM_ENABLE_BENCH=ON && ./build-bench/tests/bench/vhsm_bench  # bench
+isabelle build -D isabelle  # 5 theories, <3s
+cd mobile && npx tsc --noEmit && npx expo-doctor  # TS + Expo SDK 54
+cd rest_api && go vet ./...  # Go
+```
 cmake -S . -B build-tsan -G Ninja -DVHSM_ENABLE_TSAN=ON && ./build-tsan/tests/stress/stress_tsan  # TSan
 ```
 
@@ -84,6 +88,15 @@ flowchart LR
 ```
 
 *Forwarding shim:* `src/core/types.h:1` now only `#include "../domain/..."` for compat; new code includes `domain/*` directly. `target_include_directories(... PUBLIC ${PROJECT_SOURCE_DIR}/src)` (`src/*/CMakeLists.txt:15`) was tightened from `PUBLIC ${PROJECT_SOURCE_DIR}`.
+
+---
+
+## 3b. Verification — one code path (fixed 2026-09-05)
+
+*   **Gap before:** `VerificationService` (`verification_service_core.cpp:36` `RowIntegrity::verify_hmac` constant-time + ledger `payload_digest/sig/fingerprint`) was dead code (`AppContainer` never instantiated it, `grep VerificationService src/pkcs11/ 0 hits`). `SignatureQuery` `v_verify_signature` (`signature_query_core.cpp:52` `ledger_status=="COMMITTED"`) was the live path in `HsmAdmin::VerifySignature` (`hsm_admin_grpc.cpp:392`) — DB attacker could flip `ledger_status` to `COMMITTED` and bypass.
+*   **Fix:** `VerificationService` is now the single implementation (`src/signature_store/verification_service.{h,cpp}` + `internal/verification_service_core.*` with `integrity_hmac_ok`). `SignatureQuery::v_verify_signature` now forwards to it (both overloads `signature_query_core.cpp:52,101` construct `v_VerificationServiceCore_M1` with `verify_integrity` first, fail-closed). `HsmAdmin::VerifySignature` now constructs `SignatureRepository` + `VerificationService(*db, ledger_client, repo)` and maps `integrity_hmac_ok` → `VerifySignatureResponse.integrity_hmac_ok:8` (`hsm_admin.proto:132`), `valid = record_found && integrity_hmac_ok && ledger_ok`.
+*   **Why not `C_Verify`:** `p11_crypto.cpp:446` `do_verify` is crypto-only (`p11_rsa_verify`/`p11_ecdsa_verify`). Row-integrity needs `record_id` to `SELECT` + HMAC key (vault KEK via `DbHmacKey` HKDF) — PKCS#11 `C_Verify(data, sig, key_handle)` has no `record_id` (synthesizing `payload_digest+sig_b64+key_fingerprint` is ambiguous). Tamper check lives in `Admin::VerifySignature` and `REST GET /api/v1/verify/:recordId` (`rest_api/cmd/api/main.go:743` `GET /proof` + new `GET /verify`) which mobile `VerifyScreen.tsx` calls and shows `🚨 HMAC INVALID` vs `⚠️ ledger mismatch` with `scheduleLocalNotification`.
+*   **AppContainer wiring:** `composition_root.h:89` `verify_repo` + `verification_service` (`VerificationService(*db, ledger_client.get(), *verify_repo)`) constructed after `db`/`token` (like `dispatcher`), torn down in `destroy_app_container()` mirrored order. `C_Verify` intentionally stays crypto-only — see `p11_crypto.cpp:446` comment.
 
 ---
 

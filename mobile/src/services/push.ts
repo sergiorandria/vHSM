@@ -48,7 +48,12 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     return null;
   }
 
-  const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+  // eas.projectId is required for Expo push; placeholder "vhsm-mobile-prod" means not yet configured via `eas init`
+  const rawProjectId = Constants.expoConfig?.extra?.eas?.projectId ?? (Constants as any).easConfig?.projectId;
+  const projectId = rawProjectId && rawProjectId !== 'vhsm-mobile-prod' ? rawProjectId : undefined;
+  if (!projectId) {
+    console.log('[push] No valid EAS projectId — skipping Expo push token (run `eas init` to enable). Falling back to FCM if available.');
+  }
   let token: string | null = null;
   try {
     const t = await Notifications.getExpoPushTokenAsync(
