@@ -38,6 +38,9 @@ class SignatureDispatcher;
 namespace vhsm::persistence {
 class Vault;
 }
+namespace vhsm::kvm {
+class IKvmEnclaveProvider;
+}
 
 namespace vhsm::pkcs11 {
 
@@ -125,6 +128,11 @@ struct AppContainer {
   // Login throttle: progressive delay on consecutive PIN failures,
   // complementing the hard lockout in keystore::Token.
   std::unique_ptr<vhsm::session::LoginThrottle> login_throttle;
+
+  // KVM enclave — single source of truth for host<->guest isolation state.
+  // Owned here so C_Initialize/C_Finalize lifecycle mirrors Enclave::Start/Stop
+  // and admin GetEnclaveStatus reflects the live instance (not a transient probe).
+  std::unique_ptr<vhsm::kvm::IKvmEnclaveProvider> kvm_enclave;
 
   // Logger — central logging facility. Owned by the container; all modules
   // log through this instance. Sinks are configurable per deployment

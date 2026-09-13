@@ -42,6 +42,7 @@ set(_vhsm_pkcs11_libs
 target_link_libraries(vhsm_pkcs11
     PUBLIC
     ${_vhsm_pkcs11_libs}
+    vhsm_kvm_port
 )
 if(VHSM_LEDGER)
     target_link_libraries(vhsm_pkcs11 PUBLIC vhsm_ledger)
@@ -57,6 +58,7 @@ target_compile_options(vhsm_pkcs11_mod PRIVATE -fPIC -Wno-deprecated-declaration
 target_link_libraries(vhsm_pkcs11_mod
     PUBLIC
     ${_vhsm_pkcs11_libs}
+    vhsm_kvm_port
 )
 if(VHSM_LEDGER)
     target_link_libraries(vhsm_pkcs11_mod PUBLIC vhsm_ledger)

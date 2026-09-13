@@ -213,6 +213,48 @@ message IntegrityReport {
   string audit_tail_anchored = 12;      // latest anchored audit tail hash (ledger)
 }
 
+// ---- KVM pure-isolation enclave (§ KVM) ----
+
+// Health / connection status of the KVM enclave VMM (host -> guest via vsock/hypercall).
+// This is the admin control plane for the enclave: callers can verify that
+// /dev/kvm is present, whether the proxy is in mock or real KVM mode, and
+// fetch the guest attestation measurement before trusting C_Sign.
+enum EnclaveState {
+  ENCLAVE_UNKNOWN = 0;
+  ENCLAVE_CREATED = 1;
+  ENCLAVE_RUNNING = 2;
+  ENCLAVE_STOPPED = 3;
+  ENCLAVE_FAILED  = 4;
+}
+
+message EnclaveStatusRequest {}
+
+message EnclaveStatusResponse {
+  EnclaveState state = 1;      // lifecycle state (UNKNOWN until probe/live enclave)
+  bool has_kvm = 2;            // host_has_kvm() — /dev/kvm + KVM_GET_API_VERSION
+  bool is_mock = 3;            // enclave would run in mock (VHSM_KVM_ALLOW_MOCK)
+  bool is_using_kvm = 4;       // live enclave is using real KVM (not mock)
+  string measurement_hex = 5;  // SHA256 of guest .text+.rodata (empty if enclave not started)
+  string guest_elf_path = 6;   // configured payload.elf path (from VHSM_KVM_GUEST or default)
+  int32 cpu_pin = 7;           // isolated core (-1 = none)
+  uint32 mem_mb = 8;           // enclave mem size
+  string error_detail = 9;     // non-empty when enclave failed or KVM probe failed
+  bool enclave_enabled = 10;   // VHSM_HAVE_KVM_ENCLAVE compiled in
+  // Liveness of the host<->guest channel (hypercall mmio 0xEFF00000 / port 0xE9 and vsock fallback)
+  bool hypercall_ok = 11;      // true when PING hypercall succeeded on live enclave
+  bool vsock_ok = 12;          // true when vsock CID pair reachable (future; currently mirrors hypercall_ok)
+  // Deprecated string form for backward compat with old clients (use state enum)
+  string state_str = 13 [deprecated = true];
+}
+
+message EnclaveMeasurementRequest {}
+
+message EnclaveMeasurementResponse {
+  string measurement_hex = 1;  // attestation measurement (SHA256)
+  bool has_kvm = 2;
+  string error_detail = 3;
+}
+
 service HsmAdmin {
   rpc AdminLogin(AdminLoginRequest) returns (AdminLoginResponse);
   // Backup/Restore the token's durable state (KEK, flags, counters) into an
@@ -243,4 +285,8 @@ service HsmAdmin {
   // COMMITTED row's ledger tx_id against the Fabric ledger. This is the
   // externally-verifiable audit↔ledger proof (F3).
   rpc VerifyIntegrity(Empty) returns (IntegrityReport);
+
+  // KVM enclave control plane — host <-> guest isolation health.
+  rpc GetEnclaveStatus(EnclaveStatusRequest) returns (EnclaveStatusResponse);
+  rpc GetEnclaveMeasurement(EnclaveMeasurementRequest) returns (EnclaveMeasurementResponse);
 }

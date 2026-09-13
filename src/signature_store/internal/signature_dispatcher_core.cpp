@@ -183,6 +183,7 @@ bool v_SignatureDispatcherCore_M1::v_dispatch(
   // SIGN_CREATED notification is delivered (replayed by OutboxPoller), but
   // ledger anchoring must not depend on a restart — it is a first-class
   // outcome of every successful sign operation.
+#ifdef VHSM_LEDGER
   if (v_ledger_worker_) {
     SignatureRecord rec;
     rec.record_id = signature_id;
@@ -210,6 +211,9 @@ bool v_SignatureDispatcherCore_M1::v_dispatch(
 
     v_ledger_worker_->submit_record(rec);
   }
+#else
+  (void)v_ledger_worker_;
+#endif
   return true;
 }
 

@@ -28,6 +28,7 @@
 
 #include "pkcs11_internal.h"
 
+#include "../kvm/enclave_provider.h"
 #include "../domain/signing/adapters/db_store_adapter.h"
 #ifdef VHSM_LEDGER
 #include "../domain/signing/adapters/fabric_store_adapter.h"
@@ -549,6 +550,10 @@ std::unique_ptr<AppContainer> create_app_container() {
 
   c->vault = open_or_create_vault();
 
+  // KVM enclave — composition root owns the single provider instance so admin
+  // and PKCS#11 share the same view (no transient probes).
+  c->kvm_enclave.reset(vhsm::kvm::CreateEnclaveProvider());
+
   return c;
 }
 
@@ -577,6 +582,10 @@ void destroy_app_container(std::unique_ptr<AppContainer> &container) noexcept {
   container->verification_service.reset();
   container->verify_repo.reset();
   container->store.reset();
+  if (container->kvm_enclave) {
+    container->kvm_enclave->Stop();
+    container->kvm_enclave.reset();
+  }
   // vault is closed after dispatcher (persist token before reset in p11)
   container->vault.reset();
   container->bounded_bus.reset();

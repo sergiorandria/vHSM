@@ -61,6 +61,25 @@ target_include_directories(vhsm_admin
 
 target_compile_options(vhsm_admin PRIVATE -Wno-deprecated-declarations)
 
+# KVM enclave — use domain port (vhsm_kvm_port) so admin does not include
+# vhsm_kvm/enclave.h directly. The port implementation links vhsm_kvm_vmm
+# privately when VHSM_HAVE_KVM_ENCLAVE is enabled.
+if(TARGET vhsm_kvm_port)
+    target_link_libraries(vhsm_admin PRIVATE vhsm_kvm_port)
+elseif(TARGET vhsm_kvm)
+    target_link_libraries(vhsm_admin PRIVATE vhsm_kvm)
+elseif(TARGET vhsm_kvm_vmm)
+    target_link_libraries(vhsm_admin PRIVATE vhsm_kvm_vmm)
+    target_compile_definitions(vhsm_admin PRIVATE VHSM_HAVE_KVM_ENCLAVE=1)
+    if(EXISTS "${PROJECT_SOURCE_DIR}/kvm_module/include")
+        target_include_directories(vhsm_admin PRIVATE "${PROJECT_SOURCE_DIR}/kvm_module/include")
+    elseif(EXISTS "${PROJECT_SOURCE_DIR}/third_party/kvm_module/include")
+        target_include_directories(vhsm_admin PRIVATE "${PROJECT_SOURCE_DIR}/third_party/kvm_module/include")
+    endif()
+elseif(VHSM_KVM_ENCLAVE)
+    message(STATUS "vhsm_admin: VHSM_KVM_ENCLAVE=ON but kvm port not found — KVM RPCs will be stubs")
+endif()
+
 target_link_libraries(vhsm_admin
     PUBLIC
         vhsm_core

@@ -23,6 +23,10 @@ class LedgerClient;
 class LedgerWorker;
 } // namespace vhsm::ledger
 
+namespace vhsm::kvm {
+class IKvmEnclaveProvider;
+} // namespace vhsm::kvm
+
 namespace vhsm::admin {
 
 // WHY a thin gRPC adapter over the transport-agnostic admin cores: the auth and
@@ -42,7 +46,8 @@ public:
                       vhsm::ledger::LedgerClient *ledger_client,
                       vhsm::ledger::LedgerWorker *ledger_worker,
                       vhsm::notification::NotificationBus *bus,
-                      vhsm::audit::AuditLog *audit_log);
+                      vhsm::audit::AuditLog *audit_log,
+                      vhsm::kvm::IKvmEnclaveProvider *kvm_provider = nullptr);
 
   ::grpc::Status AdminLogin(::grpc::ServerContext *ctx,
                             const AdminLoginRequest *request,
@@ -101,7 +106,17 @@ public:
   // verifies the audit hash-chain, and cross-checks COMMITTED rows against the
   // ledger (F3).
   ::grpc::Status VerifyIntegrity(::grpc::ServerContext *ctx, const Empty *request,
-                                IntegrityReport *response) override;
+                                 IntegrityReport *response) override;
+
+  // KVM pure-isolation enclave — control plane for the host<->guest connection
+  // (vsock/hypercall health, attestation measurement). Read-only, no authz
+  // required beyond network ACLs (like Metrics).
+  ::grpc::Status GetEnclaveStatus(::grpc::ServerContext *ctx,
+                                  const EnclaveStatusRequest *request,
+                                  EnclaveStatusResponse *response) override;
+  ::grpc::Status GetEnclaveMeasurement(::grpc::ServerContext *ctx,
+                                       const EnclaveMeasurementRequest *request,
+                                       EnclaveMeasurementResponse *response) override;
 
  private:
   vhsm::signature_store::db::IDbConnection *const db_;
@@ -110,6 +125,7 @@ public:
   vhsm::ledger::LedgerWorker *const ledger_worker_;
   vhsm::notification::NotificationBus *const bus_;
   vhsm::audit::AuditLog *const audit_log_;
+  vhsm::kvm::IKvmEnclaveProvider *const kvm_provider_;
 };
 
 } // namespace vhsm::admin
