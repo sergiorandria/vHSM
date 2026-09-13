@@ -27,15 +27,20 @@
 #include "../signature_store/signature_repository.h"
 #include "../signature_store/verification_service.h"
 
+#include "../kvm/enclave_provider.h"
+#include <filesystem>
+
 namespace vhsm::admin {
 
 HsmAdminServiceImpl::HsmAdminServiceImpl(
     vhsm::signature_store::db::IDbConnection *db, vhsm::keystore::Token *token,
     vhsm::ledger::LedgerClient *ledger_client,
     vhsm::ledger::LedgerWorker *ledger_worker,
-    vhsm::notification::NotificationBus *bus, vhsm::audit::AuditLog *audit_log)
+    vhsm::notification::NotificationBus *bus, vhsm::audit::AuditLog *audit_log,
+    vhsm::kvm::IKvmEnclaveProvider *kvm_provider)
     : db_(db), token_(token), ledger_client_(ledger_client),
-      ledger_worker_(ledger_worker), bus_(bus), audit_log_(audit_log) {}
+      ledger_worker_(ledger_worker), bus_(bus), audit_log_(audit_log),
+      kvm_provider_(kvm_provider) {}
 
 namespace {
 
@@ -700,6 +705,97 @@ HsmAdminServiceImpl::VerifyIntegrity(::grpc::ServerContext * /*ctx*/,
     }
   }
 
+  return ::grpc::Status::OK;
+}
+
+::grpc::Status
+HsmAdminServiceImpl::GetEnclaveStatus(::grpc::ServerContext *ctx,
+                                      const EnclaveStatusRequest * /*request*/,
+                                      EnclaveStatusResponse *response) {
+  if (!response) {
+    return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT, "invalid request");
+  }
+  // Least-privilege: enclave status leaks guest path and KVM capability — require admin authz
+  // (mTLS CN or VHSM_ADMIN_TOKEN). In dev mode (no env set) require_admin logs once and returns true.
+  if (!require_admin(ctx)) {
+    return ::grpc::Status(::grpc::StatusCode::UNAUTHENTICATED, "admin authorization required");
+  }
+  if (kvm_provider_) {
+    auto s = kvm_provider_->GetStatus();
+    auto to_state_str = [](vhsm::kvm::ProviderEnclaveState st) {
+      switch (st) {
+        case vhsm::kvm::ProviderEnclaveState::Created: return "Created";
+        case vhsm::kvm::ProviderEnclaveState::Running: return "Running";
+        case vhsm::kvm::ProviderEnclaveState::Stopped: return "Stopped";
+        case vhsm::kvm::ProviderEnclaveState::Failed: return "Failed";
+        default: return "Unknown";
+      }
+    };
+    auto to_proto_state = [](vhsm::kvm::ProviderEnclaveState st) {
+      switch (st) {
+        case vhsm::kvm::ProviderEnclaveState::Created: return EnclaveState::ENCLAVE_CREATED;
+        case vhsm::kvm::ProviderEnclaveState::Running: return EnclaveState::ENCLAVE_RUNNING;
+        case vhsm::kvm::ProviderEnclaveState::Stopped: return EnclaveState::ENCLAVE_STOPPED;
+        case vhsm::kvm::ProviderEnclaveState::Failed: return EnclaveState::ENCLAVE_FAILED;
+        default: return EnclaveState::ENCLAVE_UNKNOWN;
+      }
+    };
+    response->set_state(to_proto_state(s.state));
+    response->set_state_str(to_state_str(s.state));
+    response->set_has_kvm(s.has_kvm);
+    response->set_is_mock(s.is_mock);
+    response->set_is_using_kvm(s.is_using_kvm);
+    response->set_measurement_hex(s.measurement_hex);
+    response->set_guest_elf_path(s.guest_elf_path);
+    response->set_cpu_pin(s.cpu_pin);
+    response->set_mem_mb(s.mem_mb);
+    response->set_error_detail(s.error_detail);
+    response->set_enclave_enabled(s.enclave_enabled);
+    response->set_hypercall_ok(s.hypercall_ok);
+    response->set_vsock_ok(s.vsock_ok);
+    vhsm::log::global_logger().info("admin", "GetEnclaveStatus: has_kvm=" + std::string(s.has_kvm ? "1" : "0") +
+                                            " state=" + to_state_str(s.state) + " guest=" + s.guest_elf_path);
+    return ::grpc::Status::OK;
+  }
+  // Fallback: no provider (test stub) — probe minimal filesystem state without VMM
+  const bool has_kvm = std::filesystem::exists("/dev/kvm");
+  response->set_has_kvm(has_kvm);
+  response->set_enclave_enabled(false);
+  response->set_is_mock(false);
+  response->set_is_using_kvm(false);
+  response->set_state(EnclaveState::ENCLAVE_UNKNOWN);
+  response->set_state_str("Unknown");
+  response->set_guest_elf_path("kvm_module/guest/payload.elf");
+  response->set_cpu_pin(-1);
+  response->set_mem_mb(256);
+  response->set_measurement_hex("");
+  response->set_hypercall_ok(false);
+  response->set_vsock_ok(false);
+  response->set_error_detail("enclave provider not injected (composition root not wired)");
+  return ::grpc::Status::OK;
+}
+
+::grpc::Status
+HsmAdminServiceImpl::GetEnclaveMeasurement(::grpc::ServerContext *ctx,
+                                          const EnclaveMeasurementRequest * /*request*/,
+                                          EnclaveMeasurementResponse *response) {
+  if (!response) {
+    return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT, "invalid request");
+  }
+  if (!require_admin(ctx)) {
+    return ::grpc::Status(::grpc::StatusCode::UNAUTHENTICATED, "admin authorization required");
+  }
+  if (kvm_provider_) {
+    auto m = kvm_provider_->GetMeasurement();
+    response->set_has_kvm(m.has_kvm);
+    response->set_measurement_hex(m.measurement_hex);
+    response->set_error_detail(m.error_detail);
+    return ::grpc::Status::OK;
+  }
+  const bool has_kvm = std::filesystem::exists("/dev/kvm");
+  response->set_has_kvm(has_kvm);
+  response->set_measurement_hex("");
+  response->set_error_detail("enclave provider not injected");
   return ::grpc::Status::OK;
 }
 

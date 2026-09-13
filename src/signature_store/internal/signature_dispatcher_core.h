@@ -11,7 +11,11 @@
 #include "../../domain/core/kernel_types.h"
 #include "../../domain/crypto/crypto_types.h"
 #include "../../keystore/token.h"
+#ifdef VHSM_LEDGER
 #include "../../ledger/ledger_worker.h"
+#else
+namespace vhsm::ledger { class LedgerWorker; }
+#endif
 #include "../../notification/notification_bus.h"
 #include "../../notification/notification_event.h"
 #include "../db_connection.h"

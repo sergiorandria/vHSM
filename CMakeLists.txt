@@ -347,6 +347,56 @@ add_compile_definitions(
 # Subdirectories
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# KVM pure-isolation enclave (kvm_module submodule)
+# Supports both superproject locations:
+#   - kvm_module/              (current submodule path)
+#   - third_party/kvm_module/  (alternative / requested third_party location)
+# When present and VHSM_KVM_ENCLAVE=ON, adds vhsm_kvm_vmm + vhsm_kvm_proxy and
+# defines VHSM_HAVE_KVM_ENCLAVE=1 so the admin subsystem can expose enclave
+# status/measurement RPCs without hard-depending on /dev/kvm at configure time.
+# ---------------------------------------------------------------------------
+option(VHSM_KVM_ENCLAVE "Build KVM pure-isolation enclave from kvm_module" ON)
+# Allow external override: -DVHSM_KVM_ROOT=/path/to/kvm_module for standalone builds
+set(VHSM_KVM_ROOT "" CACHE PATH "External kvm_module root (overrides submodule detection)")
+if(VHSM_KVM_ROOT AND EXISTS "${VHSM_KVM_ROOT}/CMakeLists.txt")
+  set(_vhsm_kvm_src "${VHSM_KVM_ROOT}")
+elseif(EXISTS "${CMAKE_SOURCE_DIR}/kvm_module/CMakeLists.txt")
+  set(_vhsm_kvm_src "${CMAKE_SOURCE_DIR}/kvm_module")
+elseif(EXISTS "${CMAKE_SOURCE_DIR}/third_party/kvm_module/CMakeLists.txt")
+  set(_vhsm_kvm_src "${CMAKE_SOURCE_DIR}/third_party/kvm_module")
+else()
+  set(_vhsm_kvm_src "")
+endif()
+if(VHSM_KVM_ENCLAVE AND _vhsm_kvm_src)
+  message(STATUS "VHSM: KVM enclave enabled from ${_vhsm_kvm_src}")
+  # kvm_module owns its own hardening flags and mock policy; avoid double test registration
+  # by disabling its examples when embedded (they drag host_main dep).
+  set(VHSM_KVM_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  # Also disable proxy examples that are not needed for admin control plane
+  # The proxy .so is useful for runtime but not required for admin RPC build
+  set(VHSM_KVM_BUILD_PROXY ON CACHE BOOL "" FORCE)
+  add_subdirectory(${_vhsm_kvm_src} kvm_module_build)
+  # Patch: kvm_module/CMakeLists.txt uses CMAKE_SOURCE_DIR for includes, which
+  # breaks when embedded (CMAKE_SOURCE_DIR==vHSM root, not kvm_module root).
+  # Ensure vhsm_kvm_vmm sees its own headers.
+  if(TARGET vhsm_kvm_vmm)
+    target_include_directories(vhsm_kvm_vmm PUBLIC "${_vhsm_kvm_src}/include" "${_vhsm_kvm_src}/src")
+  endif()
+  if(TARGET vhsm_kvm_proxy)
+    target_include_directories(vhsm_kvm_proxy PUBLIC "${_vhsm_kvm_src}/include")
+    # Proxy's CMakeLists hardcodes /home/sergio/Project/vHSM/src — already ok when embedded
+  endif()
+  # VHSM_HAVE_KVM_ENCLAVE is defined target-scoped (vhsm_admin, vhsm_kvm, EnclaveManager) — not globally
+  add_library(vhsm_kvm INTERFACE)
+  target_compile_definitions(vhsm_kvm INTERFACE VHSM_HAVE_KVM_ENCLAVE=1)
+  target_link_libraries(vhsm_kvm INTERFACE vhsm_kvm_vmm)
+  # Expose KVM headers via INTERFACE for consumers that compile with the enclave
+  target_include_directories(vhsm_kvm INTERFACE "${_vhsm_kvm_src}/include")
+elseif(VHSM_KVM_ENCLAVE AND NOT _vhsm_kvm_src)
+  message(STATUS "VHSM: VHSM_KVM_ENCLAVE=ON but no kvm_module found at kvm_module/ or third_party/kvm_module — building without enclave (admin KVM RPCs will return UNIMPLEMENTED)")
+endif()
+
 enable_testing()  # Enable CTest for the tests/ subdirectory
 
 # Fabric Gateway C++ SDK (gRPC transport + Gateway client).  Pulled in when the

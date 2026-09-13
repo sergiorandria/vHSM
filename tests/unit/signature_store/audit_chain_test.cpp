@@ -1,4 +1,4 @@
-#include "../../src/audit/audit_log.h"
+#include "../../../src/audit/audit_log.h"
 
 #include <cstdio>
 #include <fstream>
