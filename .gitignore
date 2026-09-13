@@ -48,6 +48,10 @@ rest_api/.env
 !.env.example
 rest_api/.env.example
 !rest_api/.env.example
+# Go build outputs (never commit compiled binaries)
+rest_api/target/
+rest_api/main
+rest_api/cmd/api/main
 network/fabric_configuration/peer-data 
 network/fabric_configuration/crypto-config 
 network/fabric_configuration/template_chaincode/chaincode
