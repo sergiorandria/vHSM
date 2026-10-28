@@ -4,6 +4,16 @@
 
 namespace vhsm::keystore::internal {
 
+namespace {
+
+// Vendor attributes holding DER-encoded private key material. These values
+// must stay in sync with src/pkcs11/pkcs11_internal.h; they are duplicated
+// here because the keystore layer must not depend on the PKCS#11 facade.
+constexpr CK_ATTRIBUTE_TYPE kCkaVhsmRsaPriv = 0x81000001UL;
+constexpr CK_ATTRIBUTE_TYPE kCkaVhsmEcPriv = 0x81000003UL;
+
+} // namespace
+
 v_AttributeStore_M1::v_AttributeStore_M1(HsmObject &object)
     : v_object_(object) {}
 
@@ -86,7 +96,12 @@ CK_RV v_AttributeStore_M1::v_get_attribute(CK_ATTRIBUTE_TYPE type,
     break;
   }
   case CKA_VALUE:
-    if (v_object_.isSensitive()) {
+  case kCkaVhsmRsaPriv:
+  case kCkaVhsmEcPriv:
+    // Key material is never readable when the object is sensitive or marked
+    // non-extractable. This covers CKA_VALUE as well as the vendor DER blobs
+    // used by the PKCS#11 layer to reconstruct private keys.
+    if (v_object_.isSensitive() || !v_object_.isExtractable()) {
       *pulValueLen = CK_UNAVAILABLE_INFORMATION;
       return CKR_ATTRIBUTE_SENSITIVE;
     }
@@ -196,6 +211,17 @@ bool v_AttributeStore_M1::v_is_read_only(CK_ATTRIBUTE_TYPE type) const {
     return v_object_.isSensitive();
   case CKA_EXTRACTABLE:
     return !v_object_.isExtractable();
+  case kCkaVhsmRsaPriv:
+  case kCkaVhsmEcPriv:
+    // Private key material is installed by the crypto layer and must never be
+    // replaced through C_SetAttributeValue.
+    return true;
+  case CKA_VALUE:
+    // CKA_VALUE is writable for data/certificate objects and non-sensitive
+    // secret keys, but private keys and sensitive objects must not have their
+    // secret material swapped after creation.
+    return v_object_.isSensitive() ||
+           v_object_.getType() == ObjectType::PRIVATE_KEY;
   default:
     return false;
   }

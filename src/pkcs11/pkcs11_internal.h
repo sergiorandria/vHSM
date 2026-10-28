@@ -183,7 +183,10 @@ extern SessionManager g_sessionManager;
 inline constexpr CK_ULONG CKA_VHSM_RSA_PRIV = 0x81000001UL;
 inline constexpr CK_ULONG CKA_VHSM_RSA_PUB = 0x81000002UL;
 inline constexpr CK_ULONG CKA_VHSM_EC_PRIV = 0x81000003UL;
-inline constexpr CK_ULONG CKA_VHSM_EC_PUB = 0x81000004UL;
+// NOTE: deliberately not 0x81000004 — that value is CKA_VHSM_KEY_STATE in
+// keystore/key_state.h. Sharing it made setKeyState() overwrite the EC public
+// key blob (and made key state read the first byte of that blob).
+inline constexpr CK_ULONG CKA_VHSM_EC_PUB = 0x81000007UL;
 // CKA_VHSM_POLICY: a JSON KeyPolicy document (see
 // domain/signing/key_policy.h) attached to a key object; when present, every
 // C_Sign with that key is gated by the policy (mechanism/who/when/quorum).

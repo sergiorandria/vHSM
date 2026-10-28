@@ -87,6 +87,11 @@ void copy_material(HsmObject &dst, const HsmObject &src) {
     if (v && !v->empty())
       dst.setAttribute(t, v->data(), v->size());
   }
+  // CKA_ID is stored on HsmObject's dedicated id_ buffer when set through the
+  // attribute store, so copy it explicitly.
+  auto id = src.getId();
+  if (!id.empty())
+    dst.setId(id);
 }
 
 bool match_object(const HsmObject &obj, CK_ATTRIBUTE_PTR t, CK_ULONG n) {
@@ -127,6 +132,8 @@ CK_RV C_CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   if (!phObject)
     return CKR_ARGUMENTS_BAD;
+  if (ulCount > 0 && pTemplate == nullptr)
+    return CKR_ARGUMENTS_BAD;
   auto s = p11_get_session(hSession);
   if (!s)
     return CKR_SESSION_HANDLE_INVALID;
@@ -157,6 +164,8 @@ CK_RV C_CopyObject(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
   if (!phNewObject)
+    return CKR_ARGUMENTS_BAD;
+  if (ulCount > 0 && pTemplate == nullptr)
     return CKR_ARGUMENTS_BAD;
   auto s = p11_get_session(hSession);
   if (!s)
@@ -246,6 +255,8 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
   VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
+  if (ulCount > 0 && pTemplate == nullptr)
+    return CKR_ARGUMENTS_BAD;
   auto o = p11_get_object(hSession, hObject);
   if (!o)
     return CKR_OBJECT_HANDLE_INVALID;
@@ -264,6 +275,8 @@ CK_RV C_SetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
   VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
+  if (ulCount > 0 && pTemplate == nullptr)
+    return CKR_ARGUMENTS_BAD;
   auto o = p11_get_object(hSession, hObject);
   if (!o)
     return CKR_OBJECT_HANDLE_INVALID;
@@ -290,6 +303,8 @@ CK_RV C_FindObjectsInit(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
   VHSM_C_TRY
   if (!p11_is_initialized())
     return CKR_CRYPTOKI_NOT_INITIALIZED;
+  if (ulCount > 0 && pTemplate == nullptr)
+    return CKR_ARGUMENTS_BAD;
   auto s = p11_get_session(hSession);
   if (!s)
     return CKR_SESSION_HANDLE_INVALID;
@@ -305,6 +320,9 @@ CK_RV C_FindObjectsInit(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
     for (CK_ULONG i = 0; i < ulCount; ++i) {
       CK_ATTRIBUTE_TYPE t = pTemplate[i].type;
       if (t != CKA_CLASS && t != CKA_LABEL && t != CKA_ID) { all_indexed = false; break; }
+      // A NULL pValue means "match on presence"; it cannot be used to build
+      // an index lookup (and would make the pointer arithmetic below invalid).
+      if (pTemplate[i].pValue == nullptr) { all_indexed = false; break; }
     }
     if (all_indexed) use_index = true;
   }
@@ -336,6 +354,8 @@ CK_RV C_FindObjects(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE_PTR phObject,
                     CK_ULONG ulMaxObjectCount, CK_ULONG_PTR pulObjectCount) {
   VHSM_C_TRY
   if (!pulObjectCount)
+    return CKR_ARGUMENTS_BAD;
+  if (ulMaxObjectCount > 0 && phObject == nullptr)
     return CKR_ARGUMENTS_BAD;
   auto s = p11_get_session(hSession);
   if (!s)

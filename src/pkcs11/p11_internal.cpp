@@ -292,6 +292,10 @@ bool is_ec_mech(CK_MECHANISM_TYPE m) {
 // ---------------------------------------------------------------------------
 CK_RV p11_apply_template(HsmObject &obj, CK_ATTRIBUTE_PTR pTemplate,
                          CK_ULONG ulCount) {
+  if (ulCount > 0 && pTemplate == nullptr)
+    return CKR_ARGUMENTS_BAD;
+
+  vhsm::keystore::internal::v_AttributeStore_M1 store(obj);
   for (CK_ULONG i = 0; i < ulCount; ++i) {
     CK_ATTRIBUTE_PTR a = &pTemplate[i];
     if (a->type & CKF_ARRAY_ATTRIBUTE)
@@ -300,6 +304,33 @@ CK_RV p11_apply_template(HsmObject &obj, CK_ATTRIBUTE_PTR pTemplate,
       return CKR_ARGUMENTS_BAD;
     if (a->pValue == nullptr) {
       // deletion not directly supported on HsmObject; skip
+      continue;
+    }
+    // Route the security-relevant flags through the attribute store so the
+    // object's actual sensitive/extractable state (not just a stored copy of
+    // the attribute) follows the creation template. Equal values are skipped
+    // because the attribute store treats them as read-only.
+    if (a->type == CKA_SENSITIVE || a->type == CKA_EXTRACTABLE) {
+      if (a->ulValueLen == sizeof(CK_BBOOL)) {
+        const CK_BBOOL requested = *static_cast<CK_BBOOL *>(a->pValue);
+        const bool current = (a->type == CKA_SENSITIVE)
+                                 ? obj.isSensitive()
+                                 : obj.isExtractable();
+        if ((requested == CK_TRUE) == current)
+          continue;
+      }
+      CK_RV rv = store.v_set_attribute(a);
+      if (rv != CKR_OK)
+        return rv;
+      continue;
+    }
+    // CKA_ID has dedicated storage on HsmObject; using setAttribute() directly
+    // would leave getId() empty and make C_GetAttributeValue(CKA_ID) return
+    // nothing.
+    if (a->type == CKA_ID) {
+      CK_RV rv = store.v_set_attribute(a);
+      if (rv != CKR_OK)
+        return rv;
       continue;
     }
     obj.setAttribute(a->type, static_cast<const u8 *>(a->pValue),
@@ -1116,16 +1147,23 @@ std::string p11_key_fingerprint(EVP_PKEY *pkey) {
 std::string p11_key_id(const HsmObject *obj) {
   if (!obj)
     return "";
-  // Use CKA_ID if available, otherwise generate from object handle
-  const std::vector<u8> *id = obj->findAttribute(CKA_ID);
-  if (id && !id->empty()) {
+  const auto hex_id = [](const auto &id) {
     std::ostringstream oss;
-    for (u8 b : *id) {
+    for (u8 b : id) {
       oss << std::hex << std::setw(2) << std::setfill('0')
           << static_cast<int>(b);
     }
     return oss.str();
-  }
+  };
+  // CKA_ID lives on HsmObject's dedicated id_ buffer when set through the
+  // attribute store; fall back to the generic attribute map for objects that
+  // carry it there.
+  const auto id_span = obj->getId();
+  if (!id_span.empty())
+    return hex_id(id_span);
+  const std::vector<u8> *id = obj->findAttribute(CKA_ID);
+  if (id && !id->empty())
+    return hex_id(*id);
   // Fallback: use a placeholder based on object type
   return "key-" + std::to_string(reinterpret_cast<uintptr_t>(obj));
 }

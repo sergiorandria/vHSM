@@ -52,6 +52,43 @@ TEST(v_AttributeStore_M1, SetAndGetValue) {
   EXPECT_EQ(value, keyValue);
 }
 
+TEST(v_AttributeStore_M1, SensitiveAndNonExtractableKeyMaterialIsNotReadable) {
+  // Vendor private-key blobs must follow CKA_SENSITIVE/CKA_EXTRACTABLE just
+  // like CKA_VALUE. These IDs mirror src/pkcs11/pkcs11_internal.h.
+  constexpr CK_ATTRIBUTE_TYPE kRsaPriv = 0x81000001UL;
+  constexpr CK_ATTRIBUTE_TYPE kEcPriv = 0x81000003UL;
+  const std::vector<unsigned char> der = {0x30, 0x01, 0x02};
+
+  for (CK_ATTRIBUTE_TYPE type : {kRsaPriv, kEcPriv, CKA_VALUE}) {
+    HsmObject sensitive(ObjectType::PRIVATE_KEY, /*sensitive=*/true,
+                        /*extractable=*/true);
+    sensitive.setAttribute(type, der.data(), der.size());
+    v_AttributeStore_M1 sensitiveStore(sensitive);
+    CK_ULONG len = 0;
+    EXPECT_EQ(sensitiveStore.v_get_attribute(type, nullptr, &len),
+              CKR_ATTRIBUTE_SENSITIVE);
+
+    HsmObject unextractable(ObjectType::PRIVATE_KEY, /*sensitive=*/false,
+                            /*extractable=*/false);
+    unextractable.setAttribute(type, der.data(), der.size());
+    v_AttributeStore_M1 unextractableStore(unextractable);
+    EXPECT_EQ(unextractableStore.v_get_attribute(type, nullptr, &len),
+              CKR_ATTRIBUTE_SENSITIVE);
+  }
+}
+
+TEST(v_AttributeStore_M1, PrivateKeyMaterialCannotBeOverwritten) {
+  HsmObject obj(ObjectType::PRIVATE_KEY, /*sensitive=*/true,
+                /*extractable=*/true);
+  v_AttributeStore_M1 store(obj);
+  std::vector<unsigned char> der = {0x30, 0x01, 0x02};
+
+  for (CK_ATTRIBUTE_TYPE type : {0x81000001UL, 0x81000003UL, CKA_VALUE}) {
+    CK_ATTRIBUTE attr = {type, der.data(), static_cast<CK_ULONG>(der.size())};
+    EXPECT_EQ(store.v_set_attribute(&attr), CKR_ATTRIBUTE_READ_ONLY);
+  }
+}
+
 TEST(v_AttributeStore_M1, ReadOnlyAttributesAfterInit) {
   HsmObject obj(ObjectType::SECRET_KEY);
   v_AttributeStore_M1 store(obj);

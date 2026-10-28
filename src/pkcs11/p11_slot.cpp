@@ -232,10 +232,17 @@ CK_RV C_InitPIN(CK_SESSION_HANDLE hSession, CK_UTF8CHAR_PTR pPin,
                 CK_ULONG ulPinLen) {
   VHSM_C_TRY
   keystore::Token *tok = p11_get_token_for_session(hSession);
-  if (!tok)
+  auto s = p11_get_session(hSession);
+  if (!tok || !s)
     return CKR_SESSION_HANDLE_INVALID;
   if (!pPin)
     return CKR_ARGUMENTS_BAD;
+  // PKCS#11: C_InitPIN is an SO operation. Keep the bootstrap path working on
+  // a token whose SO PIN has never been set, but once it is set require an
+  // authenticated SO session instead of letting any public session set the
+  // user PIN.
+  if (tok->is_so_pin_set() == CK_TRUE && s->getUserType() != CKU_SO)
+    return CKR_USER_NOT_LOGGED_IN;
   return tok->initialize_user_pin(reinterpret_cast<const CK_CHAR *>(pPin),
                                   ulPinLen);
 VHSM_C_CATCH
